@@ -1,0 +1,111 @@
+{
+  "artifact_kind": "bard_song_proposal",
+  "schema_version": "0.3",
+  "title": "The Night the Build Went Green",
+  "mode": "chronicle",
+  "language": "en",
+  "sources": [
+    {"kind": "conversation_summary", "ref": "context.md"}
+  ],
+  "rationale": "D dorian suits a night watch tale; 4/4 at 96 bpm is a steady ballad pulse.",
+  "originality": {
+    "original_lyrics": true,
+    "original_melody": true,
+    "no_named_artist_imitation": true,
+    "no_real_person_ridicule": true
+  },
+  "key": {"tonic": "D", "mode": "dorian"},
+  "meter": "4/4",
+  "bpm": 96,
+  "instruments": {"melody": 74, "accompaniment": 24},
+  "vocal_range": {"low": "c4", "high": "e5"},
+  "sections": [
+    {
+      "name": "verse 1",
+      "kind": "verse",
+      "chords": ["Dm", "C", "Am", "Dm"],
+      "lines": [
+        {
+          "text": "We build the night in quiet rows of green",
+          "units": ["We", "build", "the", "night", "in", "qui", "et", "rows", "of", "green"],
+          "notes": [
+            {"pitch": "d4", "beats": 0.5}, {"pitch": "e4", "beats": 0.5},
+            {"pitch": "f4", "beats": 1}, {"pitch": "g4", "beats": 1},
+            {"pitch": "f4", "beats": 0.5}, {"pitch": "e4", "beats": 0.5},
+            {"pitch": "e4", "beats": 1}, {"pitch": "c4", "beats": 1},
+            {"pitch": "d4", "beats": 0.5}, {"pitch": "c4", "beats": 1.5}
+          ]
+        },
+        {
+          "text": "The merge is done the night turns green",
+          "units": ["The", "merge", "is", "done", "the", "night", "turns", "green"],
+          "notes": [
+            {"pitch": "a4", "beats": 1}, {"pitch": "b4", "beats": 0.5},
+            {"pitch": "c5", "beats": 0.5}, {"pitch": "a4", "beats": 1},
+            {"pitch": "g4", "beats": 1}, {"pitch": "f4", "beats": 0.5},
+            {"pitch": "e4", "beats": 0.5}, {"pitch": "d4", "beats": 3}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "chorus 1",
+      "kind": "chorus",
+      "chords": ["C", "Dm", "Am", "Dm"],
+      "lines": [
+        {
+          "text": "Sing out the build is green the night is done",
+          "units": ["Sing", "out", "the", "build", "is", "green", "the", "night", "is", "done"],
+          "notes": [
+            {"pitch": "c5", "beats": 1}, {"pitch": "d5", "beats": 0.5},
+            {"pitch": "c5", "beats": 0.5}, {"pitch": "a4", "beats": 1},
+            {"pitch": "g4", "beats": 0.5}, {"pitch": "f4", "beats": 0.5},
+            {"pitch": "d4", "beats": 1}, {"pitch": "e4", "beats": 0.5},
+            {"pitch": "f4", "beats": 0.5}, {"pitch": "d4", "beats": 2}
+          ]
+        },
+        {
+          "text": "The watchers rest the pipeline flows again",
+          "units": ["The", "watch", "ers", "rest", "the", "pipe", "line", "flows", "a", "gain"],
+          "notes": [
+            {"pitch": "c5", "beats": 1}, {"pitch": "b4", "beats": 0.5},
+            {"pitch": "a4", "beats": 0.5}, {"pitch": "c5", "beats": 1},
+            {"pitch": "d5", "beats": 0.5}, {"pitch": "c5", "beats": 0.5},
+            {"pitch": "a4", "beats": 1}, {"pitch": "g4", "beats": 0.5},
+            {"pitch": "e4", "beats": 0.5}, {"pitch": "d4", "beats": 2}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "verse 2",
+      "kind": "verse",
+      "melody_from": "verse 1",
+      "lines": [
+        {
+          "text": "The logs grow long the tests run red all night",
+          "units": ["The", "logs", "grow", "long", "the", "tests", "run", "red", "all", "night"]
+        },
+        {
+          "text": "The fix lands soft the stars stay up",
+          "units": ["The", "fix", "lands", "soft", "the", "stars", "stay", "up"]
+        }
+      ]
+    },
+    {
+      "name": "chorus 2",
+      "kind": "chorus",
+      "melody_from": "chorus 1",
+      "lines": [
+        {
+          "text": "Sing out the gate is green the work is done",
+          "units": ["Sing", "out", "the", "gate", "is", "green", "the", "work", "is", "done"]
+        },
+        {
+          "text": "The daylight finds the pipeline still at peace",
+          "units": ["The", "day", "light", "finds", "the", "pipe", "line", "still", "at", "peace"]
+        }
+      ]
+    }
+  ]
+}

@@ -645,3 +645,248 @@ def test_rationale_quote_ascii_quotes(
     data["rationale"] = 'the chorus "Raise up  the bridge" repeats'
     proposal = _write_proposal(tmp_path, data)
     assert _run(render_module, proposal, tmp_path / "out") == 0
+
+
+# ---------------------------------------------------------------------------
+# schema 0.3: melody_from + shipped examples
+
+EXAMPLES = REPO_ROOT / "plugins/bard/skills/bard-render/examples"
+
+
+def _to_03(d: dict[str, Any]) -> dict[str, Any]:
+    d["schema_version"] = "0.3"
+    return d
+
+
+@pytest.mark.parametrize("example", ["minimal.en.json", "minimal.ja.json"])
+def test_shipped_example_renders_deterministic(
+    render_module: Any, tmp_path: Path, example: str
+) -> None:
+    proposal = EXAMPLES / example
+    out1, out2 = tmp_path / "a", tmp_path / "b"
+    assert _run(render_module, proposal, out1) == 0
+    assert _run(render_module, proposal, out2) == 0
+    for name in EXPECTED_FILES - {"song.provenance.json"}:
+        assert (out1 / name).read_bytes() == (out2 / name).read_bytes()
+    p1 = json.loads((out1 / "song.provenance.json").read_bytes())
+    p2 = json.loads((out2 / "song.provenance.json").read_bytes())
+    p1.pop("generated_at")
+    p2.pop("generated_at")
+    assert p1 == p2
+    assert p1["schema_version"] == "0.3"
+
+
+def test_melody_from_copies_notes(render_module: Any, tmp_path: Path) -> None:
+    proposal = EXAMPLES / "minimal.ja.json"
+    out_dir = tmp_path / "out"
+    assert _run(render_module, proposal, out_dir) == 0
+    song = render_module.validate_proposal(
+        json.loads(proposal.read_text(encoding="utf-8"))
+    )
+    verse1 = song.sections[0]
+    for copier in song.sections[1:]:
+        assert [n.pitch for ln in copier.lines for n in ln.notes] == [
+            n.pitch for ln in verse1.lines for n in ln.notes
+        ]
+        assert copier.chords == verse1.chords
+    abc = (out_dir / "song.abc").read_text(encoding="utf-8")
+    assert "%% section verse 2" in abc
+    assert "コミットを重ね朝を呼ぶ" in (out_dir / "song.md").read_text(encoding="utf-8")
+    counts = render_module.parse_midi_counts((out_dir / "song.mid").read_bytes())
+    assert counts[0][0] == counts[0][1] == 78
+
+
+def _mf(d: dict[str, Any], mutate: Any) -> dict[str, Any]:
+    _to_03(d)
+    mutate(d)
+    return d
+
+
+def _copy_verse2(d: dict[str, Any]) -> dict[str, Any]:
+    sec = d["sections"][0]
+    return {
+        "name": "verse 2",
+        "kind": "verse",
+        "melody_from": "verse 1",
+        "lines": [{"text": ln["text"], "units": ln["units"]} for ln in sec["lines"]],
+    }
+
+
+def test_reject_melody_from_unknown_section(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        sec = _copy_verse2(d)
+        sec["melody_from"] = "bridge 9"
+        d["sections"].append(sec)
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_ja,
+        lambda d: _mf(d, m),
+        'references unknown/later section "bridge 9"',
+    )
+
+
+def test_reject_melody_from_later_section(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        d["sections"][0]["melody_from"] = "chorus"
+        d["sections"][0].pop("chords")
+        for line in d["sections"][0]["lines"]:
+            line.pop("notes")
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_ja,
+        lambda d: _mf(d, m),
+        'references unknown/later section "chorus"',
+    )
+
+
+def test_reject_melody_from_chained(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        copier = _copy_verse2(d)
+        copier["name"] = "verse 2"
+        d["sections"].append(copier)
+        chained = _copy_verse2(d)
+        chained["name"] = "verse 3"
+        chained["melody_from"] = "verse 2"
+        d["sections"].append(chained)
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_ja,
+        lambda d: _mf(d, m),
+        'source "verse 2" uses melody_from',
+    )
+
+
+def test_reject_melody_from_keeps_chords(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        sec = _copy_verse2(d)
+        sec["chords"] = ["Am", "F", "G", "Am"]
+        d["sections"].append(sec)
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_ja,
+        lambda d: _mf(d, m),
+        "melody_from section must omit chords",
+    )
+
+
+def test_reject_melody_from_keeps_notes(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        sec = _copy_verse2(d)
+        sec["lines"][0]["notes"] = [
+            {"pitch": n["pitch"], "beats": n["beats"]}
+            for n in d["sections"][0]["lines"][0]["notes"]
+        ]
+        d["sections"].append(sec)
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_ja,
+        lambda d: _mf(d, m),
+        "melody_from section must omit notes",
+    )
+
+
+def test_reject_melody_from_line_count(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        sec = _copy_verse2(d)
+        sec["lines"] = sec["lines"][:1]
+        d["sections"].append(sec)
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_ja,
+        lambda d: _mf(d, m),
+        "line count 1 != source 2",
+    )
+
+
+def test_reject_melody_from_units_count(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        sec = _copy_verse2(d)
+        sec["lines"][0]["units"] = sec["lines"][0]["units"][:-1]
+        d["sections"].append(sec)
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_ja,
+        lambda d: _mf(d, m),
+        "units count",
+    )
+
+
+def test_reject_melody_from_rest_positions(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        sec = _copy_verse2(d)
+        # source line 1 has a rest at units index 10 ("-"); move it
+        src = d["sections"][0]["lines"][1]["units"]
+        assert src[10] == "-"
+        new_units = list(src)
+        new_units[10] = "を"
+        new_units[9] = "-"
+        sec["lines"][1]["units"] = new_units
+        d["sections"].append(sec)
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_ja,
+        lambda d: _mf(d, m),
+        "rest positions differ from source",
+    )
+
+
+def test_reject_melody_from_under_02(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        d["sections"].append(_copy_verse2(d))
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_ja,
+        m,
+        "melody_from requires schema_version 0.3",
+    )
+
+
+def test_reject_schema_version_04(
+    render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        d["schema_version"] = "0.4"
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_en,
+        m,
+        'must be "0.2" or "0.3"',
+    )
