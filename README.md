@@ -26,7 +26,12 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 - `song.mid` — Standard MIDI File format 1（旋律 + 伴奏）
 - `song.mml` — `bard-mml 0.1`
 - `song.proposal.json` / `song.provenance.json` — 歌の正となる提案と来歴
+- `notes.md` / `story.md` / `lyrics.md` / `plan.md` — 作詞過程の中間ファイル（stage別）
 - `context.md` / `critic.md` — 親が書いた会話の要約と、critic の所見・採否
+
+提案契約はschema 0.3。反復するセクションは`melody_from`で前のセクションのコードと
+メロディを複製できるので、提案JSONが短くなります。検証だけしたいときは`--check`を
+使います（何も書かずに理由を列挙）。
 
 ## 仕組み
 
@@ -85,6 +90,11 @@ URLで再追加し、plugin詳細の`resolved_ref`が新しいタグのSHAと一
 
 実機確認済みの環境は OpenHands 1.46.0 です（SDKの対象版 1.49.2 とは別の系統）。fallback経路は
 実機で確認済み、task経路はまだ未検証です。
+
+補足: SDK 1.49.2 の `AgentSettings.create_agent` は profile の `tools` が `None`（未指定）の
+ときだけ `enable_sub_agents` で TaskToolSet を追加します（ソース: `openhands-sdk/openhands/sdk/settings/model.py`）。
+profile で `tools` を明示していると ON でも `task` が出ません。対処: `tools` を未指定に戻すか、
+`task_tool_set` を明示追加してください。1.46.0 で同じ挙動かは未確認です。
 
 導入状態はAPIでも確認できます（`X-Session-API-Key` が必要）。`resolved_ref` がタグの
 commit SHA と一致していれば、意図した版が入っています。

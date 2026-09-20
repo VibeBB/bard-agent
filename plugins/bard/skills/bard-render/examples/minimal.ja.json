@@ -1,0 +1,93 @@
+{
+  "artifact_kind": "bard_song_proposal",
+  "schema_version": "0.3",
+  "title": "夜明けのビルド",
+  "mode": "chronicle",
+  "language": "ja",
+  "sources": [
+    {"kind": "conversation_summary", "ref": "context.md"}
+  ],
+  "rationale": "Aマイナーの3/4は夜通しの作業に合う。反復形式にmelody_fromを使う例。",
+  "originality": {
+    "original_lyrics": true,
+    "original_melody": true,
+    "no_named_artist_imitation": true,
+    "no_real_person_ridicule": true
+  },
+  "key": {"tonic": "A", "mode": "minor"},
+  "meter": "3/4",
+  "bpm": 90,
+  "instruments": {"melody": 74, "accompaniment": 24},
+  "vocal_range": {"low": "c4", "high": "e5"},
+  "sections": [
+    {
+      "name": "verse 1",
+      "kind": "verse",
+      "chords": ["Am", "F", "G", "Am"],
+      "lines": [
+        {
+          "text": "ビルドのあかり夜にともる",
+          "reading": "びるどのあかりよるにともる",
+          "units": ["び", "る", "ど", "の", "あ", "か", "り", "よ", "る", "に", "と", "も", "る"],
+          "notes": [
+            {"pitch": "a4", "beats": 0.5}, {"pitch": "b4", "beats": 0.5},
+            {"pitch": "c5", "beats": 0.5}, {"pitch": "b4", "beats": 0.5},
+            {"pitch": "a4", "beats": 0.25}, {"pitch": "g4", "beats": 0.25},
+            {"pitch": "a4", "beats": 0.5}, {"pitch": "f4", "beats": 0.5},
+            {"pitch": "e4", "beats": 0.5}, {"pitch": "f4", "beats": 0.25},
+            {"pitch": "d4", "beats": 0.25}, {"pitch": "e4", "beats": 0.5},
+            {"pitch": "e4", "beats": 1}
+          ]
+        },
+        {
+          "text": "テストが赤く夜をうめる",
+          "reading": "てすとがあかくよるをうめる",
+          "units": ["て", "す", "と", "が", "あ", "か", "く", "よ", "る", "を", "う", "め", "る"],
+          "notes": [
+            {"pitch": "g4", "beats": 0.25}, {"pitch": "a4", "beats": 0.25},
+            {"pitch": "b4", "beats": 1}, {"pitch": "c5", "beats": 0.5},
+            {"pitch": "a4", "beats": 0.5}, {"pitch": "a4", "beats": 0.5},
+            {"pitch": "a4", "beats": 0.5}, {"pitch": "e4", "beats": 0.25},
+            {"pitch": "f4", "beats": 0.25}, {"pitch": "e4", "beats": 0.5},
+            {"pitch": "d4", "beats": 0.5}, {"pitch": "c4", "beats": 0.5},
+            {"pitch": "a4", "beats": 0.5}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "verse 2",
+      "kind": "verse",
+      "melody_from": "verse 1",
+      "lines": [
+        {
+          "text": "コミットを重ね朝を呼ぶ",
+          "reading": "こみっとをかさねあさをよぶ",
+          "units": ["こ", "み", "っ", "と", "を", "か", "さ", "ね", "あ", "さ", "を", "よ", "ぶ"]
+        },
+        {
+          "text": "緑のチェック朝に変わる",
+          "reading": "みどりのちぇっくあさにかわる",
+          "units": ["み", "ど", "り", "の", "ちぇ", "っ", "く", "あ", "さ", "に", "か", "わ", "る"]
+        }
+      ]
+    },
+    {
+      "name": "verse 3",
+      "kind": "verse",
+      "melody_from": "verse 1",
+      "lines": [
+        {
+          "text": "古いタグを夜明けに歌う",
+          "reading": "ふるいたぐをよあけにうたう",
+          "units": ["ふ", "る", "い", "た", "ぐ", "を", "よ", "あ", "け", "に", "う", "た", "う"]
+        },
+        {
+          "text": "あの歌が空にのぼりゆく",
+          "reading": "あのうたがそらにのぼりゆく",
+          "units": ["あ", "の", "う", "た", "が", "そ", "ら", "に", "の", "ぼ", "り", "ゆ", "く"]
+        }
+      ]
+    }
+  ]
+}

@@ -17,9 +17,56 @@ triggers:
 # Bard render
 
 `scripts/render_song.py` is the only writer of song artifacts. It reads one proposal, validates
-it against `docs/song-proposal-contract.md` (schema 0.2), renders every output in memory, reads
-each output back and compares it with the proposal, and only then writes files. Any failure
-writes nothing and exits non-zero with every reason listed. Python 3.12+, standard library only.
+it against `docs/song-proposal-contract.md` (schema 0.3; 0.2 still accepted), renders every
+output in memory, reads each output back and compares it with the proposal, and only then
+writes files. Any failure writes nothing and exits non-zero with every reason listed.
+Python 3.12+, standard library only.
+
+## Contract in one page
+
+Start from a complete valid example and edit it: `examples/minimal.en.json` (English,
+verse-chorus) or `examples/minimal.ja.json` (Japanese with `reading`, strophic
+`melody_from`). Both render in CI. You do not need to read `render_song.py`.
+
+```json
+{
+  "artifact_kind": "bard_song_proposal", "schema_version": "0.3",
+  "title": "1..80 chars", "mode": "chronicle|praise|lament|satire|inspire|lore",
+  "language": "ja|en",
+  "sources": [{"kind": "conversation_summary|agent_message|git_log|file|user_request", "ref": "path or range"}],
+  "rationale": "1..2000 chars; quote lyrics only verbatim",
+  "originality": {"original_lyrics": true, "original_melody": true,
+                  "no_named_artist_imitation": true, "no_real_person_ridicule": true},
+  "key": {"tonic": "D", "mode": "major|minor|dorian|mixolydian"},
+  "meter": "4/4|3/4|6/8", "bpm": 96,
+  "instruments": {"melody": 74, "accompaniment": 24},
+  "vocal_range": {"low": "c4", "high": "e5"},
+  "sections": [
+    {"name": "verse 1", "kind": "verse", "chords": ["Dm", "C", "Am Dm", "Dm"],
+     "lines": [{"text": "...", "reading": "kana, ja only", "units": ["..."],
+                "notes": [{"pitch": "d4", "beats": 0.5}]}]},
+    {"name": "verse 2", "kind": "verse", "melody_from": "verse 1",
+     "lines": [{"text": "...", "units": ["..."]}]}
+  ]
+}
+```
+
+- One note per unit; `-` unit ⇔ `r` pitch; `~` unit = melisma on the previous syllable, same or
+  adjacent pitch. `beats` ∈ `0.25 0.5 0.75 1 1.5 2 3 4`; a section's notes sum to
+  `bars × beats-per-bar` (`6/8` = 3 beats per bar).
+- Section `name` `[A-Za-z0-9 _-]{1,32}`, unique; its first word (`intro verse chorus refrain
+  bridge outro`) must agree with `kind` (`refrain` → `chorus`). `intro`/`outro` may have
+  `lines: []` (instrumental).
+- `melody_from: "<earlier section name>"` copies that section's `chords` and every line's
+  `notes`; the copying section omits `chords` and `notes`, and must have the same number of
+  lines, the same unit count per line, and `-` rests in the same positions. The source may
+  not itself use `melody_from`.
+- Mechanical melody rules: all pitches in `vocal_range` and in the scale; the note starting
+  beat 1 of each bar is a tone of that bar's first chord; leaps ≤ 12 semitones; last sung note
+  is degree 1/3/5 of the tonic; last chord root is the tonic; 16+ sung notes, 4+ lyric lines;
+  a line of 4+ notes uses ≥ 2 different `beats` values.
+- Lyric checks: `en` units joined == `text` minus spaces/punctuation (case-insensitive);
+  `ja` units joined == `reading` if present else `text`; `reading` is kana only and `ja` only.
 
 ## Run
 
@@ -73,6 +120,11 @@ Read every reason before editing; fix the proposal JSON, not the outputs. The co
 | `originality.* must be true` | only set the flags after re-checking the song; do not set them to pass |
 | `name "…" implies kind …` | section names starting `intro`/`verse`/`chorus`/`refrain`/`bridge`/`outro` must use the matching `kind` (`refrain` → `chorus`) |
 | `quoted lyric "…" does not appear` | a lyric quoted in `rationale` after `refrain`/`chorus`/`verse`/`サビ`/`リフレイン` must match the final `text`/`title`; fix the quote after revising lyrics |
+| `melody_from references unknown/later section` | point at a section that appears earlier in `sections` |
+| `melody_from source uses melody_from` | copy from the section that holds the notes, not from another copy |
+| `melody_from section must omit chords/notes` | remove `chords` from the section and `notes` from its lines |
+| `line count N != source M` / `units count N != source M` / `rest positions differ` | rewrite the copying line to the source line's unit count and rest placement, or change the source |
+| `schema_version must be 0.2 or 0.3` / `melody_from requires schema_version 0.3` | write `"schema_version": "0.3"` |
 
 The renderer judges the proposal text only. Whether the song is good, and whether the work it
 sings about succeeded, are outside its scope.

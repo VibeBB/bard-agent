@@ -10,16 +10,30 @@ allowed-tools:
 # /bard:sing
 
 bard sub-agentは親の会話履歴を受け取らない。親であるあなたが題材を要約して渡す。
+歌の生成には数分から数十分かかるため、着手前に方向を可視化し、途中で黙り込まない。
 
 1. 引数からモードと題材を読む。モードが無ければ`chronicle`、題材が無ければ「この会話で
    起きたこと」とする。歌詞の言語は引数か会話の言語に合わせる（`ja`/`en`）。
-2. `out/bard/<slug>/`を作る。`<slug>`は題材から作る英小文字とハイフンの短い名前。
-3. `out/bard/<slug>/context.md`へ次を書く（会話の言語で、300..1500字）:
-   - 何が起きたか（時系列、5..12項目。具体的なファイル名・テスト名・エラー文を含める）
+2. 利用者への可視メッセージへ、着手前に3行だけ書く:
+
+   ```text
+   モード: <mode> / 言語: <ja|en> / 題材: <一言>
+   出力: out/bard/<slug>/
+   実行経路: task sub-agent | fallback（taskなし）
+   ```
+
+   実行経路は、**この会話で実際に使えるツール一覧**に`task`があるかで決める。設定画面の
+   「sub-agentを有効化」だけでは判断しない（profileで`tools`が明示されていると、有効化しても
+   `task`が出ない）。
+3. `out/bard/<slug>/`を作る。`<slug>`は題材から作る英小文字とハイフンの短い名前。
+4. `out/bard/<slug>/context.md`へ次を書く（会話の言語で、300..1500字）。各項目に出所を
+   `[会話]` `[git]` `[file:<path>]` `[依頼]` で付ける。会話に無いことは書かない:
+   - 何が起きたか（時系列、5..12項目。具体的なファイル名・テスト名・エラー文・版番号）
    - 登場した役割（人名は書かず「利用者」「レビュアー」「CI」「別のエージェント」等）
    - 感情の起伏（詰まった所、抜けた所、まだ残っている不安）
    - 歌に入れてほしい語、入れてほしくない語
-4. `task`が使える場合:
+   - 他のエージェントの発言や成果物を題材にする場合は、その要約と出所（会話ID・ファイル）
+5. `task`が使える場合:
 
    ```text
    task(subagent_type="bard",
@@ -27,17 +41,21 @@ bard sub-agentは親の会話履歴を受け取らない。親であるあなた
         prompt="Mode: <mode>. Language: <ja|en>. Output directory: out/bard/<slug>/. Read out/bard/<slug>/context.md first, then the workspace. Subject: <題材>.")
    ```
 
-   `task`が使えない場合（sub-agentが無効、`task_tool_set`が無い）は、そのことを
-   利用者への返信（可視メッセージ）へ一言書き、plugin rootの`agents/bard.md`を読み、その手順を自分で実行する。criticも同様に
-   `task`が無ければ`<plugin root>/agents/bard-critic.md`を読んで自分で別パスとして実施し、
-   所見と採否を`<out dir>/critic.md`へ書く。plugin rootは
-   `$BARD_PLUGIN_ROOT`、`$OPENHANDS_PROJECT_DIR/plugins/bard`、
-   `$HOME/.openhands/plugins/installed/bard`の順で最初に存在するディレクトリ。
-5. bardの報告を受け取ったら、題名・モード・歌詞全文を会話に表示し、`out/bard/<slug>/song.md`
-   （コード表とABC譜）、`song.mid`、`song.mml`の場所を示す。歌詞は1行につきMarkdownの
-   1行となるよう（行末ハードブレークかコードブロックで）表示し、一つの段落に潰さない。
-   返信の末尾に`実行経路: task sub-agent`または`実行経路: fallback（taskなし）`の
-   1行を必ず入れる。
+   `task`が使えない場合は、plugin rootの`agents/bard.md`を読み、そのStage 0..7を自分で順に
+   実行する（各Stageのファイルを書き、`--check`→render→critic）。criticは
+   `<plugin root>/agents/bard-critic.md`を読んで別パスとして実施し、所見と採否を
+   `<out dir>/critic.md`へ書く。plugin rootは`$BARD_PLUGIN_ROOT`、
+   `$OPENHANDS_PROJECT_DIR/plugins/bard`、`$HOME/.openhands/plugins/installed/bard`の順で
+   最初に存在するディレクトリ。
+6. bardの報告を受け取ったら、次の順で会話に表示する:
+   1. 題名・モード・言語・調/拍子/テンポ
+   2. 歌詞全文。1行につきMarkdownの1行（行末ハードブレークかコードブロック）、一つの段落に
+      潰さない
+   3. `Files:` `out/bard/<slug>/song.md`（コード表とABC譜）、`song.mid`、`song.mml`、
+      `song.provenance.json`、`critic.md`
+   4. `Critic:` 適用した所見と見送った所見（各1行）
+   5. 末尾に必ず1行: `実行経路: task sub-agent` または `実行経路: fallback（taskなし）`
+      （手順2で宣言したものと一致させる。途中で変わったら理由を添える）
 
-歌は観測物であり、作業の合否や品質の判断ではない。既存楽曲の使用を求められても、bardは
-オリジナルを書く（`docs/adr/ADR-0003`）。
+歌は観測物であり、作業の合否や品質の判断ではない。歌の良し悪しも断定しない。既存楽曲の
+使用を求められても、bardはオリジナルを書く（`docs/adr/ADR-0003`）。

@@ -64,7 +64,8 @@ from typing import Any
 
 PROPOSAL_KIND = "bard_song_proposal"
 PROVENANCE_KIND = "bard_song_provenance"
-SCHEMA_VERSION = "0.2"
+SCHEMA_VERSION = "0.3"
+SCHEMA_VERSIONS_ACCEPTED = ("0.2", "0.3")
 PPQ = 480
 
 MODES = {"chronicle", "praise", "lament", "satire", "inspire", "lore"}
@@ -266,8 +267,13 @@ def validate_proposal(data: object) -> Song:
 
     if data.get("artifact_kind") != PROPOSAL_KIND:
         err("artifact_kind", f'must be "{PROPOSAL_KIND}"')
-    if data.get("schema_version") != SCHEMA_VERSION:
-        err("schema_version", f'must be "{SCHEMA_VERSION}"')
+    schema_version = data.get("schema_version")
+    if schema_version not in SCHEMA_VERSIONS_ACCEPTED:
+        accepted = SCHEMA_VERSIONS_ACCEPTED
+        err(
+            "schema_version",
+            f'must be "{accepted[0]}" or "{accepted[1]}"',
+        )
 
     title = data.get("title")
     if not isinstance(title, str) or not (1 <= len(title) <= 80) or not title.strip():
@@ -403,6 +409,8 @@ def validate_proposal(data: object) -> Song:
         err("sections", "must contain 1..12 sections")
     else:
         seen_names: set[str] = set()
+        earlier: dict[str, Section] = {}
+        copier_names: set[str] = set()
         for si, raw_sec in enumerate(raw_sections):
             sp = f"sections[{si}]"
             if not isinstance(raw_sec, dict):
@@ -424,9 +432,41 @@ def validate_proposal(data: object) -> Song:
             if implied is not None and kind in SECTION_KINDS and kind != implied:
                 err(f"{sp}.kind", f'name "{name}" implies kind {implied}')
 
+            melody_from = raw_sec.get("melody_from")
+            src: Section | None = None
+            if melody_from is not None:
+                if schema_version != SCHEMA_VERSION:
+                    err(
+                        f"{sp}.melody_from",
+                        "melody_from requires schema_version 0.3",
+                    )
+                elif not isinstance(melody_from, str) or melody_from not in earlier:
+                    err(
+                        f"{sp}.melody_from",
+                        f'references unknown/later section "{melody_from}"',
+                    )
+                elif melody_from in copier_names:
+                    err(
+                        f"{sp}.melody_from",
+                        f'source "{melody_from}" uses melody_from',
+                    )
+                else:
+                    src = earlier[melody_from]
+                if "chords" in raw_sec:
+                    err(
+                        f"{sp}.chords",
+                        "melody_from section must omit chords",
+                    )
+
             raw_chords = raw_sec.get("chords")
             bars: list[list[Chord]] = []
-            if not isinstance(raw_chords, list) or not (1 <= len(raw_chords) <= 32):
+            if melody_from is not None:
+                if src is not None:
+                    bars = [list(bar) for bar in src.chords]
+                    chord_events += sum(len(c.tones) for bar in bars for c in bar)
+                    if bars and bars[-1]:
+                        last_chord_root_pc = bars[-1][-1].root_pc
+            elif not isinstance(raw_chords, list) or not (1 <= len(raw_chords) <= 32):
                 err(f"{sp}.chords", "must contain 1..32 bar entries")
             else:
                 for bi, entry in enumerate(raw_chords):
@@ -466,6 +506,12 @@ def validate_proposal(data: object) -> Song:
                     pass
                 else:
                     lyric_line_count += len(raw_lines)
+                if melody_from is not None and src is not None:
+                    if len(raw_lines) != len(src.lines):
+                        err(
+                            f"{sp}.lines",
+                            f"line count {len(raw_lines)} != source {len(src.lines)}",
+                        )
                 for li, raw_line in enumerate(raw_lines):
                     lp = f"{sp}.lines[{li}]"
                     if not isinstance(raw_line, dict):
@@ -494,10 +540,51 @@ def validate_proposal(data: object) -> Song:
                         units = []
                     raw_notes = raw_line.get("notes")
                     notes: list[Note] = []
-                    if not isinstance(raw_notes, list):
+                    src_line = (
+                        src.lines[li]
+                        if src is not None and li < len(src.lines)
+                        else None
+                    )
+                    if melody_from is not None:
+                        if "notes" in raw_line:
+                            err(
+                                f"{lp}.notes",
+                                "melody_from section must omit notes",
+                            )
+                        if src_line is not None:
+                            notes = list(src_line.notes)
+                            section_beats += sum(n.beats for n in notes)
+                            if len(units) != len(src_line.units):
+                                err(
+                                    f"{lp}.units",
+                                    f"units count {len(units)} != "
+                                    f"source {len(src_line.units)}",
+                                )
+                            elif [i for i, u in enumerate(units) if u == "-"] != [
+                                i for i, u in enumerate(src_line.units) if u == "-"
+                            ]:
+                                err(
+                                    f"{lp}.units",
+                                    "rest positions differ from source",
+                                )
+                        raw_notes = []
+                        for ni, note in enumerate(notes):
+                            if note.midi is None:
+                                continue
+                            if prev_midi is not None and (
+                                abs(note.midi - prev_midi) > 12
+                            ):
+                                err(
+                                    f"{lp}.notes[{ni}]",
+                                    "leap from previous note exceeds 12 semitones",
+                                )
+                            prev_midi = note.midi
+                            sung_notes += 1
+                            last_sung_midi = note.midi
+                    elif not isinstance(raw_notes, list):
                         err(f"{lp}.notes", "must be a list")
                         raw_notes = []
-                    if len(raw_notes) != len(units):
+                    elif len(raw_notes) != len(units):
                         err(
                             f"{lp}.notes",
                             f"notes count {len(raw_notes)} != units count {len(units)}",
@@ -629,9 +716,11 @@ def validate_proposal(data: object) -> Song:
                     f"section beats {float(section_beats)} != "
                     f"bars*beats {float(beats_per_bar * len(bars))}",
                 )
-            sections.append(
-                Section(name=name, kind=kind or "", chords=bars, lines=lines)
-            )
+            section = Section(name=name, kind=kind or "", chords=bars, lines=lines)
+            sections.append(section)
+            earlier[name] = section
+            if melody_from is not None:
+                copier_names.add(name)
 
     if sung_notes < 16:
         err("sections", "at least 16 sung (non-rest) notes required")
@@ -1135,6 +1224,7 @@ def render_provenance(
     )
     record = {
         "artifact_kind": PROVENANCE_KIND,
+        "schema_version": song.raw.get("schema_version", SCHEMA_VERSION),
         "authority": "none",
         "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "proposal": {"path": str(proposal_path), "sha256": proposal_sha},
