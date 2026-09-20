@@ -419,7 +419,8 @@ def validate_proposal(data: object) -> Song:
             kind = raw_sec.get("kind")
             if kind not in SECTION_KINDS:
                 err(f"{sp}.kind", f"must be one of {sorted(SECTION_KINDS)}")
-            implied = SECTION_NAME_KIND.get(name.split()[0].lower())
+            first_word = name.split()[0].lower() if name.split() else ""
+            implied = SECTION_NAME_KIND.get(first_word)
             if implied is not None and kind in SECTION_KINDS and kind != implied:
                 err(f"{sp}.kind", f'name "{name}" implies kind {implied}')
 
