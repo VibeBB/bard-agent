@@ -17,6 +17,13 @@ Conventions chosen where the contract leaves detail open:
   ``text`` to use kanji. ``reading`` is rejected on ``en`` lines.
 - Rhythm rule: any sung line of 4+ notes must use at least two distinct
   ``beats`` values.
+- A section ``name`` starting with a known kind word (``intro``/``verse``/
+  ``chorus``/``refrain``/``bridge``/``outro``) must carry the matching ``kind``
+  (``refrain`` maps to ``chorus``).
+- ``rationale`` lyric quotes introduced by ``refrain``/``chorus``/``verse``/
+  ``サビ``/``リフレイン`` and ``「」``/``"`` must appear verbatim (after
+  whitespace normalization) in some line ``text`` or the ``title``, catching
+  quotes left stale by post-critic rewrites.
 - ``w:`` lyric lines: for ``en``, text words are reconstructed by consuming
   non-special units against each whitespace-split word's normalized form;
   inside a word, a piece is separated from the previous one by ``-`` only
@@ -63,6 +70,19 @@ PPQ = 480
 MODES = {"chronicle", "praise", "lament", "satire", "inspire", "lore"}
 LANGUAGES = {"ja", "en"}
 SECTION_KINDS = {"intro", "verse", "chorus", "bridge", "outro"}
+SECTION_NAME_KIND = {
+    "intro": "intro",
+    "verse": "verse",
+    "chorus": "chorus",
+    "refrain": "chorus",
+    "bridge": "bridge",
+    "outro": "outro",
+}
+RATIONALE_QUOTE_RE = re.compile(
+    r'(?:refrain|chorus|verse|サビ|リフレイン)\s*[「"“]([^」"”]{4,})[」"”]',
+    re.IGNORECASE,
+)
+WS_RUN_RE = re.compile("[ 　]+")
 SOURCE_KINDS = {
     "conversation_summary",
     "agent_message",
@@ -399,6 +419,9 @@ def validate_proposal(data: object) -> Song:
             kind = raw_sec.get("kind")
             if kind not in SECTION_KINDS:
                 err(f"{sp}.kind", f"must be one of {sorted(SECTION_KINDS)}")
+            implied = SECTION_NAME_KIND.get(name.split()[0].lower())
+            if implied is not None and kind in SECTION_KINDS and kind != implied:
+                err(f"{sp}.kind", f'name "{name}" implies kind {implied}')
 
             raw_chords = raw_sec.get("chords")
             bars: list[list[Chord]] = []
@@ -642,6 +665,17 @@ def validate_proposal(data: object) -> Song:
         )
         if cadence and last_sung_midi % 12 not in cadence:
             err("sections", "final pitch not degree 1/3/5")
+
+    if rationale:
+        corpus = [WS_RUN_RE.sub(" ", line.text) for s in sections for line in s.lines]
+        corpus.append(WS_RUN_RE.sub(" ", title))
+        for m in RATIONALE_QUOTE_RE.finditer(rationale):
+            quote = WS_RUN_RE.sub(" ", m.group(1)).strip()
+            if quote and not any(quote in c for c in corpus):
+                err(
+                    "rationale",
+                    f'quoted lyric "{quote}" does not appear in the lyrics',
+                )
 
     if reasons:
         raise ProposalError(reasons)

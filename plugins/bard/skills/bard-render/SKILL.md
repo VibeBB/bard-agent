@@ -71,6 +71,8 @@ Read every reason before editing; fix the proposal JSON, not the outputs. The co
 | `chord root X not in scale` | pick a diatonic chord (see `../bard-songcraft/SKILL.md` §3) |
 | `final chord root != tonic` / `final pitch not degree 1/3/5` | end on the tonic chord and a chord tone |
 | `originality.* must be true` | only set the flags after re-checking the song; do not set them to pass |
+| `name "…" implies kind …` | section names starting `intro`/`verse`/`chorus`/`refrain`/`bridge`/`outro` must use the matching `kind` (`refrain` → `chorus`) |
+| `quoted lyric "…" does not appear` | a lyric quoted in `rationale` after `refrain`/`chorus`/`verse`/`サビ`/`リフレイン` must match the final `text`/`title`; fix the quote after revising lyrics |
 
 The renderer judges the proposal text only. Whether the song is good, and whether the work it
 sings about succeeded, are outside its scope.

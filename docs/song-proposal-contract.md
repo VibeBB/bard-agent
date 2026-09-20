@@ -78,7 +78,7 @@ bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skil
 | フィールド | 規則 |
 | --- | --- |
 | `name` | 1..32文字、`[A-Za-z0-9 _-]`、歌全体で一意 |
-| `kind` | `intro` / `verse` / `chorus` / `bridge` / `outro` |
+| `kind` | `intro` / `verse` / `chorus` / `bridge` / `outro`。`name`の先頭の語が `intro` / `verse` / `chorus` / `refrain` / `bridge` / `outro`（小文字化して比較）なら`kind`は対応する種別でなければならない（`refrain`は`chorus`に対応） |
 | `chords` | 小節ごとに1要素、1..32小節。要素は1つまたは空白区切り2つのコード記号（2つなら小節を前後半に等分） |
 | `lines` | 0件以上（`intro`/`outro`は0件可、それ以外は1件以上）。`lines: []`の`intro`/`outro`は小節数×1小節の拍数のインストゥルメンタル区間となり、旋律は休み・伴奏のみ鳴る（ABCは各コード区間に`z`全小節休符、MMLは`r`、Markdownは`_(instrumental)_`/`_（間奏）_`を出力、`w:`行は出さない）。行がある場合、行の`notes`の合計拍数を順に並べたものがセクションの総拍数（小節数×1小節の拍数）と**一致**しなければならない |
 
@@ -118,6 +118,7 @@ bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skil
 6. 休符以外の音が16個以上、行が4行以上（`intro`/`outro`を除く）。
 7. 総イベント数（旋律音 + 和音音）は8192以下。
 8. 4音以上を持つ各行の`notes`の`beats`値は少なくとも2種類含まなければならない。
+9. `rationale`中で `refrain` / `chorus` / `verse` / `サビ` / `リフレイン` に続く引用（`「」`・`"`・`“”`、4文字以上）は、空白正規化後にいずれかの行の`text`か`title`に部分一致しなければならない（改訂で古くなった歌詞引用を検出するため）。
 
 ## 描画
 
