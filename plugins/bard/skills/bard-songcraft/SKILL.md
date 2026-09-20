@@ -169,7 +169,7 @@ asks for.
 
 ### Worked example (Japanese, chronicle, A minor, 3/4, 90 bpm)
 
-Kanji goes in `text`, kana in `reading`, morae in `units`. Eight morae over two
+Kanji goes in `text`, kana in `reading`, morae in `units`. Thirteen morae over two
 bars with varied beats and a breath rest:
 
 ```text
