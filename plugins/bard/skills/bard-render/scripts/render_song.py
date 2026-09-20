@@ -18,6 +18,10 @@ Conventions chosen where the contract leaves detail open:
   becomes ``_`` and a rest unit becomes ``*``. ``ja`` text has no word
   boundaries, so every sung unit is joined by ``-`` into one run (``~`` -> ``_``,
   ``-`` -> ``*``).
+- Each lyric ``Line`` renders as its own ABC music line followed by its single
+  ``w:`` line, keeping lyric verse alignment 1:1; a line that ends mid-bar
+  omits the ``|`` and the next line continues the bar. The section's last
+  music line always closes with ``|``.
 - Split-bar chords ("Am Dm") annotate the bar start and are re-annotated before
   the first melody event starting at or after the bar midpoint; if no event
   starts there, the annotation goes just before the bar line.
@@ -359,6 +363,7 @@ def validate_proposal(data: object) -> Song:
     chord_events = 0
     last_sung_midi: int | None = None
     last_chord_root_pc: int | None = None
+    prev_midi: int | None = None
 
     if not isinstance(raw_sections, list) or not (1 <= len(raw_sections) <= 12):
         err("sections", "must contain 1..12 sections")
@@ -423,7 +428,6 @@ def validate_proposal(data: object) -> Song:
                     pass
                 else:
                     lyric_line_count += len(raw_lines)
-                prev_midi: int | None = None
                 for li, raw_line in enumerate(raw_lines):
                     lp = f"{sp}.lines[{li}]"
                     if not isinstance(raw_line, dict):
@@ -714,71 +718,67 @@ def render_abc(song: Song) -> str:
     half = song.beats_per_bar / 2
     for sec in song.sections:
         lines.append(f"%% section {sec.name}")
-        # events with absolute offsets inside the section
-        events: list[tuple[Fraction, Note]] = []
         pos = Fraction(0)
+        bar = 0
+        need_chord = True
+        mid_done = False
         for line in sec.lines:
+            tokens: list[str] = []
             for note in line.notes:
-                events.append((pos, note))
-                pos += note.beats
-        bar_start = Fraction(0)
-        body_tokens: list[str] = []
-        for bar in sec.chords:
-            bar_end = bar_start + song.beats_per_bar
-            if bar:
-                body_tokens.append(f'"{bar[0].symbol}"')
-            mid_used = len(bar) == 2
-            mid_done = False
-            for start, note in events:
-                if not (bar_start <= start < bar_end):
-                    continue
-                if mid_used and not mid_done and start >= bar_start + half:
-                    body_tokens.append(f'"{bar[1].symbol}"')
+                while pos >= (bar + 1) * song.beats_per_bar:
+                    cur = sec.chords[bar]
+                    if len(cur) == 2 and not mid_done:
+                        tokens.append(f'"{cur[1].symbol}"')
+                    tokens.append("|")
+                    bar += 1
+                    need_chord = True
+                    mid_done = False
+                if need_chord:
+                    tokens.append(f'"{sec.chords[bar][0].symbol}"')
+                    need_chord = False
+                cur = sec.chords[bar]
+                if len(cur) == 2 and not mid_done and pos % song.beats_per_bar >= half:
+                    tokens.append(f'"{cur[1].symbol}"')
                     mid_done = True
                 if note.midi is None:
-                    body_tokens.append("z" + _abc_len(note.beats))
+                    tokens.append("z" + _abc_len(note.beats))
                 else:
-                    body_tokens.append(
+                    tokens.append(
                         _abc_note_name(note.midi, flat) + _abc_len(note.beats)
                     )
-            if mid_used and not mid_done:
-                body_tokens.append(f'"{bar[1].symbol}"')
-            body_tokens.append("|")
-            bar_start = bar_end
-        lines.append(" ".join(body_tokens))
-        for w in _section_w_lines(song, sec):
-            lines.append(w)
+                pos += note.beats
+            lines.append(" ".join(tokens))
+            lines.append(_w_line(song, line))
+        music_line_idx = len(lines) - 2
+        if not lines[music_line_idx].endswith("|"):
+            lines[music_line_idx] += " |"
     return "\n".join(lines) + "\n"
 
 
-def _section_w_lines(song: Song, sec: Section) -> list[str]:
-    out: list[str] = []
-    for line in sec.lines:
-        if song.language == "en":
-            tokens: list[str] = []
-            words = [w for w in line.text.split() if w]
-            idx = 0
-            for word in words:
-                target = word.translate(EN_TEXT_STRIP).casefold()
-                syllables: list[str] = []
-                while idx < len(line.units):
-                    u = line.units[idx]
-                    idx += 1
-                    if u in ("~", "-"):
-                        tokens.append("_" if u == "~" else "*")
-                        continue
-                    syllables.append(u)
-                    if "".join(syllables).casefold() == target:
-                        break
-                if syllables:
-                    tokens.append("-".join(syllables))
-            for u in line.units[idx:]:
-                tokens.append("_" if u == "~" else "*" if u == "-" else u)
-            out.append("w: " + " ".join(tokens))
-        else:
-            tokens = ["_" if u == "~" else "*" if u == "-" else u for u in line.units]
-            out.append("w: " + "-".join(tokens))
-    return out
+def _w_line(song: Song, line: Line) -> str:
+    if song.language == "en":
+        tokens: list[str] = []
+        words = [w for w in line.text.split() if w]
+        idx = 0
+        for word in words:
+            target = word.translate(EN_TEXT_STRIP).casefold()
+            syllables: list[str] = []
+            while idx < len(line.units):
+                u = line.units[idx]
+                idx += 1
+                if u in ("~", "-"):
+                    tokens.append("_" if u == "~" else "*")
+                    continue
+                syllables.append(u)
+                if "".join(syllables).casefold() == target:
+                    break
+            if syllables:
+                tokens.append("-".join(syllables))
+        for u in line.units[idx:]:
+            tokens.append("_" if u == "~" else "*" if u == "-" else u)
+        return "w: " + " ".join(tokens)
+    tokens = ["_" if u == "~" else "*" if u == "-" else u for u in line.units]
+    return "w: " + "-".join(tokens)
 
 
 # ---------------------------------------------------------------------------
@@ -1061,6 +1061,18 @@ def parse_abc_melody(abc: str) -> tuple[int, int, Fraction]:
     return notes, rests, total / 2
 
 
+def _read_vlq(track: bytes, i: int) -> tuple[int, int]:
+    value = 0
+    while True:
+        if i >= len(track):
+            raise ProposalError(["readback.midi: truncated VLQ"])
+        b = track[i]
+        i += 1
+        value = (value << 7) | (b & 0x7F)
+        if not (b & 0x80):
+            return value, i
+
+
 def parse_midi_counts(data: bytes) -> dict[int, list[int]]:
     """Parse an SMF and return {channel: [note_on_count, note_off_count]}."""
     if len(data) < 14 or data[:4] != b"MThd":
@@ -1082,16 +1094,7 @@ def parse_midi_counts(data: bytes) -> dict[int, list[int]]:
         i = 0
         running = 0
         while i < len(track):
-            # delta time
-            delta = 0
-            while True:
-                if i >= len(track):
-                    raise ProposalError(["readback.midi: truncated VLQ"])
-                b = track[i]
-                i += 1
-                delta = (delta << 7) | (b & 0x7F)
-                if not (b & 0x80):
-                    break
+            _delta, i = _read_vlq(track, i)
             if i >= len(track):
                 raise ProposalError(["readback.midi: truncated event"])
             status = track[i]
@@ -1106,14 +1109,17 @@ def parse_midi_counts(data: bytes) -> dict[int, list[int]]:
             if status == 0xFF:
                 if i >= len(track):
                     raise ProposalError(["readback.midi: truncated meta event"])
-                meta_len = track[i + 1]
-                i += 2 + meta_len
+                i += 1
+                meta_len, i = _read_vlq(track, i)
+                i += meta_len
+                if i > len(track):
+                    raise ProposalError(["readback.midi: truncated meta payload"])
                 continue
             if status in (0xF0, 0xF7):
-                i += 1
-                if i >= len(track):
-                    raise ProposalError(["readback.midi: truncated sysex"])
-                i += track[i]
+                syx_len, i = _read_vlq(track, i)
+                i += syx_len
+                if i > len(track):
+                    raise ProposalError(["readback.midi: truncated sysex payload"])
                 continue
             if kind in (0xC0, 0xD0):
                 i += 1

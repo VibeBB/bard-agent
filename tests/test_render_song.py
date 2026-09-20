@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+import re
 import struct
 from fractions import Fraction
 from pathlib import Path
@@ -103,6 +104,40 @@ def test_midi_structure(render_module: Any, tmp_path: Path) -> None:
     assert fmt == 1 and ntrks == 3
 
 
+def test_abc_lyrics_align_per_music_line(render_module: Any, tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+    assert _run(render_module, FIXTURES / "valid_en.json", out_dir) == 0
+    abc = (out_dir / "song.abc").read_text(encoding="utf-8")
+    pending: str | None = None
+    pairs: list[tuple[str, str]] = []
+    for raw in abc.splitlines():
+        if raw.startswith("w: "):
+            assert pending is not None, "w: line without a music line"
+            pairs.append((pending, raw[3:]))
+            pending = None
+        elif raw.startswith(("X:", "T:", "C:", "M:", "L:", "Q:", "K:", "%%")):
+            continue
+        elif raw.strip():
+            pending = raw
+    assert len(pairs) >= 6
+    for music, lyric in pairs:
+        n_music = len([t for t in re.sub(r'"[^"]*"', "", music).split() if t != "|"])
+        n_lyric = len([s for tok in lyric.split() for s in tok.split("-")])
+        assert n_music == n_lyric, (music, lyric)
+
+
+def test_long_utf8_title_renders(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    data = copy.deepcopy(valid_ja)
+    data["title"] = "夜の歌" * 20  # 60 chars, 180 UTF-8 bytes -> 2-byte VLQ
+    proposal = _write_proposal(tmp_path, data)
+    out_dir = tmp_path / "out"
+    assert _run(render_module, proposal, out_dir) == 0
+    counts = render_module.parse_midi_counts((out_dir / "song.mid").read_bytes())
+    assert counts[0][0] == counts[0][1] > 0
+
+
 # ---------------------------------------------------------------------------
 # negative tests: one-field corruptions of the valid en fixture
 
@@ -176,6 +211,17 @@ def test_reject_leap_over_octave(
         # d4 then g5 = +19 semitones; g5 also leaves range, leap triggers anyway
         d["vocal_range"] = {"low": "c4", "high": "g5"}
         d["sections"][0]["lines"][0]["notes"][1] = {"pitch": "g5", "beats": 0.5}
+
+    _reject(render_module, tmp_path, valid_en, m, "exceeds 12 semitones")
+
+
+def test_reject_leap_across_section_boundary(
+    render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        # verse ends on d4; chorus opens with f5 (+15) on an F-chord downbeat
+        d["vocal_range"] = {"low": "c4", "high": "g5"}
+        d["sections"][1]["lines"][0]["notes"][0] = {"pitch": "f5", "beats": 0.5}
 
     _reject(render_module, tmp_path, valid_en, m, "exceeds 12 semitones")
 
