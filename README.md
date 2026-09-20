@@ -1,5 +1,7 @@
 # bard-agent
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/uist1idrju3i/bard-agent)
+
 OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです。開発中のワークスペース、
 利用者との会話、他のエージェントとの会話を題材に、オリジナルの歌詞と旋律を作り、
 歌詞・ABC譜・MIDI・MMLとして書き出します。
