@@ -446,3 +446,66 @@ def test_abcm2ps_accepts_abc(render_module: Any, tmp_path: Path, fixture: str) -
     output = proc.stdout + proc.stderr
     assert proc.returncode == 0, output
     assert "words in lyric line" not in output
+
+
+# ---------------------------------------------------------------------------
+# instrumental intro/outro sections
+
+
+def _with_instrumental_sections(data: dict[str, Any]) -> dict[str, Any]:
+    d = copy.deepcopy(data)
+    d["sections"] = [
+        {"name": "intro", "kind": "intro", "chords": ["Dm"], "lines": []},
+        *d["sections"],
+        {"name": "outro", "kind": "outro", "chords": ["Dm", "Dm"], "lines": []},
+    ]
+    return d
+
+
+def test_instrumental_intro_outro_renders(
+    render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
+) -> None:
+    data = _with_instrumental_sections(valid_en)
+    proposal = _write_proposal(tmp_path, data)
+    out_dir = tmp_path / "out"
+    assert _run(render_module, proposal, out_dir) == 0
+    assert {p.name for p in out_dir.iterdir()} == EXPECTED_FILES
+
+    abc = (out_dir / "song.abc").read_text(encoding="utf-8")
+    assert '%% section intro\n"Dm" z8 |' in abc
+    assert '%% section outro\n"Dm" z8 | "Dm" z8 |' in abc
+    intro_w = abc.split("%% section intro")[1].split("%% section")[0]
+    assert "w:" not in intro_w
+
+    n, r, b = render_module.parse_abc_melody(abc)
+    assert (n, r, b) == (58, 3, Fraction(60))
+    counts = render_module.parse_midi_counts((out_dir / "song.mid").read_bytes())
+    assert counts[0] == [58, 58]
+    voices = render_module.parse_mml((out_dir / "song.mml").read_text(encoding="utf-8"))
+    assert voices["melody"] == (58, Fraction(60))
+    assert "(instrumental)" in (out_dir / "song.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(shutil.which("abcm2ps") is None, reason="abcm2ps not installed")
+def test_abcm2ps_accepts_instrumental(
+    render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
+) -> None:
+    proposal = _write_proposal(tmp_path, _with_instrumental_sections(valid_en))
+    out_dir = tmp_path / "out"
+    assert _run(render_module, proposal, out_dir) == 0
+    proc = subprocess.run(
+        ["abcm2ps", str(out_dir / "song.abc"), "-O", str(tmp_path / "song.ps")],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_reject_empty_lines_on_verse(
+    render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        d["sections"][0]["lines"] = []
+
+    _reject(render_module, tmp_path, valid_en, m, "need at least one line")

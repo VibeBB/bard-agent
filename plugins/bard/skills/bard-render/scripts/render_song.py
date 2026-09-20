@@ -25,6 +25,10 @@ Conventions chosen where the contract leaves detail open:
   ``w:`` line, keeping lyric verse alignment 1:1; a line that ends mid-bar
   omits the ``|`` and the next line continues the bar. The section's last
   music line always closes with ``|``.
+- ``intro``/``outro`` sections may declare ``lines: []``: the section is then
+  an instrumental of bars x beats-per-bar. The melody is silent (ABC emits
+  one ``z`` whole-bar rest per chord segment, MML emits ``r`` rests, the MIDI
+  melody track plays nothing) while the accompaniment voices keep playing.
 - Split-bar chords ("Am Dm") annotate the bar start and are re-annotated before
   the first melody event starting at or after the bar midpoint; if no event
   starts there, the annotation goes just before the bar line.
@@ -562,7 +566,7 @@ def validate_proposal(data: object) -> Song:
                                     f"downbeat pitch {note.pitch} is not a chord "
                                     f"tone of {first.symbol}",
                                 )
-            if bars and section_beats != beats_per_bar * len(bars):
+            if bars and lines and section_beats != beats_per_bar * len(bars):
                 err(
                     sp,
                     f"section beats {float(section_beats)} != "
@@ -642,10 +646,12 @@ def _melody_events(song: Song) -> list[tuple[Fraction, Note, Section, Line]]:
     events: list[tuple[Fraction, Note, Section, Line]] = []
     pos = Fraction(0)
     for sec in song.sections:
+        sec_start = pos
         for line in sec.lines:
             for note in line.notes:
                 events.append((pos, note, sec, line))
                 pos += note.beats
+        pos = sec_start + song.beats_per_bar * len(sec.chords)
     return events
 
 
@@ -721,6 +727,19 @@ def render_abc(song: Song) -> str:
     half = song.beats_per_bar / 2
     for sec in song.sections:
         lines.append(f"%% section {sec.name}")
+        if not sec.lines:
+            tokens = []
+            for bar in sec.chords:
+                if bar:
+                    tokens.append(f'"{bar[0].symbol}"')
+                seg = half if len(bar) == 2 else song.beats_per_bar
+                tokens.append("z" + _abc_len(seg))
+                if len(bar) == 2:
+                    tokens.append(f'"{bar[1].symbol}"')
+                    tokens.append("z" + _abc_len(seg))
+                tokens.append("|")
+            lines.append(" ".join(tokens))
+            continue
         pos = Fraction(0)
         bar = 0
         need_chord = True
@@ -939,12 +958,23 @@ def render_mml(song: Song) -> str:
         "; license=BSD-3-Clause",
     ]
     melody = _MmlVoice(song.bpm, 4)
-    for _start, note, _sec, _line in _melody_events(song):
-        if note.midi is None:
-            melody.rest(note.beats)
-        else:
-            octave = note.midi // 12 - 1
-            melody.note(_mml_pc(note.midi % 12, flat), octave, note.beats)
+    half = song.beats_per_bar / 2
+    for sec in song.sections:
+        if not sec.lines:
+            for bar in sec.chords:
+                if len(bar) == 2:
+                    melody.rest(half)
+                    melody.rest(half)
+                else:
+                    melody.rest(song.beats_per_bar)
+            continue
+        for line in sec.lines:
+            for note in line.notes:
+                if note.midi is None:
+                    melody.rest(note.beats)
+                else:
+                    octave = note.midi // 12 - 1
+                    melody.note(_mml_pc(note.midi % 12, flat), octave, note.beats)
     lines.append("@melody")
     lines.append(" ".join(melody.tokens))
 
@@ -991,6 +1021,9 @@ def render_markdown(song: Song, abc: str) -> str:
     for sec in song.sections:
         lines.append(f"## {sec.name} ({sec.kind})")
         lines.append("")
+        if not sec.lines:
+            lines.append("_（間奏）_" if song.language == "ja" else "_(instrumental)_")
+            lines.append("")
         for line in sec.lines:
             lines.append(line.text)
         if sec.lines:
@@ -1261,11 +1294,11 @@ def _readback_check(song: Song, outputs: dict[str, bytes]) -> list[str]:
     )
     rests = sum(
         1 for s in song.sections for line in s.lines for n in line.notes if not n.midi
-    )
+    ) + sum(len(bar) for s in song.sections if not s.lines for bar in s.chords)
     total_beats = sum(
         (n.beats for s in song.sections for line in s.lines for n in line.notes),
         Fraction(0),
-    )
+    ) + sum(song.beats_per_bar * len(s.chords) for s in song.sections if not s.lines)
 
     abc_notes, abc_rests, abc_beats = parse_abc_melody(
         outputs["song.abc"].decode("utf-8")
