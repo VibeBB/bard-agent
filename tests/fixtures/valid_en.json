@@ -10,7 +10,10 @@
       "ref": "out/bard/red-pipeline/context.md",
       "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     },
-    {"kind": "git_log", "ref": "HEAD~20..HEAD"}
+    {
+      "kind": "git_log",
+      "ref": "HEAD~20..HEAD"
+    }
   ],
   "rationale": "D dorian and a steady 4/4 suit a chronicle of a failing pipeline walked back to green; the melody stays low in the verse and lifts a fourth into the refrain.",
   "originality": {
@@ -19,59 +22,266 @@
     "no_named_artist_imitation": true,
     "no_real_person_ridicule": true
   },
-  "key": {"tonic": "D", "mode": "dorian"},
+  "key": {
+    "tonic": "D",
+    "mode": "dorian"
+  },
   "meter": "4/4",
   "bpm": 96,
-  "instruments": {"melody": 74, "accompaniment": 24},
-  "vocal_range": {"low": "c4", "high": "e5"},
+  "instruments": {
+    "melody": 74,
+    "accompaniment": 24
+  },
+  "vocal_range": {
+    "low": "c4",
+    "high": "e5"
+  },
   "sections": [
     {
       "name": "verse 1",
       "kind": "verse",
-      "chords": ["Dm", "C", "Dm", "Am", "Dm", "C", "Am", "Dm"],
+      "chords": [
+        "Dm",
+        "C",
+        "Dm",
+        "Am",
+        "Dm",
+        "C",
+        "Am",
+        "Dm"
+      ],
       "lines": [
         {
           "text": "Under the red light of the pipelines eye",
-          "units": ["Un", "der", "the", "red", "light", "of", "the", "pipe", "lines", "eye"],
+          "units": [
+            "Un",
+            "~",
+            "der",
+            "the",
+            "red",
+            "light",
+            "of",
+            "the",
+            "pipe",
+            "lines",
+            "eye"
+          ],
           "notes": [
-            {"pitch": "d4", "beats": 0.5}, {"pitch": "e4", "beats": 0.5},
-            {"pitch": "f4", "beats": 0.5}, {"pitch": "g4", "beats": 0.5},
-            {"pitch": "a4", "beats": 1}, {"pitch": "g4", "beats": 0.5},
-            {"pitch": "f4", "beats": 0.5}, {"pitch": "e4", "beats": 1},
-            {"pitch": "d4", "beats": 1}, {"pitch": "d4", "beats": 2}
+            {
+              "pitch": "d4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "d4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "e4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "f4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "g4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "g4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "f4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "e4",
+              "beats": 1
+            },
+            {
+              "pitch": "d4",
+              "beats": 1
+            },
+            {
+              "pitch": "d4",
+              "beats": 2
+            }
           ]
         },
         {
           "text": "We chased the wisp through logs that would not rest",
-          "units": ["We", "chased", "the", "wisp", "through", "logs", "that", "would", "not", "rest"],
+          "units": [
+            "We",
+            "chased",
+            "the",
+            "wisp",
+            "through",
+            "logs",
+            "that",
+            "would",
+            "not",
+            "rest"
+          ],
           "notes": [
-            {"pitch": "f4", "beats": 0.5}, {"pitch": "g4", "beats": 0.5},
-            {"pitch": "a4", "beats": 1}, {"pitch": "a4", "beats": 0.5},
-            {"pitch": "g4", "beats": 0.5}, {"pitch": "f4", "beats": 0.5},
-            {"pitch": "e4", "beats": 0.5}, {"pitch": "e4", "beats": 1},
-            {"pitch": "c4", "beats": 1}, {"pitch": "c4", "beats": 2}
+            {
+              "pitch": "f4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "g4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 1
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "g4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "f4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "e4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "e4",
+              "beats": 1
+            },
+            {
+              "pitch": "c4",
+              "beats": 1
+            },
+            {
+              "pitch": "c4",
+              "beats": 2
+            }
           ]
         },
         {
           "text": "The watchman flagged the night a deeper red",
-          "units": ["The", "watch", "man", "flagged", "the", "night", "a", "deep", "er", "red"],
+          "units": [
+            "The",
+            "watch",
+            "man",
+            "flagged",
+            "the",
+            "night",
+            "a",
+            "deep",
+            "er",
+            "red"
+          ],
           "notes": [
-            {"pitch": "d4", "beats": 1}, {"pitch": "e4", "beats": 0.5},
-            {"pitch": "f4", "beats": 0.5}, {"pitch": "g4", "beats": 1},
-            {"pitch": "a4", "beats": 0.5}, {"pitch": "b4", "beats": 0.5},
-            {"pitch": "c5", "beats": 1}, {"pitch": "a4", "beats": 1},
-            {"pitch": "g4", "beats": 1}, {"pitch": "d4", "beats": 1}
+            {
+              "pitch": "d4",
+              "beats": 1
+            },
+            {
+              "pitch": "e4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "f4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "g4",
+              "beats": 1
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "c5",
+              "beats": 1
+            },
+            {
+              "pitch": "a4",
+              "beats": 1
+            },
+            {
+              "pitch": "g4",
+              "beats": 1
+            },
+            {
+              "pitch": "d4",
+              "beats": 1
+            }
           ]
         },
         {
           "text": "And sang the failing build back into green",
-          "units": ["And", "sang", "the", "fail", "ing", "build", "back", "in", "to", "green"],
+          "units": [
+            "And",
+            "sang",
+            "the",
+            "fail",
+            "ing",
+            "build",
+            "back",
+            "in",
+            "to",
+            "green"
+          ],
           "notes": [
-            {"pitch": "a4", "beats": 0.5}, {"pitch": "g4", "beats": 0.5},
-            {"pitch": "f4", "beats": 0.5}, {"pitch": "e4", "beats": 0.5},
-            {"pitch": "d4", "beats": 1}, {"pitch": "e4", "beats": 0.5},
-            {"pitch": "f4", "beats": 0.5}, {"pitch": "d4", "beats": 1},
-            {"pitch": "c4", "beats": 1}, {"pitch": "d4", "beats": 2}
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "g4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "f4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "e4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "d4",
+              "beats": 1
+            },
+            {
+              "pitch": "e4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "f4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "d4",
+              "beats": 1
+            },
+            {
+              "pitch": "c4",
+              "beats": 1
+            },
+            {
+              "pitch": "d4",
+              "beats": 2
+            }
           ]
         }
       ]
@@ -79,27 +289,110 @@
     {
       "name": "chorus",
       "kind": "chorus",
-      "chords": ["F", "C", "Am", "Dm"],
+      "chords": [
+        "F",
+        "C",
+        "Am",
+        "Dm"
+      ],
       "lines": [
         {
           "text": "Raise up the bridge, the merge is done",
-          "units": ["Raise", "up", "the", "bridge", "the", "merge", "is", "done"],
+          "units": [
+            "Raise",
+            "up",
+            "the",
+            "bridge",
+            "the",
+            "merge",
+            "is",
+            "done"
+          ],
           "notes": [
-            {"pitch": "f4", "beats": 0.5}, {"pitch": "g4", "beats": 0.5},
-            {"pitch": "a4", "beats": 1}, {"pitch": "c5", "beats": 1},
-            {"pitch": "a4", "beats": 0.5}, {"pitch": "g4", "beats": 0.5},
-            {"pitch": "e4", "beats": 1}, {"pitch": "g4", "beats": 3}
+            {
+              "pitch": "f4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "g4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 1
+            },
+            {
+              "pitch": "c5",
+              "beats": 1
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "g4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "e4",
+              "beats": 1
+            },
+            {
+              "pitch": "g4",
+              "beats": 3
+            }
           ]
         },
         {
           "text": "Sing for the dawn and the green lit run",
-          "units": ["Sing", "for", "the", "dawn", "and", "the", "green", "lit", "run"],
+          "units": [
+            "Sing",
+            "for",
+            "the",
+            "dawn",
+            "and",
+            "the",
+            "green",
+            "lit",
+            "run"
+          ],
           "notes": [
-            {"pitch": "a4", "beats": 0.5}, {"pitch": "c5", "beats": 0.5},
-            {"pitch": "b4", "beats": 0.5}, {"pitch": "a4", "beats": 0.5},
-            {"pitch": "g4", "beats": 1}, {"pitch": "f4", "beats": 0.5},
-            {"pitch": "e4", "beats": 0.5}, {"pitch": "d4", "beats": 1},
-            {"pitch": "d4", "beats": 3}
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "c5",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "g4",
+              "beats": 1
+            },
+            {
+              "pitch": "f4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "e4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "d4",
+              "beats": 1
+            },
+            {
+              "pitch": "d4",
+              "beats": 3
+            }
           ]
         }
       ]

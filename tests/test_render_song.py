@@ -4,7 +4,9 @@ import copy
 import hashlib
 import json
 import re
+import shutil
 import struct
+import subprocess
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -131,7 +133,10 @@ def test_abc_lyrics_align_per_music_line(
             for t in re.sub(r'"[^"]*"', "", music).split()
             if t != "|" and not t.startswith("z")
         ]
-        n_lyric = len([s for tok in lyric.split() for s in tok.split("-")])
+        # w: pieces: each "_" is its own melisma token; "-" separates syllables
+        n_lyric = len(
+            [p for tok in lyric.split() for p in re.findall(r"_|[^_-]+", tok)]
+        )
         assert len(notes) == n_lyric, (music, lyric)
 
 
@@ -207,8 +212,8 @@ def test_reject_downbeat_non_chord_tone(
     render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
 ) -> None:
     def m(d: dict[str, Any]) -> None:
-        # index 7 starts bar 2 (chord C); f4 is not a C chord tone
-        d["sections"][0]["lines"][0]["notes"][7] = {"pitch": "f4", "beats": 1}
+        # index 8 starts bar 2 (chord C); f4 is not a C chord tone
+        d["sections"][0]["lines"][0]["notes"][8] = {"pitch": "f4", "beats": 1}
 
     _reject(render_module, tmp_path, valid_en, m, "is not a chord tone of C")
 
@@ -219,7 +224,7 @@ def test_reject_leap_over_octave(
     def m(d: dict[str, Any]) -> None:
         # d4 then g5 = +19 semitones; g5 also leaves range, leap triggers anyway
         d["vocal_range"] = {"low": "c4", "high": "g5"}
-        d["sections"][0]["lines"][0]["notes"][1] = {"pitch": "g5", "beats": 0.5}
+        d["sections"][0]["lines"][0]["notes"][2] = {"pitch": "g5", "beats": 0.5}
 
     _reject(render_module, tmp_path, valid_en, m, "exceeds 12 semitones")
 
@@ -270,7 +275,7 @@ def test_reject_notes_units_count_mismatch(
     def m(d: dict[str, Any]) -> None:
         d["sections"][0]["lines"][0]["notes"].append({"pitch": "d4", "beats": 1})
 
-    _reject(render_module, tmp_path, valid_en, m, "notes count 11 != units count 10")
+    _reject(render_module, tmp_path, valid_en, m, "notes count 12 != units count 11")
 
 
 def test_reject_section_beats_mismatch(
@@ -354,7 +359,7 @@ def test_parse_abc_melody_counts(render_module: Any, valid_en: dict[str, Any]) -
     song = render_module.validate_proposal(valid_en)
     abc = render_module.render_abc(song)
     notes, rests, beats = render_module.parse_abc_melody(abc)
-    assert notes == 57
+    assert notes == 58
     assert rests == 0
     assert beats == Fraction(48)
 
@@ -364,7 +369,7 @@ def test_parse_midi_counts_roundtrip(
 ) -> None:
     song = render_module.validate_proposal(valid_en)
     counts = render_module.parse_midi_counts(render_module.render_midi(song))
-    assert counts[0] == [57, 57]
+    assert counts[0] == [58, 58]
     assert counts[1][0] == counts[1][1] > 0
 
 
@@ -394,3 +399,50 @@ def test_parse_mml_counts(render_module: Any, valid_ja: dict[str, Any]) -> None:
 def test_parse_mml_rejects_garbage(render_module: Any) -> None:
     with pytest.raises(render_module.ProposalError):
         render_module.parse_mml("@melody\n???")
+
+
+# ---------------------------------------------------------------------------
+# w: lyric token emission
+
+
+@pytest.mark.parametrize(
+    ("units", "text", "expected"),
+    [
+        (["hea", "~", "ven"], "heaven", "w: hea-_ven"),
+        (["hea", "~", "~", "ven"], "heaven", "w: hea-__ven"),
+        (["hea", "ven", "~"], "heaven", "w: hea-ven-_"),
+        (["hea", "-", "ven"], "heaven", "w: hea-ven"),
+        (["hea", "ven", "~", "up"], "heaven up", "w: hea-ven _ up"),
+        (["up", "~", "hea", "ven"], "up heaven", "w: up _ hea-ven"),
+    ],
+)
+def test_w_line_en_pieces(
+    render_module: Any,
+    valid_en: dict[str, Any],
+    units: list[str],
+    text: str,
+    expected: str,
+) -> None:
+    song = render_module.validate_proposal(valid_en)
+    line = render_module.Line(text=text, units=units, notes=[])
+    assert render_module._w_line(song, line) == expected
+
+
+# ---------------------------------------------------------------------------
+# external ABC tools
+
+
+@pytest.mark.skipif(shutil.which("abcm2ps") is None, reason="abcm2ps not installed")
+@pytest.mark.parametrize("fixture", ["valid_en.json", "valid_ja.json"])
+def test_abcm2ps_accepts_abc(render_module: Any, tmp_path: Path, fixture: str) -> None:
+    out_dir = tmp_path / "out"
+    assert _run(render_module, FIXTURES / fixture, out_dir) == 0
+    proc = subprocess.run(
+        ["abcm2ps", str(out_dir / "song.abc"), "-O", str(tmp_path / "song.ps")],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = proc.stdout + proc.stderr
+    assert proc.returncode == 0, output
+    assert "words in lyric line" not in output

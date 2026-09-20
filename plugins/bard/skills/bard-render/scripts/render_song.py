@@ -14,12 +14,13 @@ Conventions chosen where the contract leaves detail open:
   already be punctuation-free (e.g. ``"lines"`` for the word ``line's``).
 - ``w:`` lyric lines: for ``en``, text words are reconstructed by consuming
   non-special units against each whitespace-split word's normalized form;
-  syllables inside a word are joined by ``-`` and words by spaces, ``~``
-  becomes ``_``. ``ja`` text has no word boundaries, so every sung unit is
-  joined by ``-`` into one run. In both languages ``~`` becomes a
-  space-separated ``_`` token (ABC melisma) and rest units emit no lyric
-  token: ABC aligns ``w:`` words to sounded notes only and skips rests
-  automatically.
+  inside a word, a piece is separated from the previous one by ``-`` only
+  when the previous piece is a syllable, so mid-word melismas render as
+  ``hea-_ven`` and a word-start ``~`` is a standalone ``_`` token. ``ja``
+  text has no word boundaries, so every sung unit is joined by ``-`` into
+  one run, with ``~`` breaking the run as a space-separated ``_`` token.
+  Rest units emit no lyric token in either language: ABC aligns ``w:``
+  words to sounded notes only and skips rests automatically.
 - Each lyric ``Line`` renders as its own ABC music line followed by its single
   ``w:`` line, keeping lyric verse alignment 1:1; a line that ends mid-bar
   omits the ``|`` and the next line continues the bar. The section's last
@@ -764,23 +765,39 @@ def _w_line(song: Song, line: Line) -> str:
         idx = 0
         for word in words:
             target = word.translate(EN_TEXT_STRIP).casefold()
-            syllables: list[str] = []
+            pieces: list[str] = []
+            joined = ""
             while idx < len(line.units):
                 u = line.units[idx]
                 idx += 1
                 if u == "-":
                     continue
                 if u == "~":
-                    tokens.append("_")
+                    if pieces:
+                        pieces.append("_")
+                    else:
+                        tokens.append("_")
                     continue
-                syllables.append(u)
-                if "".join(syllables).casefold() == target:
+                pieces.append(u)
+                joined += u
+                if joined.casefold() == target:
                     break
-            if syllables:
-                tokens.append("-".join(syllables))
+            if pieces:
+                word_token = pieces[0]
+                for j in range(1, len(pieces)):
+                    word_token += ("-" if pieces[j - 1] != "_" else "") + pieces[j]
+                tokens.append(word_token)
         for u in line.units[idx:]:
-            if u != "-":
-                tokens.append("_" if u == "~" else u)
+            if u == "-":
+                continue
+            if u == "~":
+                if tokens:
+                    tokens[-1] += "" if tokens[-1].endswith("_") else "-"
+                    tokens[-1] += "_"
+                else:
+                    tokens.append("_")
+            else:
+                tokens.append(u)
         return "w: " + " ".join(tokens)
     tokens = []
     run: list[str] = []
