@@ -52,10 +52,11 @@ Tool rules that cost real minutes when ignored:
 1. The prompt names an output directory (default `out/bard/<slug>/`) and usually a
    `context.md` written by the parent agent. Read it first; it is the parent's summary of the
    conversation: events, roles, emotional arc, wanted and unwanted words.
-2. Read the workspace yourself: `git log --oneline -n 30`, `git diff --stat HEAD~5..HEAD` when
-   the history is deep enough, README, and any file the context points at. If `git log`
-   shows a single grafted commit (shallow clone), do not narrate history that is not there —
-   record "log shallow" and lean on the workspace files.
+2. Read the workspace yourself: `git --no-pager log --oneline -n 30`,
+   `git --no-pager diff --stat HEAD~5..HEAD` when the history is deep enough, README, and any
+   file the context points at. If `git log` shows a single grafted commit (shallow clone), do
+   not narrate history that is not there — record "log shallow" and lean on the workspace
+   files. Always pass `--no-pager`; a pager blocks the terminal for every later command.
 3. Write `<out dir>/notes.md` with three lists, each item tagged with where it came from:
    - **Facts** (`[context]`, `[git]`, `[file:<path>]`, `[request]`): 6..14 concrete events or
      states — a test name, a red pipeline, a version number, a file that vanished.
@@ -114,8 +115,10 @@ personal names, refrain identical every time, no line that asserts an event miss
 
 ## Stage 5 — Melody and proposal (writes `song.proposal.json`)
 
-Now, and only now, write notes. Build the proposal from the files: `title`, `mode`,
-`language`, `sources` (every file and log you used, one entry each), `rationale` (why this
+Before writing a single note, confirm you have read `examples/minimal.<ja|en>.json` in
+Stage 0; if not, read it now — proposals written without it fail the first `--check` on
+scale, beat values and bar sums. Now, and only now, write notes. Build the proposal from the
+files: `title`, `mode`, `language`, `sources` (every file and log you used, one entry each), `rationale` (why this
 key, meter and imagery fit the story; quote lyrics only by copying them exactly), the
 `originality` flags, key, meter, bpm, instruments, vocal range, and `sections` in order.
 
@@ -169,8 +172,10 @@ wrote the song. Either way, write `<out dir>/critic.md` with the findings verbat
 `DECISIONS` block listing each finding as `APPLIED` or `DECLINED: <one-line reason>`. Apply
 findings that improve singability, prosody, imagery or originality; the critic has no
 authority, you decide. After applying, re-read `rationale` so every quoted lyric matches the
-final text, rerun `--check` and the render, and stop after at most two revision rounds. If a
-finding names an originality or real-person risk, it is not optional: rewrite the line or do
+final text, rerun `--check` and the render, and stop after at most two revision rounds. Edit
+`song.proposal.json` with `str_replace`; `create` refuses to overwrite an existing file. When
+a change alters units, rhythm or key, update `lyrics.md`, `plan.md` and `story.md` to match
+so the stage files agree with the delivered proposal. If a finding names an originality or real-person risk, it is not optional: rewrite the line or do
 not deliver the song.
 
 ## Originality contract
