@@ -22,6 +22,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      version: ${{ steps.check.outputs.version }}
       tag: ${{ steps.check.outputs.tag }}
       sha: ${{ steps.check.outputs.sha }}
     steps:
@@ -40,17 +41,24 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'
+          VERSION="${VERSION#v}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::version '$VERSION' is not X.Y.Z" >&2
+            exit 1
+          fi
           PLUGIN_VERSION=$(python3 -c \
             'import json; print(json.load(open("plugins/bard/.plugin/plugin.json"))["version"])')
           PYPROJECT_VERSION=$(python3 -c \
             'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
-          test "$VERSION" = "$PLUGIN_VERSION"
-          test "$VERSION" = "$PYPROJECT_VERSION"
-          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}"; then
-            echo "tag v${VERSION} already exists" >&2
+          if [ "$VERSION" != "$PLUGIN_VERSION" ] || [ "$VERSION" != "$PYPROJECT_VERSION" ]; then
+            echo "::error::version mismatch: input=$VERSION plugin.json=$PLUGIN_VERSION pyproject=$PYPROJECT_VERSION" >&2
             exit 1
           fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}"; then
+            echo "::error::tag v${VERSION} already exists" >&2
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
@@ -79,13 +87,13 @@ jobs:
           --repo uist1idrju3i/bard-agent --ref "$REF" --repo-path plugins/bard
 
   release:
-    needs: [verify, install-smoke]
+    needs: [check-version, verify, install-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
     env:
-      VERSION: ${{ inputs.version }}
+      VERSION: ${{ needs.check-version.outputs.version }}
       SHA: ${{ needs.check-version.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
