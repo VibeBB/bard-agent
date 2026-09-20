@@ -44,6 +44,9 @@ and one concrete suggestion. Order by severity.
    the workspace or context, invented events that the context does not support.
 6. **Form** — missing refrain in strophic songs, a chorus whose text changes between
    repetitions, a final line that does not resolve.
+7. **Consistency** — do lyric quotes in `rationale` still match the final `text`
+   after any revision? Do section `kind` values match their names (a section named
+   `refrain N` must be `kind: chorus`)?
 
 ## Output
 

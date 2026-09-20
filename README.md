@@ -59,7 +59,7 @@ Agent Canvas（OpenHands のWeb GUI）からGitHubのリリースタグを指定
    | 項目 | 値 |
    | --- | --- |
    | ソース（source） | `github:uist1idrju3i/bard-agent` |
-   | リファレンス（ref） | `v0.1.0`（[Releases](https://github.com/uist1idrju3i/bard-agent/releases) の任意のタグ） |
+   | リファレンス（ref） | `v<最新版>`（[Releases](https://github.com/uist1idrju3i/bard-agent/releases) の最新タグ） |
    | パス（path） | `plugins/bard` |
 
 3. 一覧に **bard** が「有効」で表示されれば導入完了です。導入先は
@@ -69,8 +69,22 @@ Agent Canvas（OpenHands のWeb GUI）からGitHubのリリースタグを指定
 4. （任意）sub-agent を使う場合は Agent Canvas の設定で `enable_sub_agents` を有効にします。
    無効のままでも動きます（後述の fallback）。
 
-別の版へ更新するときは、同じ画面から ref を変えて再インストールします（同じrepoのcacheが
-残っていると古い版が使われることがあるので、導入後に version 表示が意図した版か確認してください）。
+### 更新時の注意
+
+Agent Canvasはsource文字列ごとにplugin repositoryをcacheします（tagのみを取得する
+refspecのため、同じsource文字列で新しいrefを指定しても古い`resolved_ref`が残ることがあります）。
+1.46.0で確認した回避策: いったんアンインストールしてから、大文字小文字を変えたsource表記
+（例: `github:UIST1IDRJU3I/bard-agent`）または完全な`https://github.com/uist1idrju3i/bard-agent.git`
+URLで再追加し、plugin詳細の`resolved_ref`が新しいタグのSHAと一致することを確認してください。
+
+### sub-agentが有効にならない場合
+
+1.46.0では agent profileで"sub-agents"を有効にしても会話で`task`が使えないケースを確認しています
+（settings APIは引き続き`enable_sub_agents=false`を返す）。この場合`/bard:sing`はfallback経路で
+動き、返信末尾の`実行経路:`にその旨が出ます。実機ではfallbackで約34分かかった実績があります。
+
+実機確認済みの環境は OpenHands 1.46.0 です（SDKの対象版 1.49.2 とは別の系統）。fallback経路は
+実機で確認済み、task経路はまだ未検証です。
 
 導入状態はAPIでも確認できます（`X-Session-API-Key` が必要）。`resolved_ref` がタグの
 commit SHA と一致していれば、意図した版が入っています。

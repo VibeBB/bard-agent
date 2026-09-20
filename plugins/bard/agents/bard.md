@@ -56,8 +56,15 @@ unreadable Skill as a hard stop:
    lyrics first, then split them into sung units (syllables for `en`, morae for `ja`), then set
    one note per unit inside the vocal range, downbeats on chord tones.
 3. Write the proposal to `<out dir>/song.proposal.json` following the contract exactly, with
-   `rationale` explaining why this key, meter and imagery fit the story.
-4. Render:
+   `rationale` explaining why this key, meter and imagery fit the story. Write the file
+   with `file_editor` (or a single script file run by one terminal command): the terminal
+   tool rejects multiple commands in one call ("Cannot execute multiple commands at
+   once"), so use one command per call, chained with `&&` if needed.
+4. Self-check the proposal against the songcraft **(checked)** rules before rendering:
+   downbeats on chord tones, each bar's note lengths summing to the bar's beats, `ja`
+   units joined == `reading`, refrains marked `kind: chorus`. Most rejections come
+   from these; it is cheaper to catch them by eye than to spend render attempts.
+5. Render:
 
    ```bash
    python3 "<bard plugin root>/skills/bard-render/scripts/render_song.py" \
@@ -66,7 +73,7 @@ unreadable Skill as a hard stop:
 
    A rejection lists every reason and writes nothing. Fix the proposal and rerun; do not
    loosen the story to satisfy the checker, change notes or units instead.
-5. Ask the critic once the render succeeds:
+6. Ask the critic once the render succeeds:
 
    ```text
    task(subagent_type="bard-critic", prompt="Review <out dir>/song.proposal.json and <out dir>/song.md. Context: <out dir>/context.md")
@@ -77,7 +84,9 @@ unreadable Skill as a hard stop:
    decide what to change. If `task` is unavailable, read
    `<bard plugin root>/agents/bard-critic.md` yourself and perform the critique as a separate
    pass, then revise on the findings. Either way, write the critic's findings and what you
-   applied or declined to `<out dir>/critic.md`.
+   applied or declined to `<out dir>/critic.md`. When revising lyrics after the critic
+   pass, re-read `rationale` so any quoted lyric matches the final text — the renderer
+   rejects stale quotes.
 
 ## Originality contract
 
