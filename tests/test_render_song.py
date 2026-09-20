@@ -583,3 +583,65 @@ def test_song_md_hard_breaks_and_chord_line(render_module: Any, tmp_path: Path) 
     assert "桜の下で歌を紡ぐ  \n夜の火を越えてゆく" in md
     assert "Chords: | Am | F | G | Am |" in md
     assert "| bar | chord |" not in md
+
+
+def test_reject_section_name_implies_kind(
+    render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        # verse section renamed like a refrain while keeping kind=verse
+        d["sections"][0]["name"] = "refrain 1"
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_en,
+        m,
+        'name "refrain 1" implies kind chorus',
+    )
+
+
+def test_refrain_name_with_chorus_kind_ok(
+    render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
+) -> None:
+    data = copy.deepcopy(valid_en)
+    data["sections"][1]["name"] = "refrain 1"
+    proposal = _write_proposal(tmp_path, data)
+    assert _run(render_module, proposal, tmp_path / "out") == 0
+
+
+def test_reject_stale_rationale_quote(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        d["rationale"] = "サビ「存在しない歌詞」を繰り返す。"
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_ja,
+        m,
+        "does not appear in the lyrics",
+    )
+
+
+def test_rationale_quote_matches_normalized(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    data = copy.deepcopy(valid_ja)
+    # 「」 quote matching a line after whitespace normalization
+    data["rationale"] = "サビ「明日はもう　青い」で締める。"
+    # the line text itself carries a fullwidth space; both sides collapse
+    data["sections"][1]["lines"][1]["text"] = "明日はもう　青い"
+    proposal = _write_proposal(tmp_path, data)
+    assert _run(render_module, proposal, tmp_path / "out") == 0
+
+
+def test_rationale_quote_ascii_quotes(
+    render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
+) -> None:
+    data = copy.deepcopy(valid_en)
+    # ASCII quotes and collapsed double space still match the line text
+    data["rationale"] = 'the chorus "Raise up  the bridge" repeats'
+    proposal = _write_proposal(tmp_path, data)
+    assert _run(render_module, proposal, tmp_path / "out") == 0

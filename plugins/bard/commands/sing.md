@@ -27,8 +27,8 @@ bard sub-agentは親の会話履歴を受け取らない。親であるあなた
         prompt="Mode: <mode>. Language: <ja|en>. Output directory: out/bard/<slug>/. Read out/bard/<slug>/context.md first, then the workspace. Subject: <題材>.")
    ```
 
-   `task`が使えない場合（sub-agentが無効、`task_tool_set`が無い）は、そのことを利用者へ
-   一言伝え、plugin rootの`agents/bard.md`を読み、その手順を自分で実行する。criticも同様に
+   `task`が使えない場合（sub-agentが無効、`task_tool_set`が無い）は、そのことを
+   利用者への返信（可視メッセージ）へ一言書き、plugin rootの`agents/bard.md`を読み、その手順を自分で実行する。criticも同様に
    `task`が無ければ`<plugin root>/agents/bard-critic.md`を読んで自分で別パスとして実施し、
    所見と採否を`<out dir>/critic.md`へ書く。plugin rootは
    `$BARD_PLUGIN_ROOT`、`$OPENHANDS_PROJECT_DIR/plugins/bard`、
@@ -36,6 +36,8 @@ bard sub-agentは親の会話履歴を受け取らない。親であるあなた
 5. bardの報告を受け取ったら、題名・モード・歌詞全文を会話に表示し、`out/bard/<slug>/song.md`
    （コード表とABC譜）、`song.mid`、`song.mml`の場所を示す。歌詞は1行につきMarkdownの
    1行となるよう（行末ハードブレークかコードブロックで）表示し、一つの段落に潰さない。
+   返信の末尾に`実行経路: task sub-agent`または`実行経路: fallback（taskなし）`の
+   1行を必ず入れる。
 
 歌は観測物であり、作業の合否や品質の判断ではない。既存楽曲の使用を求められても、bardは
 オリジナルを書く（`docs/adr/ADR-0003`）。

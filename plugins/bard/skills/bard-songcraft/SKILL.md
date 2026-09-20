@@ -98,7 +98,9 @@ Strong beats: 1 and 3 in `4/4`; 1 in `3/4`; 1 and (2.5) in `6/8`.
   chord (rests are fine). Put passing tones on weak beats.
 - Phrases of 2 or 4 bars; end each phrase on a long note or a rest.
 - Prefer a verse + chorus form over three identical verses; let the refrain line
-  recur with the same words each time.
+  recur with the same words each time. A recurring refrain section is
+  `kind: chorus` (name it `refrain N` or `chorus N`); verse sections stay
+  `kind: verse` — the renderer checks name/kind agreement.
 - Repeat the verse melody for every verse (strophic); vary only the words.
 - **(checked)**: the last sung note is the tonic, or the 3rd or 5th above it.
 - Melisma: a held or stepwise-moving syllable is written as extra notes whose unit is `~`.
