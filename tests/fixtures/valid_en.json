@@ -1,6 +1,6 @@
 {
   "artifact_kind": "bard_song_proposal",
-  "schema_version": "0.1",
+  "schema_version": "0.2",
   "title": "The Watchman of the Red Pipeline",
   "mode": "chronicle",
   "language": "en",
