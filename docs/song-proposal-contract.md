@@ -1,0 +1,138 @@
+# 歌提案契約 `bard_song_proposal` 0.1
+
+bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skillがそれを検証・描画する契約。
+検証器は提案テキストだけを判定し、歌の芸術的な良否や、歌の題材となった作業の合否を判定しない。
+提案は歌の唯一の正であり、ABC・MIDI・MMLはすべて提案から決定論的に導出される。
+
+## 最上位
+
+```json
+{
+  "artifact_kind": "bard_song_proposal",
+  "schema_version": "0.1",
+  "title": "The Dragon of the Red Pipeline",
+  "mode": "chronicle",
+  "language": "en",
+  "sources": [
+    {"kind": "conversation_summary", "ref": "out/bard/red-pipeline/context.md", "sha256": "..."},
+    {"kind": "git_log", "ref": "HEAD~20..HEAD"}
+  ],
+  "rationale": "Why this key, mode, meter and imagery fit the story.",
+  "originality": {
+    "original_lyrics": true,
+    "original_melody": true,
+    "no_named_artist_imitation": true,
+    "no_real_person_ridicule": true
+  },
+  "key": {"tonic": "D", "mode": "dorian"},
+  "meter": "4/4",
+  "bpm": 96,
+  "instruments": {"melody": 74, "accompaniment": 24},
+  "vocal_range": {"low": "c4", "high": "e5"},
+  "sections": [ ... ]
+}
+```
+
+| フィールド | 規則 |
+| --- | --- |
+| `artifact_kind` | 固定値 `bard_song_proposal` |
+| `schema_version` | 固定値 `0.1` |
+| `title` | 1..80文字、空白のみ不可 |
+| `mode` | `chronicle` / `praise` / `lament` / `satire` / `inspire` / `lore` |
+| `language` | `ja` / `en` |
+| `sources` | 1件以上。`kind`は `conversation_summary` / `agent_message` / `git_log` / `file` / `user_request`。`ref`は1..200文字。`sha256`は任意（64桁hex） |
+| `rationale` | 1..2000文字 |
+| `originality` | 4つの真偽値がすべて `true` でなければ不合格（歌詞・旋律が自作、実在アーティスト模倣なし、実在人物への嘲笑なし） |
+| `key.tonic` | `C C# Db D D# Eb E F F# Gb G G# Ab A A# Bb B` |
+| `key.mode` | `major` / `minor` / `dorian` / `mixolydian` |
+| `meter` | `4/4` / `3/4` / `6/8`。1拍は四分音符（6/8は八分音符を0.5拍として数え、1小節=3拍） |
+| `bpm` | 60..180 の整数 |
+| `instruments.melody`, `instruments.accompaniment` | General MIDI program 0..127 |
+| `vocal_range.low`, `vocal_range.high` | 音名（後述）。`high - low` は 7..19半音 |
+| `sections` | 1..12件 |
+
+## セクション
+
+```json
+{
+  "name": "verse 1",
+  "kind": "verse",
+  "chords": ["Dm", "C", "Dm", "Am", "Dm", "C", "Am Dm", "Dm"],
+  "lines": [
+    {
+      "text": "Under the red light of the pipeline's eye",
+      "units": ["Un", "der", "the", "red", "light", "of", "the", "pipe", "line's", "eye"],
+      "notes": [
+        {"pitch": "d4", "beats": 0.5}, {"pitch": "e4", "beats": 0.5},
+        {"pitch": "f4", "beats": 1}, {"pitch": "g4", "beats": 1},
+        {"pitch": "a4", "beats": 1},
+        {"pitch": "g4", "beats": 0.5}, {"pitch": "f4", "beats": 0.5},
+        {"pitch": "e4", "beats": 1}, {"pitch": "d4", "beats": 1},
+        {"pitch": "d4", "beats": 1}
+      ]
+    }
+  ]
+}
+```
+
+| フィールド | 規則 |
+| --- | --- |
+| `name` | 1..32文字、`[A-Za-z0-9 _-]`、歌全体で一意 |
+| `kind` | `intro` / `verse` / `chorus` / `bridge` / `outro` |
+| `chords` | 小節ごとに1要素、1..32小節。要素は1つまたは空白区切り2つのコード記号（2つなら小節を前後半に等分） |
+| `lines` | 0件以上（`intro`/`outro`は0件可、それ以外は1件以上）。行の`notes`の合計拍数を順に並べたものがセクションの総拍数（小節数×1小節の拍数）と**一致**しなければならない |
+
+### コード記号
+
+`<root><quality>`。`root`は`key.tonic`と同じ表記集合、`quality`は空（長三和音）/ `m` / `dim` / `7` / `maj7` / `m7` / `sus4` / `sus2`。
+コードのrootは調の音階に属さなければならない（借用和音は0.1では不可）。
+最後のセクションの最後のコードのrootは`key.tonic`でなければならない。
+
+### 行
+
+| フィールド | 規則 |
+| --- | --- |
+| `text` | 1..200文字 |
+| `units` | 歌唱単位の列。`en`は音節、`ja`はモーラ。`~`は直前の単位の引き延ばし（メリスマ）、`-`は休符位置 |
+| `notes` | `units`と同数。`pitch`は音名または`r`（休符）。`beats`は `0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4` のいずれか |
+
+`units`と`text`の整合（決定論的検査）:
+
+- `en`: `units`のうち`~`と`-`を除いたものを連結し、`text`から空白と `,.;:!?'"()-—` を除いたものと大文字小文字を無視して一致しなければならない。
+- `ja`: 同様に連結し、`text`から空白と句読点（`、。！？「」・…—`）を除いたものと一致しなければならない。モーラ分割は提案側の責任だが、各単位は1..2文字（拗音・長音・促音は前の文字に付ける）とする。
+
+`notes[i].pitch == "r"` ⇔ `units[i] == "-"`。`units[i] == "~"`の音は直前の音と同じか隣接（順次進行）の音でなければならない。
+
+### 音名
+
+`[a-g](#|b)?[0-9]`（例 `d4`, `f#4`, `bb3`）。MIDI番号は `c4 = 60`。
+
+## 旋律規則（不合格条件）
+
+1. 休符以外のすべての音は `vocal_range.low..high` 内。
+2. 休符以外のすべての音は調の音階に属する。`minor`は導音（長7度）も許す。
+3. 各小節の第1拍で鳴り始める旋律音は、その小節（前半）のコードの構成音でなければならない（休符は可）。
+4. 隣接する2音の跳躍は完全8度（12半音）以内。
+5. 歌全体の最後の旋律音は`key.tonic`の音階度1・3・5のいずれか。
+6. 休符以外の音が16個以上、行が4行以上（`intro`/`outro`を除く）。
+7. 総イベント数（旋律音 + 和音音）は8192以下。
+
+## 描画
+
+| 出力 | 内容 |
+| --- | --- |
+| `song.abc` | ABC 2.1。`X:1`, `T:`, `C:bard-agent`, `M:`, `L:1/8`, `Q:1/4=<bpm>`, `K:<tonic><mode略号>`（`Ddor`, `Gmix`, `Am`, `C`）。コードは`"Dm"`形式、歌詞は`w:`行（`en`は音節を`-`で連結、`~`は`_`、休符は`*`）。セクションごとに`%% section <name>`コメントと改行 |
+| `song.mid` | SMF format 1、480 tick/拍。track 0: tempo・拍子・title。track 1: 旋律（channel 0, `instruments.melody`）。track 2: 伴奏（channel 1, `instruments.accompaniment`）。伴奏はコード変化ごとに root（第3オクターブ）+ 3度 + 5度（第4オクターブ）を保持、7th系は7度も加える |
+| `song.mml` | `bard-mml 0.1`。`;`で始まるヘッダ行（title, mode, language, key, meter, bpm, license）、`@melody`, `@chord1`..`@chord4` の各voiceはモノフォニック。トークンは `t<bpm>`, `o<oct>`, `l<len>`, 音名（`c d e f g a b`, `+`/`-`）, `r`, `&`（タイ）, `<`/`>`（オクターブ）。長さは 1,2,4,8,16 と付点 `.`。0.75拍は`8.`、1.5拍は`4.`、3拍は`2.` |
+| `song.md` | Agent Canvasのinline Markdown previewで読むための一枚。題名、モード、言語、調・拍子・テンポ、セクションごとの歌詞（`text`行）とコード表（小節番号とコード）、`abc`コードフェンスに`song.abc`全文、末尾に`rationale`と`sources` |
+| `song.provenance.json` | `authority: none`、`artifact_kind: bard_song_provenance`、生成時刻（UTC ISO 8601）、提案path/sha256、各出力のsha256、`sources`の写し、生成scriptのsha256、`license: BSD-3-Clause`、`originality`の写し、`bpm`/`key`/`meter`/小節数/音数 |
+
+すべてのテキスト出力は`encoding="utf-8"`、改行`\n`。
+
+## 読み戻し検査（fail-closed）
+
+- MIDI: 自身の出力を再パースし、note-onとnote-offの数がchannelごとに一致し、旋律音数が提案と一致すること。
+- ABC: 生成した本文から音符トークンを再パースし、旋律音・休符の数と総拍数が提案と一致すること。
+- MML: 生成テキストを再パースし、`@melody`の音数・総長さが提案と一致し、和音voiceの総長さが旋律と一致すること。
+
+どれか1つでも一致しない場合は**すべての出力を書かず**、理由を列挙して非ゼロ終了する。
