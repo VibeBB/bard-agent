@@ -26,6 +26,7 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 - `song.mid` — Standard MIDI File format 1（旋律 + 伴奏）
 - `song.mml` — `bard-mml 0.1`
 - `song.proposal.json` / `song.provenance.json` — 歌の正となる提案と来歴
+- `context.md` / `critic.md` — 親が書いた会話の要約と、critic の所見・採否
 
 ## 仕組み
 
@@ -47,18 +48,69 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 - 既存楽曲の引用・翻案、実在アーティストの模倣、実在人物への嘲笑は禁止し、`originality`
   宣言がすべて`true`でなければ描画しません（[ADR-0003](docs/adr/ADR-0003-copyright-and-license-policy.md)）。
 
-## インストール（Agent Canvas）
+## インストール（Agent Canvas WebGUI）
 
-1. Agent Canvasの設定で sub-agent（`enable_sub_agents`）を有効にします。
-2. pluginを導入します。Agent Canvasのplugin導線から本リポジトリの`plugins/bard`を指定するか、
-   プロジェクト直下に`plugins/bard`として置きます（`$OPENHANDS_PROJECT_DIR/plugins/bard`）。
-   別の場所に置く場合は環境変数`BARD_PLUGIN_ROOT`でpluginのディレクトリを指します。
-   リリース済みタグから直接導入する場合は`github:uist1idrju3i/bard-agent/plugins/bard#v0.1.0`を
-   指定します。SDK経由なら`PluginSource("github:uist1idrju3i/bard-agent", ref="v0.1.0", repo_path="plugins/bard")`と同じ指定です。
-3. 会話で `/bard:sing chronicle 今日のCI修正` のように呼びます。モードを省くと`chronicle`。
+Agent Canvas（OpenHands のWeb GUI）からGitHubのリリースタグを指定して導入します。
+以下は実機（OpenHands agent-server 1.46 系）で確認した手順です。
 
-sub-agentを有効にできない環境では、`/bard:sing`が親エージェント自身に
-`agents/bard.md`の手順を実行させます（fallback）。
+1. 左サイドバーの **カスタマイズ**（Customize）を開き、**Plugins** タブを選びます。
+2. **プラグインを追加** を押し、次の3項目を入力して **インストール** を押します。
+
+   | 項目 | 値 |
+   | --- | --- |
+   | ソース（source） | `github:uist1idrju3i/bard-agent` |
+   | リファレンス（ref） | `v0.1.0`（[Releases](https://github.com/uist1idrju3i/bard-agent/releases) の任意のタグ） |
+   | パス（path） | `plugins/bard` |
+
+3. 一覧に **bard** が「有効」で表示されれば導入完了です。導入先は
+   `~/.openhands/plugins/installed/bard/` で、`agents/`・`commands/`・`skills/` がそのまま置かれます。
+   会話を新規作成すると `bard-songcraft`・`bard-render` Skill と `/bard:sing` command が自動で
+   読み込まれます（会話開始直後に「スキル準備完了」と表示されます）。
+4. （任意）sub-agent を使う場合は Agent Canvas の設定で `enable_sub_agents` を有効にします。
+   無効のままでも動きます（後述の fallback）。
+
+別の版へ更新するときは、同じ画面から ref を変えて再インストールします（同じrepoのcacheが
+残っていると古い版が使われることがあるので、導入後に version 表示が意図した版か確認してください）。
+
+導入状態はAPIでも確認できます（`X-Session-API-Key` が必要）。`resolved_ref` がタグの
+commit SHA と一致していれば、意図した版が入っています。
+
+```bash
+curl -sS -H "X-Session-API-Key: $KEY" http://127.0.0.1:8000/api/plugins/installed
+```
+
+GUIを使わない場合は、プロジェクト直下に `plugins/bard` を置く（`$OPENHANDS_PROJECT_DIR/plugins/bard`）か、
+環境変数 `BARD_PLUGIN_ROOT` で plugin ディレクトリを指すか、SDKで
+`PluginSource("github:uist1idrju3i/bard-agent", ref="v0.1.0", repo_path="plugins/bard")` を使います。
+
+## 使い方（Agent Canvas WebGUI）
+
+1. **新規チャット** を開き、歌わせたいワークスペース（リポジトリ）を選びます。
+2. 入力欄に `/bard:sing` に続けてモードと題材を書いて送ります。
+
+   ```text
+   /bard:sing chronicle このワークスペースの開発の歩みを、gitの履歴とREADMEを読んで叙事詩として歌ってください。
+   /bard:sing praise 今日のリリース
+   /bard:sing satire flakyなテスト
+   ```
+
+   モードを省くと `chronicle`、題材を省くと「この会話で起きたこと」になります。歌詞の言語は
+   引数か会話の言語（`ja`/`en`）に合わせます。
+3. 親エージェントが会話を `out/bard/<slug>/context.md` に要約し、bard が workspace（`git log`、README、
+   ADR）を読んで作詞作曲、`render_song.py` で検証・描画します。実機では完了までおおむね 10〜15 分
+   （LLMとworkspaceの規模に依存）でした。
+4. 完了すると会話に題名・モード・調・拍子・テンポ・歌詞全文と、書き出したファイルの一覧が表示されます。
+   成果物はワークスペース内の `out/bard/<slug>/` にあり、右上の **パネルを表示** からファイルを
+   開くか、`song.md` を Markdown preview で読みます。`song.mid` は任意のMIDIプレイヤー、`song.abc` は
+   abcjs 等の ABC 描画ツールで再生・表示できます。
+
+`enable_sub_agents` が無効（既定）の環境では、`/bard:sing` がその旨を一言伝えたうえで親エージェント
+自身が `agents/bard.md` の手順を実行し、critic も `agents/bard-critic.md` を読んで別パスとして
+自己批評します（所見は `critic.md`）。有効な環境では bard と bard-critic が `task` sub-agent として
+動きます。どちらの経路でも成果物と検証は同じです。
+
+歌は観測物で、作業の合否や品質の判定ではありません。既存楽曲の使用を頼まれても bard は
+オリジナルを書きます。
 
 ## 構成
 
