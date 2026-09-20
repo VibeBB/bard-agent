@@ -75,6 +75,19 @@ uv run pytest -q
 Markdownのみの変更では`git diff --check`と相対リンクの確認だけでよい。
 検証器には判定対象を故意に壊すnegative testを用意し、壊した提案が不合格になることを確認する。
 
+## CI/CD
+
+- `.github/workflows/ci.yml`はpush main・PR・`workflow_call`で動き、`verify`（Python 3.12/3.13
+  matrix: ruff・format・pyright・pytest）、`independent-check`（abcm2ps必須化・楽譜PNG生成）、
+  `plugin-load`（`sdk-check`グループの`openhands-sdk==1.49.2`で`Plugin.load`を検査）を行う。
+- `.github/workflows/release.yml`は`workflow_dispatch`専用。main上でversion三者一致
+  （入力・`pyproject.toml`・`plugins/bard/.plugin/plugin.json`）とタグ未存在を検査し、
+  verify→install-smokeを経て`gh release create`で`v<version>`タグとReleaseを作成する。
+- `.github/workflows/workflow-lint.yml`は`.github/**`の変更と週次でzizmorを実行する。
+- すべての`uses:`は40桁のSHA pinに`# vX.Y.Z`コメントを付ける。checkoutは
+  `persist-credentials: false`、各jobに`timeout-minutes`を付ける。
+- `dependabot.yml`はgithub-actionsとuvを週次で監視する（uvは`cooldown: 7`日）。
+
 ## Git
 
 日本語コミットを使い、`git add .`、amend、`--no-verify`、force push、mainへのpush、
