@@ -17,7 +17,7 @@ triggers:
 # Bard render
 
 `scripts/render_song.py` is the only writer of song artifacts. It reads one proposal, validates
-it against `docs/song-proposal-contract.md` (schema 0.1), renders every output in memory, reads
+it against `docs/song-proposal-contract.md` (schema 0.2), renders every output in memory, reads
 each output back and compares it with the proposal, and only then writes files. Any failure
 writes nothing and exits non-zero with every reason listed. Python 3.12+, standard library only.
 
@@ -48,8 +48,8 @@ one `reason` per line as `<path in proposal>: <message>`, e.g.
 | --- | --- |
 | `song.abc` | ABC 2.1, `L:1/8`, chords as `"Dm"`, lyrics in `w:` lines |
 | `song.mid` | SMF format 1, 480 ticks/beat; track 1 melody, track 2 block chords |
-| `song.mml` | `bard-mml 0.1`: `;` header lines, `@melody` and `@chord1..@chord4` monophonic voices |
-| `song.md` | Markdown song sheet for the Agent Canvas preview: lyrics, chord table per section, full ABC in a fence, rationale, sources |
+| `song.mml` | `bard-mml 0.1`: `;` header lines, `@melody` and `@chord1..@chordN` monophonic voices (N = max chord tones, at least 3) |
+| `song.md` | Markdown song sheet for the Agent Canvas preview: lyric lines with hard breaks, one `Chords: | ... |` line per section, full ABC in a fence, rationale, sources |
 | `song.provenance.json` | `artifact_kind: bard_song_provenance`, `authority: none`, sha256 of proposal, script and every output, copy of `sources` and `originality`, `license: BSD-3-Clause` |
 
 Outputs are byte-for-byte deterministic for the same proposal, except the `generated_at`
@@ -61,7 +61,9 @@ Read every reason before editing; fix the proposal JSON, not the outputs. The co
 
 | Reason | Fix |
 | --- | --- |
-| `units do not match text` | re-split the line; `en` drops spaces and `,.;:!?'"()-—`, `ja` drops spaces and `、。！？「」・…—`; a `~` or `-` unit is skipped |
+| `units do not match text` / `units do not match reading` | re-split the line; `en` drops spaces and `,.;:!?'"()-—`, `ja` drops spaces and `、。！？「」・…—`; a `~` or `-` unit is skipped. With a kana `reading`, `ja` units join to the reading and `text` may carry kanji |
+| `reading is only for ja` / `reading must be kana` | drop `reading` on `en`; write `ja` readings in kana only |
+| `line needs at least two different note lengths` | vary the rhythm: mix `beats` values, end the line on a long note or a rest |
 | `notes count != units count` | one note per unit; a rest note (`r`) needs a `-` unit |
 | `section beats N != bars*beats M` | add or trim notes, or change the number of chords (bars) |
 | `downbeat pitch X is not a chord tone of Y` | move the note or change the bar's chord |

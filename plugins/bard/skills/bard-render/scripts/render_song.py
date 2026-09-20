@@ -1,5 +1,5 @@
 """Validate a bard_song_proposal JSON and render it to ABC, MIDI, MML, Markdown
-and a provenance record. Implements docs/song-proposal-contract.md (schema 0.1).
+and a provenance record. Implements docs/song-proposal-contract.md (schema 0.2).
 
 Python 3.12+, standard library only.
 
@@ -12,6 +12,11 @@ Conventions chosen where the contract leaves detail open:
 - ``en`` units contain no punctuation: the unit join is compared to the text
   with whitespace and ``,.;:!?'"()-—`` removed and casefolded, so units must
   already be punctuation-free (e.g. ``"lines"`` for the word ``line's``).
+- A ``ja`` line may carry a ``reading`` field (kana only); when present the
+  unit join is checked against ``reading`` instead of ``text``, freeing
+  ``text`` to use kanji. ``reading`` is rejected on ``en`` lines.
+- Rhythm rule: any sung line of 4+ notes must use at least two distinct
+  ``beats`` values.
 - ``w:`` lyric lines: for ``en``, text words are reconstructed by consuming
   non-special units against each whitespace-split word's normalized form;
   inside a word, a piece is separated from the previous one by ``-`` only
@@ -52,7 +57,7 @@ from typing import Any
 
 PROPOSAL_KIND = "bard_song_proposal"
 PROVENANCE_KIND = "bard_song_provenance"
-SCHEMA_VERSION = "0.1"
+SCHEMA_VERSION = "0.2"
 PPQ = 480
 
 MODES = {"chronicle", "praise", "lament", "satire", "inspire", "lore"}
@@ -139,6 +144,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 LETTER_PC = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
 EN_TEXT_STRIP = str.maketrans("", "", " \t\r\n,.;:!?'\"()-—")
 JA_TEXT_STRIP = str.maketrans("", "", " \t\r\n、。！？「」・…—")
+JA_READING_RE = re.compile(r"^[ぁ-ゖァ-ヶー \t\r\n、。！？「」・…—]+$")
 MAX_EVENTS = 8192
 
 
@@ -170,6 +176,7 @@ class Line:
     text: str
     units: list[str]
     notes: list[Note]
+    reading: str | None = None
 
 
 @dataclass(frozen=True)
@@ -444,6 +451,17 @@ def validate_proposal(data: object) -> Song:
                     if not isinstance(text, str) or not (1 <= len(text) <= 200):
                         err(f"{lp}.text", "must be 1..200 characters")
                         text = ""
+                    reading = raw_line.get("reading")
+                    if reading is not None:
+                        if not isinstance(reading, str) or not reading.strip():
+                            err(f"{lp}.reading", "must be a non-empty string")
+                            reading = None
+                        elif language != "ja":
+                            err(f"{lp}.reading", "reading is only for ja")
+                            reading = None
+                        elif not JA_READING_RE.match(reading):
+                            err(f"{lp}.reading", "must be kana")
+                            reading = None
                     units = raw_line.get("units")
                     if not isinstance(units, list) or not all(
                         isinstance(u, str) for u in units
@@ -532,6 +550,11 @@ def validate_proposal(data: object) -> Song:
                         elif language == "ja" and unit not in ("~", "-"):
                             if not (1 <= len(unit) <= 2):
                                 err(up, "ja unit must be 1..2 characters")
+                    if len(notes) >= 4 and len({n.beats for n in notes}) < 2:
+                        err(
+                            f"{lp}.notes",
+                            "line needs at least two different note lengths",
+                        )
                     if units and text:
                         joined = "".join(u for u in units if u not in ("~", "-"))
                         if language == "en":
@@ -539,10 +562,20 @@ def validate_proposal(data: object) -> Song:
                             if joined.casefold() != norm:
                                 err(f"{lp}.units", "units do not match text")
                         elif language == "ja":
-                            norm = text.translate(JA_TEXT_STRIP)
-                            if joined != norm:
-                                err(f"{lp}.units", "units do not match text")
-                    lines.append(Line(text=text, units=units, notes=notes))
+                            if reading is not None:
+                                norm = reading.translate(JA_TEXT_STRIP)
+                                if joined != norm:
+                                    err(
+                                        f"{lp}.units",
+                                        "units do not match reading",
+                                    )
+                            else:
+                                norm = text.translate(JA_TEXT_STRIP)
+                                if joined != norm:
+                                    err(f"{lp}.units", "units do not match text")
+                    lines.append(
+                        Line(text=text, units=units, notes=notes, reading=reading)
+                    )
 
                 # melody rule 3: notes starting on beat 1 of a bar must be a
                 # chord tone of that bar's first chord
@@ -978,20 +1011,27 @@ def render_mml(song: Song) -> str:
     lines.append("@melody")
     lines.append(" ".join(melody.tokens))
 
+    n_chord_voices = max(
+        3,
+        max(
+            (len(c.tones) for s in song.sections for bar in s.chords for c in bar),
+            default=3,
+        ),
+    )
     voice_events: list[list[tuple[Fraction, str | None, int, Fraction]]] = [
-        [] for _ in range(4)
+        [] for _ in range(n_chord_voices)
     ]
     for start, dur, chord, _sec in _chord_events(song):
         pcs = [chord.root_pc, *chord.tones[1:]]
-        pcs += [None] * (4 - len(pcs))
-        for vi in range(4):
+        pcs += [None] * (n_chord_voices - len(pcs))
+        for vi in range(n_chord_voices):
             pc = pcs[vi]
             octave = 3 if vi == 0 else 4
             if pc is None:
                 voice_events[vi].append((start, None, octave, dur))
             else:
                 voice_events[vi].append((start, _mml_pc(pc, flat), octave, dur))
-    for vi in range(4):
+    for vi in range(n_chord_voices):
         voice = _MmlVoice(song.bpm, 3 if vi == 0 else 4)
         for _start, name, octave, dur in voice_events[vi]:
             if name is None:
@@ -1025,13 +1065,11 @@ def render_markdown(song: Song, abc: str) -> str:
             lines.append("_（間奏）_" if song.language == "ja" else "_(instrumental)_")
             lines.append("")
         for line in sec.lines:
-            lines.append(line.text)
+            lines.append(line.text + "  ")
         if sec.lines:
             lines.append("")
-        lines.append("| bar | chord |")
-        lines.append("| --- | --- |")
-        for i, bar in enumerate(sec.chords, start=1):
-            lines.append(f"| {i} | {' '.join(c.symbol for c in bar)} |")
+        chord_cells = " | ".join(" ".join(c.symbol for c in bar) for bar in sec.chords)
+        lines.append(f"Chords: | {chord_cells} |")
         lines.append("")
     lines.append("```abc")
     lines.append(abc.rstrip("\n"))
@@ -1329,7 +1367,14 @@ def _readback_check(song: Song, outputs: dict[str, bytes]) -> list[str]:
                 f"readback.mml: melody notes {melody_voice[0]}/{sung} "
                 f"beats {float(melody_voice[1])}/{float(total_beats)}"
             )
-        for vi in range(1, 5):
+        n_chord_voices = max(
+            3,
+            max(
+                (len(c.tones) for s in song.sections for bar in s.chords for c in bar),
+                default=3,
+            ),
+        )
+        for vi in range(1, n_chord_voices + 1):
             v = voices.get(f"chord{vi}")
             if v is None:
                 reasons.append(f"readback.mml: missing @chord{vi} voice")

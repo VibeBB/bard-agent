@@ -301,9 +301,9 @@ def test_reject_bad_schema_version(
     render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
 ) -> None:
     def m(d: dict[str, Any]) -> None:
-        d["schema_version"] = "0.2"
+        d["schema_version"] = "0.1"
 
-    _reject(render_module, tmp_path, valid_en, m, 'must be "0.1"')
+    _reject(render_module, tmp_path, valid_en, m, 'must be "0.2"')
 
 
 def test_reject_ja_unit_too_long(
@@ -392,9 +392,20 @@ def test_parse_midi_counts_rejects_corruption(
 def test_parse_mml_counts(render_module: Any, valid_ja: dict[str, Any]) -> None:
     song = render_module.validate_proposal(valid_ja)
     voices = render_module.parse_mml(render_module.render_mml(song))
-    assert voices["melody"] == (42, Fraction(24))
-    for i in range(1, 5):
+    assert voices["melody"] == (44, Fraction(24))
+    for i in range(1, 4):
         assert voices[f"chord{i}"][1] == Fraction(24)
+    assert "chord4" not in voices
+
+
+def test_parse_mml_fourth_voice_for_seventh_chord(
+    render_module: Any, valid_ja: dict[str, Any]
+) -> None:
+    data = copy.deepcopy(valid_ja)
+    data["sections"][0]["chords"][1] = "Fm7"
+    song = render_module.validate_proposal(data)
+    voices = render_module.parse_mml(render_module.render_mml(song))
+    assert voices["chord4"][1] == Fraction(24)
 
 
 def test_parse_mml_rejects_garbage(render_module: Any) -> None:
@@ -516,3 +527,59 @@ def test_reject_empty_lines_on_verse(
         d["sections"][0]["lines"] = []
 
     _reject(render_module, tmp_path, valid_en, m, "need at least one line")
+
+
+# ---------------------------------------------------------------------------
+# schema 0.2: reading, rhythm variety, markdown shape
+
+
+def test_reject_monotone_rhythm(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        for n in d["sections"][0]["lines"][0]["notes"]:
+            n["beats"] = 1 if n["pitch"] != "r" else 1
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_ja,
+        m,
+        "line needs at least two different note lengths",
+    )
+
+
+def test_reject_reading_on_en(
+    render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        d["sections"][0]["lines"][0]["reading"] = "あんだー"
+
+    _reject(render_module, tmp_path, valid_en, m, "reading is only for ja")
+
+
+def test_reject_reading_not_kana(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        d["sections"][0]["lines"][0]["reading"] = "桜の下で"
+
+    _reject(render_module, tmp_path, valid_ja, m, "must be kana")
+
+
+def test_reject_units_mismatch_reading(
+    render_module: Any, tmp_path: Path, valid_ja: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        d["sections"][0]["lines"][0]["reading"] = "よるのうた"
+
+    _reject(render_module, tmp_path, valid_ja, m, "units do not match reading")
+
+
+def test_song_md_hard_breaks_and_chord_line(render_module: Any, tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+    assert _run(render_module, FIXTURES / "valid_ja.json", out_dir) == 0
+    md = (out_dir / "song.md").read_text(encoding="utf-8")
+    assert "桜の下で歌を紡ぐ  \n夜の火を越えてゆく" in md
+    assert "Chords: | Am | F | G | Am |" in md
+    assert "| bar | chord |" not in md

@@ -1,11 +1,14 @@
 {
   "artifact_kind": "bard_song_proposal",
-  "schema_version": "0.1",
+  "schema_version": "0.2",
   "title": "夜のビルドの歌",
   "mode": "chronicle",
   "language": "ja",
   "sources": [
-    {"kind": "conversation_summary", "ref": "out/bard/night-build/context.md"}
+    {
+      "kind": "conversation_summary",
+      "ref": "out/bard/night-build/context.md"
+    }
   ],
   "rationale": "Aマイナーと3/4のワルツは夜通しのビルドとの戦いの物語に合う。メリスマと休符を節目に置き、最後は主音で休ませる。",
   "originality": {
@@ -14,70 +17,304 @@
     "no_named_artist_imitation": true,
     "no_real_person_ridicule": true
   },
-  "key": {"tonic": "A", "mode": "minor"},
+  "key": {
+    "tonic": "A",
+    "mode": "minor"
+  },
   "meter": "3/4",
   "bpm": 90,
-  "instruments": {"melody": 40, "accompaniment": 46},
-  "vocal_range": {"low": "c4", "high": "e5"},
+  "instruments": {
+    "melody": 40,
+    "accompaniment": 46
+  },
+  "vocal_range": {
+    "low": "c4",
+    "high": "e5"
+  },
   "sections": [
     {
       "name": "verse 1",
       "kind": "verse",
-      "chords": ["Am", "F", "G", "Am"],
+      "chords": [
+        "Am",
+        "F",
+        "G",
+        "Am"
+      ],
       "lines": [
         {
-          "text": "さくらの下で歌をつむぐ",
-          "units": ["さ", "く", "ら", "の", "下", "で", "歌", "を", "つ", "む", "ぐ"],
+          "text": "桜の下で歌を紡ぐ",
+          "units": [
+            "さ",
+            "く",
+            "ら",
+            "の",
+            "し",
+            "た",
+            "で",
+            "う",
+            "た",
+            "を",
+            "つ",
+            "む",
+            "ぐ"
+          ],
           "notes": [
-            {"pitch": "a4", "beats": 0.5}, {"pitch": "b4", "beats": 0.5},
-            {"pitch": "c5", "beats": 0.5}, {"pitch": "b4", "beats": 0.5},
-            {"pitch": "a4", "beats": 0.5}, {"pitch": "g4", "beats": 0.5},
-            {"pitch": "a4", "beats": 0.5}, {"pitch": "b4", "beats": 0.5},
-            {"pitch": "c5", "beats": 1}, {"pitch": "b4", "beats": 0.5},
-            {"pitch": "a4", "beats": 0.5}
-          ]
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "c5",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.25
+            },
+            {
+              "pitch": "g4",
+              "beats": 0.25
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "f4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "g4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "f4",
+              "beats": 0.25
+            },
+            {
+              "pitch": "e4",
+              "beats": 0.25
+            },
+            {
+              "pitch": "d4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "e4",
+              "beats": 1.0
+            }
+          ],
+          "reading": "さくらのしたでうたをつむぐ"
         },
         {
-          "text": "よるのひをこえてゆく",
-          "units": ["よ", "る", "の", "ひ", "~", "を", "こ", "え", "~", "て", "-", "ゆく"],
+          "text": "夜の火を越えてゆく",
+          "units": [
+            "よ",
+            "る",
+            "の",
+            "ひ",
+            "~",
+            "を",
+            "こ",
+            "え",
+            "~",
+            "て",
+            "-",
+            "ゆく"
+          ],
           "notes": [
-            {"pitch": "g4", "beats": 0.5}, {"pitch": "a4", "beats": 0.5},
-            {"pitch": "b4", "beats": 0.5}, {"pitch": "c5", "beats": 0.5},
-            {"pitch": "b4", "beats": 0.5}, {"pitch": "a4", "beats": 0.5},
-            {"pitch": "a4", "beats": 0.5}, {"pitch": "a4", "beats": 0.5},
-            {"pitch": "b4", "beats": 0.5}, {"pitch": "a4", "beats": 0.5},
-            {"pitch": "r", "beats": 0.5}, {"pitch": "e4", "beats": 0.5}
-          ]
+            {
+              "pitch": "g4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 1.0
+            },
+            {
+              "pitch": "c5",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 0.25
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.25
+            },
+            {
+              "pitch": "r",
+              "beats": 0.5
+            },
+            {
+              "pitch": "e4",
+              "beats": 0.5
+            }
+          ],
+          "reading": "よるのひをこえてゆく"
         }
       ]
     },
     {
       "name": "chorus",
       "kind": "chorus",
-      "chords": ["C", "F", "G", "Am"],
+      "chords": [
+        "C",
+        "F",
+        "G",
+        "Am"
+      ],
       "lines": [
         {
-          "text": "きょうもかけはしをわたる",
-          "units": ["きょ", "う", "も", "か", "け", "は", "し", "を", "わ", "た", "る"],
+          "text": "今日も架け橋を渡る",
+          "units": [
+            "きょ",
+            "う",
+            "も",
+            "か",
+            "け",
+            "は",
+            "し",
+            "を",
+            "わ",
+            "た",
+            "る"
+          ],
           "notes": [
-            {"pitch": "c5", "beats": 0.5}, {"pitch": "b4", "beats": 0.5},
-            {"pitch": "c5", "beats": 1}, {"pitch": "e5", "beats": 0.5},
-            {"pitch": "d5", "beats": 0.5}, {"pitch": "c5", "beats": 0.5},
-            {"pitch": "b4", "beats": 0.5}, {"pitch": "a4", "beats": 0.5},
-            {"pitch": "c5", "beats": 0.5}, {"pitch": "b4", "beats": 0.5},
-            {"pitch": "a4", "beats": 0.5}
-          ]
+            {
+              "pitch": "c5",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "c5",
+              "beats": 1
+            },
+            {
+              "pitch": "e5",
+              "beats": 0.5
+            },
+            {
+              "pitch": "d5",
+              "beats": 0.5
+            },
+            {
+              "pitch": "c5",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "c5",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            }
+          ],
+          "reading": "きょうもかけはしをわたる"
         },
         {
-          "text": "あしたはもうあおい",
-          "units": ["あ", "し", "た", "は", "も", "う", "あ", "お", "い", "-"],
+          "text": "明日はもう青い",
+          "units": [
+            "あ",
+            "し",
+            "た",
+            "は",
+            "も",
+            "う",
+            "あ",
+            "お",
+            "い",
+            "-"
+          ],
           "notes": [
-            {"pitch": "g4", "beats": 1}, {"pitch": "a4", "beats": 0.5},
-            {"pitch": "b4", "beats": 0.5}, {"pitch": "c5", "beats": 0.5},
-            {"pitch": "b4", "beats": 0.5}, {"pitch": "a4", "beats": 0.5},
-            {"pitch": "e4", "beats": 0.5}, {"pitch": "c4", "beats": 0.5},
-            {"pitch": "a4", "beats": 1}, {"pitch": "r", "beats": 0.5}
-          ]
+            {
+              "pitch": "g4",
+              "beats": 1
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "c5",
+              "beats": 0.5
+            },
+            {
+              "pitch": "b4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "e4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "c4",
+              "beats": 0.5
+            },
+            {
+              "pitch": "a4",
+              "beats": 1
+            },
+            {
+              "pitch": "r",
+              "beats": 0.5
+            }
+          ],
+          "reading": "あしたはもうあおい"
         }
       ]
     }
