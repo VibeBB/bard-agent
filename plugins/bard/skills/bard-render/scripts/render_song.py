@@ -15,9 +15,11 @@ Conventions chosen where the contract leaves detail open:
 - ``w:`` lyric lines: for ``en``, text words are reconstructed by consuming
   non-special units against each whitespace-split word's normalized form;
   syllables inside a word are joined by ``-`` and words by spaces, ``~``
-  becomes ``_`` and a rest unit becomes ``*``. ``ja`` text has no word
-  boundaries, so every sung unit is joined by ``-`` into one run (``~`` -> ``_``,
-  ``-`` -> ``*``).
+  becomes ``_``. ``ja`` text has no word boundaries, so every sung unit is
+  joined by ``-`` into one run. In both languages ``~`` becomes a
+  space-separated ``_`` token (ABC melisma) and rest units emit no lyric
+  token: ABC aligns ``w:`` words to sounded notes only and skips rests
+  automatically.
 - Each lyric ``Line`` renders as its own ABC music line followed by its single
   ``w:`` line, keeping lyric verse alignment 1:1; a line that ends mid-bar
   omits the ``|`` and the next line continues the bar. The section's last
@@ -766,8 +768,10 @@ def _w_line(song: Song, line: Line) -> str:
             while idx < len(line.units):
                 u = line.units[idx]
                 idx += 1
-                if u in ("~", "-"):
-                    tokens.append("_" if u == "~" else "*")
+                if u == "-":
+                    continue
+                if u == "~":
+                    tokens.append("_")
                     continue
                 syllables.append(u)
                 if "".join(syllables).casefold() == target:
@@ -775,10 +779,24 @@ def _w_line(song: Song, line: Line) -> str:
             if syllables:
                 tokens.append("-".join(syllables))
         for u in line.units[idx:]:
-            tokens.append("_" if u == "~" else "*" if u == "-" else u)
+            if u != "-":
+                tokens.append("_" if u == "~" else u)
         return "w: " + " ".join(tokens)
-    tokens = ["_" if u == "~" else "*" if u == "-" else u for u in line.units]
-    return "w: " + "-".join(tokens)
+    tokens = []
+    run: list[str] = []
+    for u in line.units:
+        if u == "-":
+            continue
+        if u == "~":
+            if run:
+                tokens.append("-".join(run))
+                run = []
+            tokens.append("_")
+            continue
+        run.append(u)
+    if run:
+        tokens.append("-".join(run))
+    return "w: " + " ".join(tokens)
 
 
 # ---------------------------------------------------------------------------

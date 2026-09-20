@@ -104,9 +104,12 @@ def test_midi_structure(render_module: Any, tmp_path: Path) -> None:
     assert fmt == 1 and ntrks == 3
 
 
-def test_abc_lyrics_align_per_music_line(render_module: Any, tmp_path: Path) -> None:
+@pytest.mark.parametrize("fixture", ["valid_en.json", "valid_ja.json"])
+def test_abc_lyrics_align_per_music_line(
+    render_module: Any, tmp_path: Path, fixture: str
+) -> None:
     out_dir = tmp_path / "out"
-    assert _run(render_module, FIXTURES / "valid_en.json", out_dir) == 0
+    assert _run(render_module, FIXTURES / fixture, out_dir) == 0
     abc = (out_dir / "song.abc").read_text(encoding="utf-8")
     pending: str | None = None
     pairs: list[tuple[str, str]] = []
@@ -119,11 +122,17 @@ def test_abc_lyrics_align_per_music_line(render_module: Any, tmp_path: Path) -> 
             continue
         elif raw.strip():
             pending = raw
-    assert len(pairs) >= 6
+    assert len(pairs) >= 4
     for music, lyric in pairs:
-        n_music = len([t for t in re.sub(r'"[^"]*"', "", music).split() if t != "|"])
+        assert "*" not in lyric
+        # ABC w: tokens align to sounded notes only; rests are skipped
+        notes = [
+            t
+            for t in re.sub(r'"[^"]*"', "", music).split()
+            if t != "|" and not t.startswith("z")
+        ]
         n_lyric = len([s for tok in lyric.split() for s in tok.split("-")])
-        assert n_music == n_lyric, (music, lyric)
+        assert len(notes) == n_lyric, (music, lyric)
 
 
 def test_long_utf8_title_renders(

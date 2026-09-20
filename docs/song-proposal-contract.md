@@ -121,7 +121,7 @@ bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skil
 
 | 出力 | 内容 |
 | --- | --- |
-| `song.abc` | ABC 2.1。`X:1`, `T:`, `C:bard-agent`, `M:`, `L:1/8`, `Q:1/4=<bpm>`, `K:<tonic><mode略号>`（`Ddor`, `Gmix`, `Am`, `C`）。コードは`"Dm"`形式、歌詞は`w:`行（`en`は音節を`-`で連結、`~`は`_`、休符は`*`）。セクションごとに`%% section <name>`コメントと改行 |
+| `song.abc` | ABC 2.1。`X:1`, `T:`, `C:bard-agent`, `M:`, `L:1/8`, `Q:1/4=<bpm>`, `K:<tonic><mode略号>`（`Ddor`, `Gmix`, `Am`, `C`）。コードは`"Dm"`形式、歌詞は`w:`行（`en`は音節を`-`で連結、`~`は`_`、休符は歌詞行に含めない（ABCでは休符は歌詞整列の対象外））。セクションごとに`%% section <name>`コメントと改行 |
 | `song.mid` | SMF format 1、480 tick/拍。track 0: tempo・拍子・title。track 1: 旋律（channel 0, `instruments.melody`）。track 2: 伴奏（channel 1, `instruments.accompaniment`）。伴奏はコード変化ごとに root（第3オクターブ）+ 3度 + 5度（第4オクターブ）を保持、7th系は7度も加える |
 | `song.mml` | `bard-mml 0.1`。`;`で始まるヘッダ行（title, mode, language, key, meter, bpm, license）、`@melody`, `@chord1`..`@chord4` の各voiceはモノフォニック。トークンは `t<bpm>`, `o<oct>`, `l<len>`, 音名（`c d e f g a b`, `+`/`-`）, `r`, `&`（タイ）, `<`/`>`（オクターブ）。長さは 1,2,4,8,16 と付点 `.`。0.75拍は`8.`、1.5拍は`4.`、3拍は`2.` |
 | `song.md` | Agent Canvasのinline Markdown previewで読むための一枚。題名、モード、言語、調・拍子・テンポ、セクションごとの歌詞（`text`行）とコード表（小節番号とコード）、`abc`コードフェンスに`song.abc`全文、末尾に`rationale`と`sources` |
