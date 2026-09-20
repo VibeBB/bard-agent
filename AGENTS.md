@@ -80,9 +80,10 @@ Markdownのみの変更では`git diff --check`と相対リンクの確認だけ
 - `.github/workflows/ci.yml`はpush main・PR・`workflow_call`で動き、`verify`（Python 3.12/3.13
   matrix: ruff・format・pyright・pytest）、`independent-check`（abcm2ps必須化・楽譜PNG生成）、
   `plugin-load`（`sdk-check`グループの`openhands-sdk==1.49.2`で`Plugin.load`を検査）を行う。
-- `.github/workflows/release.yml`は`workflow_dispatch`専用。main上でversion三者一致
-  （入力・`pyproject.toml`・`plugins/bard/.plugin/plugin.json`）とタグ未存在を検査し、
-  verify→install-smokeを経て`gh release create`で`v<version>`タグとReleaseを作成する。
+- `.github/workflows/release.yml`は`workflow_dispatch`専用。`bump`入力（既定patch）または
+  `version`入力の明示指定から`scripts/bump_version.py`がplugin.json・pyproject.toml・
+  両SKILL.md・uv.lockの版を更新しmainへcommitし、`v<version>`タグ未存在を検査後、
+  verify→install-smokeを経て`gh release create`でタグとReleaseを作成する。
 - `.github/workflows/workflow-lint.yml`は`.github/**`の変更と週次でzizmorを実行する。
 - すべての`uses:`は40桁のSHA pinに`# vX.Y.Z`コメントを付ける。checkoutは
   `persist-credentials: false`、各jobに`timeout-minutes`を付ける。

@@ -3,9 +3,15 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      bump:
+        description: "Version bump kind"
+        required: false
+        default: patch
+        type: choice
+        options: [patch, minor, major]
       version:
-        description: "Release version without v, e.g. 0.1.0"
-        required: true
+        description: "Explicit X.Y.Z override; leave empty to bump"
+        required: false
         type: string
 
 permissions:
@@ -16,15 +22,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  check-version:
+  bump-version:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
+      contents: write
     outputs:
-      version: ${{ steps.check.outputs.version }}
-      tag: ${{ steps.check.outputs.tag }}
-      sha: ${{ steps.check.outputs.sha }}
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+      sha: ${{ steps.bump.outputs.sha }}
     steps:
       - name: Require main
         env:
@@ -34,45 +40,49 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          persist-credentials: false
-      - name: Check version consistency
-        id: check
+          persist-credentials: true
+      - name: Bump version files
+        id: bump
         env:
-          VERSION: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
+          SET_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          VERSION="${VERSION#v}"
-          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::version '$VERSION' is not X.Y.Z" >&2
-            exit 1
-          fi
-          PLUGIN_VERSION=$(python3 -c \
-            'import json; print(json.load(open("plugins/bard/.plugin/plugin.json"))["version"])')
-          PYPROJECT_VERSION=$(python3 -c \
-            'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
-          if [ "$VERSION" != "$PLUGIN_VERSION" ] || [ "$VERSION" != "$PYPROJECT_VERSION" ]; then
-            echo "::error::version mismatch: input=$VERSION plugin.json=$PLUGIN_VERSION pyproject=$PYPROJECT_VERSION" >&2
-            exit 1
+          SET_VERSION="${SET_VERSION#v}"
+          if [ -n "$SET_VERSION" ]; then
+            VERSION=$(python3 scripts/bump_version.py --set "$SET_VERSION")
+          else
+            VERSION=$(python3 scripts/bump_version.py --bump "$BUMP")
           fi
           if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}"; then
             echo "::error::tag v${VERSION} already exists" >&2
             exit 1
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add plugins/bard/.plugin/plugin.json pyproject.toml \
+            plugins/bard/skills/bard-render/SKILL.md \
+            plugins/bard/skills/bard-songcraft/SKILL.md uv.lock
+          git commit -m "リリース v${VERSION}: version を更新"
+          git push origin HEAD:main
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   verify:
-    needs: check-version
+    needs: bump-version
     uses: ./.github/workflows/ci.yml # zizmor: ignore[self-repository] same-repo reuse
+    with:
+      ref: ${{ needs.bump-version.outputs.sha }}
 
   install-smoke:
-    needs: check-version
+    needs: bump-version
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.bump-version.outputs.sha }}
           persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
@@ -81,24 +91,24 @@ jobs:
         run: uv sync --locked --group sdk-check
       - name: Smoke-test remote install
         env:
-          REF: ${{ needs.check-version.outputs.sha }}
+          REF: ${{ needs.bump-version.outputs.sha }}
         run: >
           uv run --group sdk-check python scripts/smoke_install_plugin.py
           --repo uist1idrju3i/bard-agent --ref "$REF" --repo-path plugins/bard
 
   release:
-    needs: [check-version, verify, install-smoke]
+    needs: [bump-version, verify, install-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
     env:
-      VERSION: ${{ needs.check-version.outputs.version }}
-      SHA: ${{ needs.check-version.outputs.sha }}
+      VERSION: ${{ needs.bump-version.outputs.version }}
+      SHA: ${{ needs.bump-version.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.check-version.outputs.sha }}
+          ref: ${{ needs.bump-version.outputs.sha }}
           persist-credentials: false
       - name: Install ABC tools
         run: |
