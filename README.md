@@ -51,6 +51,8 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 2. pluginを導入します。Agent Canvasのplugin導線から本リポジトリの`plugins/bard`を指定するか、
    プロジェクト直下に`plugins/bard`として置きます（`$OPENHANDS_PROJECT_DIR/plugins/bard`）。
    別の場所に置く場合は環境変数`BARD_PLUGIN_ROOT`でpluginのディレクトリを指します。
+   リリース済みタグから直接導入する場合は`github:uist1idrju3i/bard-agent/plugins/bard#v0.1.0`を
+   指定します。SDK経由なら`PluginSource("github:uist1idrju3i/bard-agent", ref="v0.1.0", repo_path="plugins/bard")`と同じ指定です。
 3. 会話で `/bard:sing chronicle 今日のCI修正` のように呼びます。モードを省くと`chronicle`。
 
 sub-agentを有効にできない環境では、`/bard:sing`が親エージェント自身に
@@ -89,6 +91,22 @@ uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
 ```
 
 作業契約は[AGENTS.md](AGENTS.md)を参照してください。
+
+## リリース
+
+配布はgit tagで行います（[ADR-0004](docs/adr/ADR-0004-ci-cd-release-by-tag.md)）。
+`release` workflowを`workflow_dispatch`で手動起動し、`version`入力に`0.1.0`のような
+v無しの版を入れます。main上でのみ動き、以下の順で進みます。
+
+1. **check-version** — `pyproject.toml`、`plugins/bard/.plugin/plugin.json`、入力versionの
+   三者一致と`v<version>`タグの未存在を検査し、対象SHAを確定します。
+2. **verify** — 通常CI（lint・type・test）を再利用workflowとして実行します。
+3. **install-smoke** — `install_plugin`で対象SHAから実際に導入し、agent/skill/commandの
+   一覧を検査します。
+4. **release** — pluginと楽譜サンプルのzipを作り、`gh release create`でタグ`v<version>`と
+   Releaseを作成します。
+
+途中で失敗した場合はタグもReleaseも作られません。
 
 ## ライセンス
 

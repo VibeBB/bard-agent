@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+import os
 import re
 import shutil
 import struct
@@ -431,14 +432,18 @@ def test_w_line_en_pieces(
 # ---------------------------------------------------------------------------
 # external ABC tools
 
+_ABCM2PS = shutil.which("abcm2ps")
+requires_abcm2ps = pytest.mark.skipif(
+    _ABCM2PS is None and not os.environ.get("BARD_REQUIRE_ABCM2PS"),
+    reason="abcm2ps not installed",
+)
 
-@pytest.mark.skipif(shutil.which("abcm2ps") is None, reason="abcm2ps not installed")
-@pytest.mark.parametrize("fixture", ["valid_en.json", "valid_ja.json"])
-def test_abcm2ps_accepts_abc(render_module: Any, tmp_path: Path, fixture: str) -> None:
-    out_dir = tmp_path / "out"
-    assert _run(render_module, FIXTURES / fixture, out_dir) == 0
+
+def _abcm2ps_or_fail(tmp_path: Path, abc_path: Path) -> None:
+    if _ABCM2PS is None:
+        pytest.fail("BARD_REQUIRE_ABCM2PS=1 is set but abcm2ps is not on PATH")
     proc = subprocess.run(
-        ["abcm2ps", str(out_dir / "song.abc"), "-O", str(tmp_path / "song.ps")],
+        ["abcm2ps", str(abc_path), "-O", str(tmp_path / "song.ps")],
         capture_output=True,
         text=True,
         check=False,
@@ -446,6 +451,14 @@ def test_abcm2ps_accepts_abc(render_module: Any, tmp_path: Path, fixture: str) -
     output = proc.stdout + proc.stderr
     assert proc.returncode == 0, output
     assert "words in lyric line" not in output
+
+
+@requires_abcm2ps
+@pytest.mark.parametrize("fixture", ["valid_en.json", "valid_ja.json"])
+def test_abcm2ps_accepts_abc(render_module: Any, tmp_path: Path, fixture: str) -> None:
+    out_dir = tmp_path / "out"
+    assert _run(render_module, FIXTURES / fixture, out_dir) == 0
+    _abcm2ps_or_fail(tmp_path, out_dir / "song.abc")
 
 
 # ---------------------------------------------------------------------------
@@ -486,20 +499,14 @@ def test_instrumental_intro_outro_renders(
     assert "(instrumental)" in (out_dir / "song.md").read_text(encoding="utf-8")
 
 
-@pytest.mark.skipif(shutil.which("abcm2ps") is None, reason="abcm2ps not installed")
+@requires_abcm2ps
 def test_abcm2ps_accepts_instrumental(
     render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
 ) -> None:
     proposal = _write_proposal(tmp_path, _with_instrumental_sections(valid_en))
     out_dir = tmp_path / "out"
     assert _run(render_module, proposal, out_dir) == 0
-    proc = subprocess.run(
-        ["abcm2ps", str(out_dir / "song.abc"), "-O", str(tmp_path / "song.ps")],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    _abcm2ps_or_fail(tmp_path, out_dir / "song.abc")
 
 
 def test_reject_empty_lines_on_verse(

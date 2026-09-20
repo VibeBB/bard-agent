@@ -84,3 +84,17 @@ def test_relative_links_resolve(path: Path) -> None:
             continue
         resolved = (path.parent / target).resolve()
         assert resolved.exists(), f"{path}: broken link {target}"
+
+
+def test_sdk_plugin_load() -> None:
+    pytest.importorskip("openhands.sdk.plugin")
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "check_plugin_load", REPO_ROOT / "scripts" / "check_plugin_load.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    reasons = module.check_plugin(PLUGIN_ROOT)
+    assert reasons == [], reasons
