@@ -1,0 +1,39 @@
+[project]
+name = "bard-agent"
+version = "0.1.0"
+description = "A fantasy minstrel plugin for OpenHands that writes original songs about workspace work"
+requires-python = ">=3.12"
+license = "BSD-3-Clause"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.16.7",
+    "pyright==1.1.414",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["plugins/bard/skills/bard-render/scripts", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+include = ["plugins/bard/skills/bard-render/scripts", "tests"]
+exclude = ["**/__pycache__", "**/.venv"]
+# The proposal JSON boundary is intentionally untyped; strict Unknown-reporting
+# would only repeat what the validator already checks at runtime.
+reportUnknownArgumentType = false
+reportUnknownLambdaType = false
+reportUnknownMemberType = false
+reportUnknownParameterType = false
+reportUnknownVariableType = false
+reportMissingParameterType = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
