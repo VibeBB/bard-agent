@@ -39,7 +39,9 @@ unreadable Skill as a hard stop:
    conversation, the events, the roles involved and the emotional arc.
 2. Read the workspace yourself: `git log --oneline -n 30`, `git diff --stat HEAD~5..HEAD` when
    the history is deep enough, README, and any file the context points at. Prefer concrete
-   details (a test name, a red pipeline, a midnight commit) over abstractions.
+   details (a test name, a red pipeline, a midnight commit) over abstractions. If `git log`
+   shows a single grafted commit (shallow clone), do not narrate history that is not there —
+   say in the rationale that the log was shallow and lean on the workspace files instead.
 3. If neither the context nor the workspace gives enough material for the requested mode,
    say so and write a shorter song about what is actually there. Do not invent events that did
    not happen; you may invent imagery, not facts.
@@ -72,7 +74,10 @@ unreadable Skill as a hard stop:
 
    Read its findings. Apply the ones that improve singability, imagery or originality, rerun
    the renderer, and stop after at most two revision rounds. The critic has no authority; you
-   decide what to change. If `task` is unavailable, skip this step and say so in the report.
+   decide what to change. If `task` is unavailable, read
+   `<bard plugin root>/agents/bard-critic.md` yourself and perform the critique as a separate
+   pass, then revise on the findings. Either way, write the critic's findings and what you
+   applied or declined to `<out dir>/critic.md`.
 
 ## Originality contract
 
@@ -85,6 +90,7 @@ unreadable Skill as a hard stop:
 ## Report
 
 Reply with: the title, mode, language, key/meter/tempo, the full lyrics, the list of written
-files (`song.md`, `song.abc`, `song.mid`, `song.mml`, `song.provenance.json`), the critic's
+files (`song.md`, `song.abc`, `song.mid`, `song.mml`, `song.provenance.json`, `critic.md`),
+the critic's
 findings you applied and the ones you declined with a one-line reason. Point the reader at
 `song.md` for the chord chart and ABC notation.

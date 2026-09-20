@@ -75,7 +75,10 @@ Example in D dorian: `Dm C Dm Am | Dm C Am Dm` (roots D C D A / D C A D, all in 
 
 One beat is a quarter note; `6/8` counts three beats of two eighths. Note lengths in beats:
 `0.25 0.5 0.75 1 1.5 2 3 4`. **(checked)**: the notes of a section fill exactly
-`bars × beats-per-bar`.
+`bars × beats-per-bar`. **(checked)**: a line of 4+ notes must use at least two
+different note lengths — a bar of four quarter notes is a rejection, not a ballad.
+End each line on a long note (>=1.5 beats) or a rest, and put a `-` rest unit
+between lines so the singer breathes.
 
 | Meter | Beats per bar | Feel | Typical bar patterns (beats) |
 | --- | --- | --- | --- |
@@ -94,6 +97,8 @@ Strong beats: 1 and 3 in `4/4`; 1 in `3/4`; 1 and (2.5) in `6/8`.
 - **(checked)**: the note that starts beat 1 of each bar is a chord tone of that bar's first
   chord (rests are fine). Put passing tones on weak beats.
 - Phrases of 2 or 4 bars; end each phrase on a long note or a rest.
+- Prefer a verse + chorus form over three identical verses; let the refrain line
+  recur with the same words each time.
 - Repeat the verse melody for every verse (strophic); vary only the words.
 - **(checked)**: the last sung note is the tonic, or the 3rd or 5th above it.
 - Melisma: a held or stepwise-moving syllable is written as extra notes whose unit is `~`.
@@ -106,7 +111,9 @@ Strong beats: 1 and 3 in `4/4`; 1 in `3/4`; 1 and (2.5) in `6/8`.
 | `ja` | a mora (拗音・長音・促音 stay with the previous character) | word boundaries at phrase breaks; long vowels get the longer notes | not required; repeat line endings (〜た / 〜ない) | 7-5 patterns, or 4 lines of 8..12 morae |
 
 **(checked)**: the units of a line, joined, equal the line's text with spaces and punctuation
-removed (case-insensitive for `en`). Rests are `-` units on `r` notes.
+removed (case-insensitive for `en`). For `ja`, write the lyrics with kanji in `text`
+and put a kana-only `reading` on the line — the units then join to `reading` instead
+(units stay in kana either way). Rests are `-` units on `r` notes.
 
 Craft:
 
@@ -159,3 +166,20 @@ Beat 1 of bar 1 is `d4` over `Dm` (chord tone); beat 1 of bar 2 is `a4` over `C`
 table: `a4` is not in C major triad, so either move the line so `g4` lands on the downbeat or
 change bar 2 to `Am`. The renderer would reject the first version; this is the kind of fix it
 asks for.
+
+### Worked example (Japanese, chronicle, A minor, 3/4, 90 bpm)
+
+Kanji goes in `text`, kana in `reading`, morae in `units`. Eight morae over two
+bars with varied beats and a breath rest:
+
+```text
+Section "verse 1", chords: Am F G Am (4 bars)
+Line: text 桜の下で歌を紡ぐ / reading さくらのしたでうたをつむぐ
+units: さ く ら の し た で う た を つ む ぐ  (13 morae)
+notes: a4 .5 | b4 .5 | c5 .5 | b4 .5 | a4 .25 | g4 .25 | a4 .5 | f4 .5 | g4 .5 | f4 .25 | e4 .25 | d4 .5 | e4 1   (6 beats = 2 bars)
+```
+
+The downbeat of bar 2 lands on `f4` over `F` (chord tone), the line ends on a
+long note, and the rhythm mixes `.25`, `.5` and `1` — both new checks pass.
+Follow the line with a `-` rest unit at the start of the next line when the
+singer should breathe.

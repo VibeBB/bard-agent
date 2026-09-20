@@ -21,7 +21,7 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 
 歌詞の言語は会話に合わせて日本語または英語。出力は`out/bard/<slug>/`に
 
-- `song.md` — Agent Canvasのpreviewで読む一枚（歌詞・コード表・ABC譜全文）
+- `song.md` — Agent Canvasのpreviewで読む一枚（歌詞・コンパクトなコード行・ABC譜全文）
 - `song.abc` — ABC 2.1
 - `song.mid` — Standard MIDI File format 1（旋律 + 伴奏）
 - `song.mml` — `bard-mml 0.1`
