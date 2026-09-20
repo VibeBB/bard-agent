@@ -40,6 +40,12 @@ marked **(checked)**, you own the rest.
 Default mode is `chronicle`. Default length: 8..24 bars per section, 2..4 sections, whole song
 under 64 bars.
 
+Work in stages and write each one down (`notes.md` facts with source tags → `story.md` arc,
+form, refrain → `lyrics.md` with units → `plan.md` chords and rhythm palette →
+`song.proposal.json`). Notes are written last, once per distinct melody: strophic verses
+after the first reuse it through `melody_from` (§5). Writing the whole proposal in one pass
+is the slowest and least reliable way to compose.
+
 ## 2. Scales
 
 Degrees relative to the tonic (semitones). **(checked)**: every sung note must be in the scale.
@@ -88,6 +94,18 @@ between lines so the singer breathes.
 
 Strong beats: 1 and 3 in `4/4`; 1 in `3/4`; 1 and (2.5) in `6/8`.
 
+### Rhythm palette
+
+Before writing notes, pick 3..5 bar patterns from the table for the song and name them
+(`P1`..`P5`) in `plan.md`. Then assign one pattern per lyric line so that:
+
+- no two adjacent lines share a pattern;
+- the chorus/refrain uses a pattern no verse line uses;
+- each line still ends on a note of >=1.5 beats or a rest, and each bar sums to its beats.
+
+The renderer only checks the two-lengths rule; the palette is what keeps a 7-mora line
+from becoming `1 1 1 1 1 1 2` eight times in a row, which is what happens without it.
+
 ## 5. Melody
 
 - Vocal range default `c4..e5`; keep verses low, lift the chorus. **(checked)**: range 7..19
@@ -97,11 +115,17 @@ Strong beats: 1 and 3 in `4/4`; 1 in `3/4`; 1 and (2.5) in `6/8`.
 - **(checked)**: the note that starts beat 1 of each bar is a chord tone of that bar's first
   chord (rests are fine). Put passing tones on weak beats.
 - Phrases of 2 or 4 bars; end each phrase on a long note or a rest.
+- Contour inside a section: A A' B A'' — line 2 and line 4 vary line 1 by a step or two,
+  line 3 climbs or falls away. Never three identical lines in one section.
+- The chorus peak sits at least a 3rd above the verse peak and opens on a chord tone.
 - Prefer a verse + chorus form over three identical verses; let the refrain line
   recur with the same words each time. A recurring refrain section is
   `kind: chorus` (name it `refrain N` or `chorus N`); verse sections stay
-  `kind: verse` — the renderer checks name/kind agreement.
-- Repeat the verse melody for every verse (strophic); vary only the words.
+  `kind: verse` — the renderer checks name/kind agreement **(checked)**.
+- Repeat the verse melody for every verse (strophic); vary only the words. Write the notes
+  once: later verses declare `"melody_from": "verse 1"` and omit `chords` and every line's
+  `notes`; the renderer copies both. **(checked)**: each line of the copying section has the
+  same number of units as the source line, with `-` rests in the same positions.
 - **(checked)**: the last sung note is the tonic, or the 3rd or 5th above it.
 - Melisma: a held or stepwise-moving syllable is written as extra notes whose unit is `~`.
 
@@ -110,7 +134,7 @@ Strong beats: 1 and 3 in `4/4`; 1 in `3/4`; 1 and (2.5) in `6/8`.
 | Language | One unit is | Stress | Rhyme | Shape |
 | --- | --- | --- | --- | --- |
 | `en` | a syllable | stressed syllables on strong beats | AABB, ABAB or ABCB; near-rhyme is fine | 4-line stanzas, 8..10 syllables per line |
-| `ja` | a mora (拗音・長音・促音 stay with the previous character) | word boundaries at phrase breaks; long vowels get the longer notes | not required; repeat line endings (〜た / 〜ない) | 7-5 patterns, or 4 lines of 8..12 morae |
+| `ja` | a mora (拗音・長音・促音 stay with the previous character) | word boundaries at phrase breaks; long vowels and the line-final mora get the longer notes | not required; keep one grammatical ending per section (〜た / 〜ぬ / 〜う) | 7-5, 8-6 or 5-7-5 mora shapes, or 4 lines of 8..12 morae; no 体言止め on 3+ consecutive lines |
 
 **(checked)**: the units of a line, joined, equal the line's text with spaces and punctuation
 removed (case-insensitive for `en`). For `ja`, write the lyrics with kanji in `text`
@@ -121,6 +145,10 @@ Craft:
 
 - Make it concrete: a red log, the terminal at midnight, the test that vanished. One abstract
   noun per line at most.
+- `en`: mark stressed syllables in `lyrics.md` (`'pipe line's 'eye`) and put them on the
+  strong beats; a stressed syllable on a weak half-beat is the most common prosody fault.
+- Every line traces to a tagged fact in `notes.md` or is imagery about one. A line that
+  states an event, number or outcome with no tag is a grounding fault, not poetic licence.
 - Turn tools into figures: CI is a watchman with a red flag, a flaky test is a will-o'-wisp,
   a merge is a bridge finished, a rollback is the road back.
 - The refrain starts with the same words every time.

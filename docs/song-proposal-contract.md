@@ -1,4 +1,6 @@
-# 歌提案契約 `bard_song_proposal` 0.2
+# 歌提案契約 `bard_song_proposal` 0.3
+
+（schema_versionは`"0.3"`が現行。`"0.2"`も受理するが`melody_from`は使えない。）
 
 bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skillがそれを検証・描画する契約。
 検証器は提案テキストだけを判定し、歌の芸術的な良否や、歌の題材となった作業の合否を判定しない。
@@ -9,7 +11,7 @@ bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skil
 ```json
 {
   "artifact_kind": "bard_song_proposal",
-  "schema_version": "0.2",
+  "schema_version": "0.3",
   "title": "The Dragon of the Red Pipeline",
   "mode": "chronicle",
   "language": "en",
@@ -36,7 +38,7 @@ bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skil
 | フィールド | 規則 |
 | --- | --- |
 | `artifact_kind` | 固定値 `bard_song_proposal` |
-| `schema_version` | 固定値 `0.2` |
+| `schema_version` | `0.2` または `0.3`。`melody_from`は`0.3`専用 |
 | `title` | 1..80文字、空白のみ不可 |
 | `mode` | `chronicle` / `praise` / `lament` / `satire` / `inspire` / `lore` |
 | `language` | `ja` / `en` |
@@ -80,6 +82,7 @@ bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skil
 | `name` | 1..32文字、`[A-Za-z0-9 _-]`、歌全体で一意 |
 | `kind` | `intro` / `verse` / `chorus` / `bridge` / `outro`。`name`の先頭の語が `intro` / `verse` / `chorus` / `refrain` / `bridge` / `outro`（小文字化して比較）なら`kind`は対応する種別でなければならない（`refrain`は`chorus`に対応） |
 | `chords` | 小節ごとに1要素、1..32小節。要素は1つまたは空白区切り2つのコード記号（2つなら小節を前後半に等分） |
+| `melody_from` | 任意（schema 0.3のみ）。それより前のセクション名を指し、そのセクションの`chords`と各行の`notes`を複製する（下記「旋律の再利用」） |
 | `lines` | 0件以上（`intro`/`outro`は0件可、それ以外は1件以上）。`lines: []`の`intro`/`outro`は小節数×1小節の拍数のインストゥルメンタル区間となり、旋律は休み・伴奏のみ鳴る（ABCは各コード区間に`z`全小節休符、MMLは`r`、Markdownは`_(instrumental)_`/`_（間奏）_`を出力、`w:`行は出さない）。行がある場合、行の`notes`の合計拍数を順に並べたものがセクションの総拍数（小節数×1小節の拍数）と**一致**しなければならない |
 
 ### コード記号
@@ -104,6 +107,17 @@ bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skil
 
 `notes[i].pitch == "r"` ⇔ `units[i] == "-"`。`units[i] == "~"`の音は直前の音と同じか隣接（順次進行）の音でなければならない。
 
+### 旋律の再利用（melody_from）
+
+反復形式（同じ旋律に別の歌詞を載せる）のために、セクションは`melody_from: "<それより前のセクション名>"`を宣言できる。
+
+- schema_versionは`"0.3"`が必須（`0.2`では不合格）。
+- 参照先は`sections`内で**それより前**に現れるセクションの`name`。未知または後方の名前は不合格。
+- 参照先自身が`melody_from`を使っている場合は不合格（連鎖不可）。
+- 複製側のセクションは`chords`キーを省略し、各行は`notes`キーを省略しなければならない。
+- 複製側は参照先と同じ行数・行ごとの`units`数・`-`（休符）の位置を持たなければならない。
+- 複製された`chords`/`notes`には通常の検査がすべて適用される（拍数一致、ダウンビート和音、音域、跳躍、カデンツなど）。
+
 ### 音名
 
 `[a-g](#|b)?[0-9]`（例 `d4`, `f#4`, `bb3`）。MIDI番号は `c4 = 60`。
@@ -119,6 +133,7 @@ bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skil
 7. 総イベント数（旋律音 + 和音音）は8192以下。
 8. 4音以上を持つ各行の`notes`の`beats`値は少なくとも2種類含まなければならない。
 9. `rationale`中で `refrain` / `chorus` / `verse` / `サビ` / `リフレイン` に続く引用（`「」`・`"`・`“”`、4文字以上）は、空白正規化後にいずれかの行の`text`か`title`に部分一致しなければならない（改訂で古くなった歌詞引用を検出するため）。
+10. `melody_from`は上記「旋律の再利用」の規則すべてに従う。
 
 ## 描画
 
