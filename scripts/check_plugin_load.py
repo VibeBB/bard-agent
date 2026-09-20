@@ -20,6 +20,21 @@ EXPECTED_SKILLS = {"bard-render", "bard-songcraft"}
 EXPECTED_COMMANDS = {"sing"}
 
 
+def _registered_tools() -> set[str]:
+    """Import the builtin tool modules so their registrations exist."""
+    import openhands.tools.preset.default  # pyright: ignore[reportMissingImports,reportMissingModuleSource]
+    from openhands.sdk.tool.registry import (  # pyright: ignore[reportMissingImports,reportMissingModuleSource]
+        list_registered_tools,
+    )
+
+    openhands.tools.preset.default.register_default_tools(enable_browser=False)
+    import openhands.tools.glob.definition  # noqa: F401  # pyright: ignore[reportMissingImports,reportMissingModuleSource,reportUnusedImport]
+    import openhands.tools.grep.definition  # noqa: F401  # pyright: ignore[reportMissingImports,reportMissingModuleSource,reportUnusedImport]
+    import openhands.tools.task.definition  # noqa: F401  # pyright: ignore[reportMissingImports,reportMissingModuleSource,reportUnusedImport]
+
+    return set(list_registered_tools())
+
+
 def check_plugin(plugin_dir: Path) -> list[str]:
     """Return a list of mismatch reasons (empty means OK)."""
     from openhands.sdk.plugin import (  # pyright: ignore[reportMissingImports,reportMissingModuleSource]
@@ -52,6 +67,25 @@ def check_plugin(plugin_dir: Path) -> list[str]:
     commands = {c.name for c in plugin.commands}
     if commands != EXPECTED_COMMANDS:
         reasons.append(f"commands {sorted(commands)} != {sorted(EXPECTED_COMMANDS)}")
+
+    registered = _registered_tools()
+    min_examples = {"bard": 3, "bard-critic": 2}
+    for agent in plugin.agents:
+        for tool in agent.tools:
+            if tool not in registered:
+                reasons.append(f"agent {agent.name!r} tool {tool!r} not registered")
+        want = min_examples.get(agent.name, 0)
+        if len(agent.when_to_use_examples) < want:
+            reasons.append(
+                f"agent {agent.name!r} when_to_use_examples "
+                f"{len(agent.when_to_use_examples)} < {want}"
+            )
+    for command in plugin.commands:
+        for tool in command.allowed_tools:
+            if tool not in registered:
+                reasons.append(
+                    f"command {command.name!r} allowed-tool {tool!r} not registered"
+                )
     return reasons
 
 
