@@ -1,6 +1,6 @@
 {
   "name": "bard",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "bard plugin: a fantasy minstrel that writes original lyrics and melodies about the work in an OpenHands workspace",
   "author": {
     "name": "bard-agent contributors",
