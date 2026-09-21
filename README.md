@@ -82,14 +82,23 @@ refspecのため、同じsource文字列で新しいrefを指定しても古い`
 （例: `github:UIST1IDRJU3I/bard-agent`）または完全な`https://github.com/uist1idrju3i/bard-agent.git`
 URLで再追加し、plugin詳細の`resolved_ref`が新しいタグのSHAと一致することを確認してください。
 
+`force: true` を付けた再 install でも古い cache（`~/.openhands/cache/extensions/bard-agent-*`）が
+使われ、`resolved_ref` が更新されないことを 1.46.0 で確認しています。確実な手順は
+「アンインストール → 上記 cache ディレクトリと `.lock` を削除 → install」で、install 後に
+installed-plugin API の `resolved_ref` が意図した commit と一致することを確認してください。
+
 ### sub-agentが有効にならない場合
 
 1.46.0では agent profileで"sub-agents"を有効にしても会話で`task`が使えないケースを確認しています
 （settings APIは引き続き`enable_sub_agents=false`を返す）。この場合`/bard:sing`はfallback経路で
 動き、返信末尾の`実行経路:`にその旨が出ます。実機ではfallbackで約34分かかった実績があります。
 
-実機確認済みの環境は OpenHands 1.46.0 です（SDKの対象版 1.49.2 とは別の系統）。fallback経路は
-実機で確認済み、task経路はまだ未検証です。
+実機確認済みの環境は OpenHands 1.46.0 です（SDKの対象版 1.49.2 とは別の系統）。profile の
+`tools` に `task_tool_set` を明示した会話では `task` 経路（bard → bard-critic の入れ子 sub-agent）
+を events で確認済みです。ただし `task` があってもモデルが親会話内で代行する例（12曲中1曲）が
+あるため、`/bard:sing` の末尾行 `実行経路:` と会話の events で経路を確認してください。critic
+sub-agent の 1 回の LLM 応答が 20〜70 分かかる／provider timeout で失敗する例が多く、
+`llm.timeout` を 600 秒以上にすることを推奨します。
 
 補足: SDK 1.49.2 の `AgentSettings.create_agent` は profile の `tools` が `None`（未指定）の
 ときだけ `enable_sub_agents` で TaskToolSet を追加します（ソース: `openhands-sdk/openhands/sdk/settings/model.py`）。

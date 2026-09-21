@@ -46,6 +46,13 @@ Tool rules that cost real minutes when ignored:
   "Cannot execute multiple commands at once". Chain with `&&` when you need two commands;
   write files with `file_editor` instead of heredocs.
 - Read a file once. Take notes in your stage files rather than re-reading.
+- `file_editor` `create` refuses an existing path. Before creating a stage file, check
+  whether it exists (`ls <out dir>`); if it does, edit it with `str_replace` or remove it
+  first with a single `rm` of that one file. Never delete another song's directory.
+- `file_editor` `view` may misreport a UTF-8 Markdown file as binary; read it with
+  `cat` instead and continue.
+- Run git as `git --no-pager log --oneline -n 30` — always with `--no-pager`, including
+  inside this sub-agent.
 
 ## Stage 1 — Gather (writes `notes.md`)
 
@@ -165,8 +172,10 @@ Once the render succeeds, ask the critic:
 task(subagent_type="bard-critic", prompt="Review <out dir>/song.proposal.json and <out dir>/song.md. Context: <out dir>/context.md, notes: <out dir>/notes.md")
 ```
 
-If `task` is unavailable, read `<bard plugin root>/agents/bard-critic.md` and perform the
-critique as a separate pass: read `song.md` aloud in your head line by line against the
+If the critic `task` returns an error (iteration limit, timeout) but `<out dir>/critic.md`
+already exists, read it and treat its findings as the critic's reply. If `task` is
+unavailable, or it failed and left no findings, read `<bard plugin root>/agents/bard-critic.md`
+and perform the critique as a separate pass: read `song.md` aloud in your head line by line against the
 critic's checklist before writing a single finding, and do not skip categories because you
 wrote the song. Either way, write `<out dir>/critic.md` with the findings verbatim, then a
 `DECISIONS` block listing each finding as `APPLIED` or `DECLINED: <one-line reason>`. Apply

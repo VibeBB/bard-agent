@@ -14,7 +14,7 @@ bard sub-agentは親の会話履歴を受け取らない。親であるあなた
 
 1. 引数からモードと題材を読む。モードが無ければ`chronicle`、題材が無ければ「この会話で
    起きたこと」とする。歌詞の言語は引数か会話の言語に合わせる（`ja`/`en`）。
-2. 利用者への可視メッセージへ、**最初のtool呼び出しより前に**3行だけ書く（gitやREADMEを読む前）:
+2. 最初のtool呼び出しの思考（thought）と、最終応答の先頭に、次の3行を書く（tool呼び出しを伴わない応答はターンを終えてしまうため、単独のメッセージにはしない）:
 
    ```text
    モード: <mode> / 言語: <ja|en> / 題材: <一言>
@@ -25,7 +25,15 @@ bard sub-agentは親の会話履歴を受け取らない。親であるあなた
    実行経路は、**この会話で実際に使えるツール一覧**に`task`があるかで決める。設定画面の
    「sub-agentを有効化」だけでは判断しない（profileで`tools`が明示されていると、有効化しても
    `task`が出ない）。
-3. `out/bard/<slug>/`を作る。`<slug>`は題材から作る英小文字とハイフンの短い名前。
+
+   ツール一覧に`task`があるなら、実行経路は必ず`task sub-agent`とし、手順5で`task`を呼ぶ。
+   親であるあなたが`agents/bard.md`を読んでStageを代行してはならない（親会話内で代行した歌は
+   短く質が落ちることを実機で確認している）。`fallback（taskなし）`と書けるのは、ツール一覧に
+   `task`が無いときだけ。
+3. `out/bard/<slug>/`を作る。`<slug>`は題材から作る英小文字とハイフンの短い名前で、末尾に
+   言語を付ける（例: `welcome-developer-ja`）。そのディレクトリが既に存在して空でなければ、
+   `<slug>-2`、`<slug>-3`…と番号を付けた新しいディレクトリを使う。既存の`out/bard/`配下の
+   ファイルは削除も上書きもしない。
 4. `out/bard/<slug>/context.md`へ次を書く（会話の言語で、300..1500字）。各項目に出所を
    `[会話]` `[git]` `[file:<path>]` `[依頼]` で付ける。会話に無いことは書かない:
    - 何が起きたか（時系列、5..12項目。具体的なファイル名・テスト名・エラー文・版番号）
@@ -45,7 +53,7 @@ bard sub-agentは親の会話履歴を受け取らない。親であるあなた
         prompt="Mode: <mode>. Language: <ja|en>. Output directory: out/bard/<slug>/. Read out/bard/<slug>/context.md first, then the workspace. Subject: <題材>.")
    ```
 
-   `task`が使えない場合は、plugin rootの`agents/bard.md`を読み、そのStage 0..7を自分で順に
+   `task`がツール一覧に無い場合に限り、plugin rootの`agents/bard.md`を読み、そのStage 0..7を自分で順に
    実行する（各Stageのファイルを書き、`--check`→render→critic）。criticは
    `<plugin root>/agents/bard-critic.md`を読んで別パスとして実施し、所見と採否を
    `<out dir>/critic.md`へ書く。plugin rootは`$BARD_PLUGIN_ROOT`、
@@ -59,7 +67,8 @@ bard sub-agentは親の会話履歴を受け取らない。親であるあなた
       `song.provenance.json`、`critic.md`
    4. `Critic:` 適用した所見と見送った所見（各1行）
    5. 末尾に必ず1行: `実行経路: task sub-agent` または `実行経路: fallback（taskなし）`
-      （手順2で宣言したものと一致させる。途中で変わったら理由を添える）
+      （手順2で宣言したものと一致させ、実際に呼んだ経路だけを書く。`task`があるのに
+      `fallback`と書いてはならない。途中で変わったら理由を添える）
 
 歌は観測物であり、作業の合否や品質の判断ではない。歌の良し悪しも断定しない。既存楽曲の
 使用を求められても、bardはオリジナルを書く（`docs/adr/ADR-0003`）。
