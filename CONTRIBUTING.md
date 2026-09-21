@@ -10,6 +10,10 @@ Use [uv](https://docs.astral.sh/uv/) with Python 3.12 or newer:
 uv sync
 ```
 
+Optional: installing `abcm2ps` enables the external-renderer tests (otherwise
+they are skipped). Rendering Japanese lyrics additionally needs a CJK font —
+`fonts-ipafont` on Debian/Ubuntu — or abcm2ps drops the lyric glyphs.
+
 ## Checks
 
 Run the full check suite before opening a pull request:

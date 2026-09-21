@@ -462,6 +462,9 @@ def _abcm2ps_or_fail(tmp_path: Path, abc_path: Path) -> None:
     output = proc.stdout + proc.stderr
     assert proc.returncode == 0, output
     assert "words in lyric line" not in output
+    # "char NNNN not treated" means glyphs were dropped from the PS output;
+    # e.g. lyrics are lost when no CJK font (fonts-ipafont) is installed.
+    assert "not treated" not in output, output
 
 
 @requires_abcm2ps
