@@ -73,7 +73,13 @@ jobs:
               plugins/bard/skills/bard-render/SKILL.md \
               plugins/bard/skills/bard-songcraft/SKILL.md uv.lock
             git commit -m "Release v${VERSION}: update version files"
-            git push origin HEAD:main
+            if ! git push origin HEAD:main; then
+              echo "::error::direct push to main was rejected. Add 'GitHub Actions' " >&2
+              echo "as a bypass actor on the 'main' ruleset (Settings → Rules → " >&2
+              echo "Rulesets → main → Bypass actors), or merge a version-bump PR " >&2
+              echo "first and re-run Release with version=${VERSION}." >&2
+              exit 1
+            fi
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
@@ -123,7 +129,7 @@ jobs:
       - name: Install ABC tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends abcm2ps abcmidi ghostscript
+          sudo apt-get install -y --no-install-recommends abcm2ps abcmidi ghostscript fonts-ipafont
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           python-version: "3.12"
