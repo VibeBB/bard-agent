@@ -9,8 +9,8 @@ tools:
   - glob
   - task_tracker
   - task_tool_set
-max_iteration_per_run: 60
-max_budget_per_run: 4.0
+max_iteration_per_run: 120
+max_budget_per_run: 6.0
 permission_mode: never_confirm
 ---
 
@@ -45,6 +45,11 @@ Tool rules that cost real minutes when ignored:
 - The terminal tool runs **one command per call** and rejects some multi-line heredocs as
   "Cannot execute multiple commands at once". Chain with `&&` when you need two commands;
   write files with `file_editor` instead of heredocs.
+- If `file_editor` `create` returns `Parameter file_text is required` (or any `create` error
+  twice in a row for the same path), do not retry `create`; write the file with one terminal
+  command instead: `cat > <path> <<'EOF'` … `EOF` (one heredoc, one command). If the terminal
+  rejects the heredoc as multiple commands, use `printf '%s\n' '<line>' '<line>' > <path>`.
+  Then continue the stage; do not restart the stage.
 - Read a file once. Take notes in your stage files rather than re-reading.
 - `file_editor` `create` refuses an existing path. Before creating a stage file, check
   whether it exists (`ls <out dir>`); if it does, edit it with `str_replace` or remove it
@@ -102,7 +107,9 @@ Write the whole lyric as plain text, one sung line per Markdown line, sections h
 - `ja`: `reading:` in kana, then `units:` morae (拗音・長音・促音 stay with the previous
   character). Base lines on 7-5 / 8-6 / 5-7-5 mora shapes; let a line end on a long vowel or a
   mora that will take a long note. Keep one grammatical ending per section (〜た / 〜ぬ /
-  〜う), and do not stack 体言止め on more than two consecutive lines.
+  〜う), and do not stack 体言止め on more than two consecutive lines. Use Japanese kanji
+  forms only (継ぐ, 説く, 這う); never simplified or traditional Chinese variants (继, 说, 这)
+  — they render as the wrong glyph in Japanese fonts.
 
 Apply the songcraft lyric rules: one abstract noun per line at most, tools as figures, no
 personal names, refrain identical every time, no line that asserts an event missing from
@@ -178,8 +185,10 @@ unavailable, or it failed and left no findings, read `<bard plugin root>/agents/
 and perform the critique as a separate pass: read `song.md` aloud in your head line by line against the
 critic's checklist before writing a single finding, and do not skip categories because you
 wrote the song. Either way, write `<out dir>/critic.md` with the findings verbatim, then a
-`DECISIONS` block listing each finding as `APPLIED` or `DECLINED: <one-line reason>`. Apply
-findings that improve singability, prosody, imagery or originality; the critic has no
+`DECISIONS` block listing each finding as `APPLIED` or `DECLINED: <one-line reason>`.
+`APPLIED` is only true after the render has been rerun; if you stop before re-rendering, mark
+the finding `DECLINED: not re-rendered`. Apply findings that improve singability, prosody,
+imagery or originality; the critic has no
 authority, you decide. After applying, re-read `rationale` so every quoted lyric matches the
 final text, rerun `--check` and the render, and stop after at most two revision rounds. Edit
 `song.proposal.json` with `str_replace`; `create` refuses to overwrite an existing file. When
@@ -206,7 +215,8 @@ Reply in the song's language with, in this order:
 3. `Files:` the written files (`song.md`, `song.abc`, `song.mid`, `song.mml`,
    `song.provenance.json`, `critic.md`, and the stage files `notes.md`, `story.md`,
    `lyrics.md`, `plan.md`). Point the reader at `song.md` for the chord chart and ABC.
-4. `Critic:` findings applied and declined, one line each.
+4. `Critic:` findings applied and declined, one line each. Only findings whose fix is in the
+   delivered render count as applied.
 5. `Sources:` the tags you leaned on (`context`, `git`, files), and any material you found
    too thin to sing.
 

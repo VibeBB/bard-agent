@@ -60,7 +60,8 @@ Severity classes, in this order:
    the missing support.
 3. **Prosody** `[FIX]` — `en`: do stressed syllables land on beats 1 and 3 (or 1 in 3/4, 1 and
    2.5 in 6/8)? `ja`: do phrase breaks fall between words, do long vowels and line-final morae
-   get the longer notes, do 体言止め lines pile up?
+   get the longer notes, do 体言止め lines pile up? Any simplified/traditional Chinese glyph in
+   a `ja` lyric is a `FIX`.
 4. **Singability** `[FIX]` — phrases longer than 4 bars without a rest, a leap before a
    consonant cluster, the same pitch more than 6 times in a row, a chorus that does not sit
    higher than the verse, a line-final note shorter than 1.5 beats.

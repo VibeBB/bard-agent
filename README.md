@@ -157,6 +157,9 @@ PluginSource("github:VibeBB/bard-agent", ref="v1.0.0", repo_path="plugins/bard")
 1. Open a **new chat** and select the workspace (repository) to sing about.
 2. Enter `/bard:sing`, followed by a mode and subject:
 
+   Plugin commands may not appear in the composer's `/` autocomplete palette; type
+   `/bard:sing …` as plain text and send it — it dispatches the same way.
+
    ```text
    /bard:sing chronicle Read this workspace's git history and README and sing its development as an epic.
    /bard:sing praise today's release
@@ -371,6 +374,9 @@ GUIを使わない場合は、プロジェクト直下に `plugins/bard` を置�
 
 1. **新規チャット** を開き、歌わせたいワークスペース（リポジトリ）を選びます。
 2. 入力欄に `/bard:sing` に続けてモードと題材を書いて送ります。
+
+   プラグインのコマンドが作曲欄の `/` オートコンプリートパレットに表示されないことがあります。
+   `/bard:sing …` をプレーンテキストで入力して送信すれば、同じようにdispatchされます。
 
    ```text
    /bard:sing chronicle このワークスペースの開発の歩みを、gitの履歴とREADMEを読んで叙事詩として歌ってください。
