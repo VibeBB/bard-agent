@@ -21,7 +21,9 @@ public repo向けに無料で、外部配布面を増やさずにタグから導
    外部描画の独立検査とし、`BARD_REQUIRE_ABCM2PS=1`でskip不可にする。
    `plugin-load`は`sdk-check`依存グループ（`openhands-sdk==1.49.2`）でSDK経由の
    plugin読み込みを検査する。SDKはCI検査用の依存としてのみ使い、実行時依存にしない。
-4. GitHub Actionsはすべて40桁SHAにpinし、zizmorを週次＋`.github/**`変更時に実行する。
+4. GitHub Actionsはすべて40桁SHAにpinし、zizmorを週次＋全pull request＋
+   `.github/**`変更のpushで実行する（`zizmor`はrequired status checkなので
+   PRのpathsフィルタは付けない）。
    dependabotはgithub-actionsとuvを週次監視（uvは7日cooldown）する。
 
 ## 結果

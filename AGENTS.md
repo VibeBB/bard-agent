@@ -108,8 +108,9 @@ input and confirm that the broken proposal is rejected.
   equal to the current version performs a consistency check, skips the bump
   commit and push, checks that the tag does not exist, and releases the current
   main HEAD.
-- `.github/workflows/workflow-lint.yml` runs zizmor on `.github/**` changes and
-  weekly.
+- `.github/workflows/workflow-lint.yml` runs zizmor on every pull request, on
+  pushes to main that touch `.github/**`, and weekly. `zizmor` is a required
+  status check, so the pull-request trigger must not be path-filtered.
 - Every `uses:` entry is pinned to a 40-character SHA with a `# vX.Y.Z`
   comment. Checkout uses `persist-credentials: false`, and every job has a
   `timeout-minutes` setting.
