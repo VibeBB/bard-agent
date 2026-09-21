@@ -94,7 +94,7 @@ jobs:
           REF: ${{ needs.bump-version.outputs.sha }}
         run: >
           uv run --group sdk-check python scripts/smoke_install_plugin.py
-          --repo uist1idrju3i/bard-agent --ref "$REF" --repo-path plugins/bard
+          --repo VibeBB/bard-agent --ref "$REF" --repo-path plugins/bard
 
   release:
     needs: [bump-version, verify, install-smoke]

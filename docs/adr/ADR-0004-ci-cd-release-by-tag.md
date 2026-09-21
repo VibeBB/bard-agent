@@ -12,7 +12,7 @@ public repo向けに無料で、外部配布面を増やさずにタグから導
 ## 決定
 
 1. 配布単位はgit tag（`v<version>`）とそのzip。PyPI・Dockerへの公開は行わない。
-   導入指定は`github:uist1idrju3i/bard-agent/plugins/bard#v<version>`とする。
+   導入指定は`github:VibeBB/bard-agent/plugins/bard#v<version>`とする。
 2. リリース起動は`workflow_dispatch`のみで、main上の`check-version`ジョブが
    入力version・`pyproject.toml`・`plugins/bard/.plugin/plugin.json`の三者一致と
    タグ未存在を検査してから進む。失敗時はタグもReleaseも作られない。

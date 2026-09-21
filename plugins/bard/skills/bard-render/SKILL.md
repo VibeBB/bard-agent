@@ -1,7 +1,7 @@
 ---
 name: bard-render
 description: Validate a bard_song_proposal JSON and render it deterministically to ABC notation, a Standard MIDI File, bard-mml text, a Markdown song sheet and a provenance record with a standard-library-only Python script. Use after writing a song proposal, or to check why a proposal was rejected.
-version: 0.3.0
+version: 1.0.0
 license: BSD-3-Clause
 triggers:
   - render song

@@ -1,7 +1,7 @@
 ---
 name: bard-songcraft
 description: Decision tables for writing an original song about work in a workspace - song modes (chronicle, praise, lament, satire, inspire, lore), keys and modes, chord progressions, meter and rhythm, melody rules, lyric craft for English and Japanese, and the originality contract. Use before writing a bard song proposal.
-version: 0.3.0
+version: 1.0.0
 license: BSD-3-Clause
 triggers:
   - song

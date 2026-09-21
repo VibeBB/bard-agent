@@ -1,6 +1,255 @@
 # bard-agent
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/uist1idrju3i/bard-agent)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/VibeBB/bard-agent)
+
+**English** | [日本語](#日本語)
+
+<a id="english"></a>
+## English
+
+`bard-agent` adds the **bard** minstrel to OpenHands (Agent Canvas). It turns a
+development workspace, the user's conversation, and conversations with other
+agents into original lyrics and melodies, then exports lyrics, ABC notation,
+MIDI, and MML.
+
+> Target: OpenHands Software Agent SDK v1.49.2 / OpenHands Agent Canvas
+
+## What it can do
+
+| Mode | What it sings |
+| --- | --- |
+| `chronicle` | Turn what happened into a chronological epic |
+| `praise` | Praise a success, release, or merge |
+| `lament` | Write a lament for a lost feature or failure |
+| `satire` | Satirize bugs or technical debt (never real people or organizations) |
+| `inspire` | Sing a short song that encourages the next step |
+| `lore` | Tell the design history preserved in a README or ADR as lore |
+
+Lyrics follow the language of the conversation (Japanese or English). Outputs
+are written to `out/bard/<slug>/`:
+
+- `song.md` — one-page Agent Canvas preview (lyrics, compact chord lines, and
+  the complete ABC score)
+- `song.abc` — ABC 2.1
+- `song.mid` — Standard MIDI File format 1 (melody and accompaniment)
+- `song.mml` — `bard-mml 0.1`
+- `song.proposal.json` / `song.provenance.json` — the canonical song proposal
+  and its provenance
+- `notes.md` / `story.md` / `lyrics.md` / `plan.md` — intermediate songwriting
+  files for each stage
+- `context.md` / `critic.md` — the parent's conversation summary and the
+  critic's observations and disposition
+
+The proposal contract is schema 0.3. Repeated sections can use `melody_from`
+to copy chords and melody from an earlier section, keeping proposal JSON short.
+Use `--check` when you only want validation; it writes nothing and lists the
+reasons.
+
+## How it works
+
+```text
+User ── /bard:sing ──▶ parent agent
+                         ├─ summarize the conversation in context.md
+                         └─ task(subagent_type="bard") ──▶ bard
+                                                            ├─ read context.md and the workspace (git log, README, ADRs)
+                                                            ├─ write song.proposal.json
+                                                            ├─ validate and render with render_song.py (fail-closed)
+                                                            └─ task(subagent_type="bard-critic") ──▶ observations (no verdict authority)
+```
+
+- A `task` sub-agent does not receive the parent's conversation history, so the
+  parent summarizes it in `context.md` while bard reads the workspace itself
+  ([ADR-0001](docs/adr/ADR-0001-task-subagent-plugin.md)).
+- The proposal JSON is the sole source of truth. ABC, MIDI, and MML are derived
+  deterministically by a Python-standard-library-only script and read back for
+  equality checks ([contract](docs/song-proposal-contract.md),
+  [ADR-0002](docs/adr/ADR-0002-song-proposal-contract.md)).
+- Quoting or adapting existing songs, imitating real artists, and mocking real
+  people are prohibited. Rendering requires every `originality` declaration to
+  be `true`
+  ([ADR-0003](docs/adr/ADR-0003-copyright-and-license-policy.md)).
+
+## Installation via Agent Canvas WebGUI
+
+From Agent Canvas (the OpenHands web GUI), install the plugin from a GitHub
+release tag. The following procedure was verified with OpenHands agent-server
+1.46-series releases.
+
+1. Open **Customize** in the left sidebar and select the **Plugins** tab.
+2. Click **Add plugin**, enter the following three values, and click
+   **Install**.
+
+   | Field | Value |
+   | --- | --- |
+   | Source | `github:VibeBB/bard-agent` |
+   | Ref | `v1.0.0` / the latest tag from [Releases](https://github.com/VibeBB/bard-agent/releases) |
+   | Path | `plugins/bard` |
+
+3. Installation is complete when **bard** appears as enabled. The plugin is
+   installed at `~/.openhands/plugins/installed/bard/`, with `agents/`,
+   `commands/`, and `skills/` in place. Starting a new conversation loads the
+   `bard-songcraft` and `bard-render` skills and the `/bard:sing` command
+   automatically (the conversation shows “skills ready” immediately after it
+   starts).
+4. To use sub-agents, optionally enable `enable_sub_agents` in Agent Canvas
+   settings. The plugin also works with it disabled (see the fallback below).
+
+### Updating
+
+Agent Canvas caches a plugin repository per source string. Because the refspec
+fetches tags only, specifying a new ref with the same source string can leave an
+old `resolved_ref` in place. A workaround confirmed with 1.46.0 is to
+uninstall the plugin, then add it again using a source with different casing
+(for example, `github:VIBEBB/bard-agent`) or the full URL
+`https://github.com/VibeBB/bard-agent.git`. Confirm that the plugin details'
+`resolved_ref` matches the new tag's SHA.
+
+Reinstalling with `force: true` can still use the old cache
+(`~/.openhands/cache/extensions/bard-agent-*`), leaving `resolved_ref`
+unchanged; this was confirmed with 1.46.0. The reliable procedure is
+“uninstall → delete the cache directory above and its `.lock` file → install”.
+After installation, confirm that the installed-plugin API's `resolved_ref`
+matches the intended commit.
+
+### If sub-agents don't activate
+
+With 1.46.0, there are cases where enabling “sub-agents” in the agent profile
+still leaves `task` unavailable in the conversation (the settings API continues
+to return `enable_sub_agents=false`). In that case `/bard:sing` uses its
+fallback path and says so in the `実行経路:` line at the end of the response.
+The fallback took approximately 34 minutes in one real-world run.
+
+The environment verified in practice was OpenHands 1.46.0, which is separate
+from the target SDK version 1.49.2. A conversation with `task_tool_set`
+explicitly listed in the profile's `tools` showed the `task` path (nested
+bard → bard-critic sub-agents) in its events. However, even when `task` is
+available, the model sometimes handles the work in the parent conversation
+(one of twelve songs in testing), so check the `/bard:sing` trailing
+`実行経路:` line and the conversation events. A critic sub-agent LLM response
+often takes 20–70 minutes or fails with a provider timeout; an
+`llm.timeout` of at least 600 seconds is recommended.
+
+Note: in SDK 1.49.2, `AgentSettings.create_agent` adds TaskToolSet through
+`enable_sub_agents` only when the profile's `tools` is `None` (unspecified)
+(source: `openhands-sdk/openhands/sdk/settings/model.py`). If `tools` is
+explicitly set in the profile, `task` does not appear even when the setting is
+ON. Either leave `tools` unspecified or explicitly add `task_tool_set`. Whether
+1.46.0 behaves identically was not verified.
+
+Installation status can also be checked through the API (an
+`X-Session-API-Key` is required). When `resolved_ref` matches the tag's commit
+SHA, the intended version is installed.
+
+```bash
+curl -sS -H "X-Session-API-Key: $KEY" http://127.0.0.1:8000/api/plugins/installed
+```
+
+For a non-GUI installation, place `plugins/bard` in the project directory
+(`$OPENHANDS_PROJECT_DIR/plugins/bard`), point `BARD_PLUGIN_ROOT` at the plugin
+directory, or use the SDK:
+
+```python
+PluginSource("github:VibeBB/bard-agent", ref="v1.0.0", repo_path="plugins/bard")
+```
+
+## Usage (Agent Canvas WebGUI)
+
+1. Open a **new chat** and select the workspace (repository) to sing about.
+2. Enter `/bard:sing`, followed by a mode and subject:
+
+   ```text
+   /bard:sing chronicle Read this workspace's git history and README and sing its development as an epic.
+   /bard:sing praise today's release
+   /bard:sing satire flaky tests
+   ```
+
+   The default mode is `chronicle`; without a subject, the subject is “what
+   happened in this conversation”. Lyrics use the language of the argument or
+   conversation (`ja`/`en`).
+3. The parent agent summarizes the conversation in
+   `out/bard/<slug>/context.md`. bard reads the workspace (`git log`, README,
+   and ADRs), writes the song, and validates and renders it with
+   `render_song.py`. Completion usually takes 10–15 minutes in practice,
+   depending on the LLM and workspace size.
+4. When complete, the conversation displays the title, mode, key, time
+   signature, tempo, full lyrics, and a list of output files. Outputs are in
+   `out/bard/<slug>/`; open them from **Show panel** in the upper right or read
+   `song.md` in Markdown preview. Play `song.mid` with any MIDI player and
+   render or play `song.abc` with an ABC tool such as abcjs.
+
+When `enable_sub_agents` is disabled (the default), `/bard:sing` briefly says
+so, then the parent agent follows `agents/bard.md` itself; the critic reads
+`agents/bard-critic.md` and performs a separate self-critique (recorded in
+`critic.md`). When enabled, bard and bard-critic run as `task` sub-agents. Both
+paths produce and validate the same outputs.
+
+In this project, songs are observations, not verdicts about the pass/fail status
+or quality of the work. If asked to use an existing song, bard writes an
+original one.
+
+## Layout
+
+```text
+plugins/bard/
+├── .plugin/plugin.json
+├── agents/bard.md, bard-critic.md
+├── commands/sing.md
+└── skills/
+    ├── bard-songcraft/SKILL.md          # songwriting decision tables and copyright contract
+    └── bard-render/                     # proposal JSON validation and rendering (stdlib only)
+        ├── SKILL.md
+        └── scripts/render_song.py
+docs/                                    # contract, ADRs, and research
+tests/                                   # renderer and plugin-asset checks
+```
+
+## Development
+
+```bash
+uv sync
+uv run ruff check . && uv run ruff format --check .
+uv run pyright
+uv run pytest -q
+```
+
+Try the renderer directly:
+
+```bash
+uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
+    --proposal tests/fixtures/valid_en.json --out-dir out/bard/example
+```
+
+See [AGENTS.md](AGENTS.md) for the working contract.
+
+## Release process
+
+Distribution uses git tags ([ADR-0004](docs/adr/ADR-0004-ci-cd-release-by-tag.md)).
+Run the `release` workflow manually with `workflow_dispatch`. Select a `bump`
+input (`patch`/`minor`/`major`, defaulting to `patch`) or a `version` input
+(an explicit `X.Y.Z` override). It runs only on `main` and proceeds as follows:
+
+1. **bump-version** — `scripts/bump_version.py` checks the versions in
+   `plugins/bard/.plugin/plugin.json`, `pyproject.toml`, both `SKILL.md` files,
+   and `uv.lock`, writes the new version, and checks that the `v<version>` tag
+   does not already exist before committing to `main`.
+2. **verify** — runs the normal CI (lint, type checks, and tests) through the
+   reusable workflow.
+3. **install-smoke** — installs from the target SHA with `install_plugin` and
+   checks the agent, skill, and command listings.
+4. **release** — creates plugin and score-sample ZIP files, then creates the
+   `v<version>` tag and Release with `gh release create`.
+
+If any step fails, neither a tag nor a Release is created.
+
+## License
+
+BSD-3-Clause ([LICENSE](LICENSE)). Provenance for generated songs is recorded
+in `song.provenance.json` with `license: BSD-3-Clause`.
+
+<a id="日本語"></a>
+## 日本語
+
+[English](#english) | **日本語**
 
 OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです。開発中のワークスペース、
 利用者との会話、他のエージェントとの会話を題材に、オリジナルの歌詞と旋律を作り、
@@ -63,8 +312,8 @@ Agent Canvas（OpenHands のWeb GUI）からGitHubのリリースタグを指定
 
    | 項目 | 値 |
    | --- | --- |
-   | ソース（source） | `github:uist1idrju3i/bard-agent` |
-   | リファレンス（ref） | `v<最新版>`（[Releases](https://github.com/uist1idrju3i/bard-agent/releases) の最新タグ） |
+   | ソース（source） | `github:VibeBB/bard-agent` |
+   | リファレンス（ref） | `v1.0.0`（[Releases](https://github.com/VibeBB/bard-agent/releases) の最新タグ） |
    | パス（path） | `plugins/bard` |
 
 3. 一覧に **bard** が「有効」で表示されれば導入完了です。導入先は
@@ -79,7 +328,7 @@ Agent Canvas（OpenHands のWeb GUI）からGitHubのリリースタグを指定
 Agent Canvasはsource文字列ごとにplugin repositoryをcacheします（tagのみを取得する
 refspecのため、同じsource文字列で新しいrefを指定しても古い`resolved_ref`が残ることがあります）。
 1.46.0で確認した回避策: いったんアンインストールしてから、大文字小文字を変えたsource表記
-（例: `github:UIST1IDRJU3I/bard-agent`）または完全な`https://github.com/uist1idrju3i/bard-agent.git`
+（例: `github:VIBEBB/bard-agent`）または完全な`https://github.com/VibeBB/bard-agent.git`
 URLで再追加し、plugin詳細の`resolved_ref`が新しいタグのSHAと一致することを確認してください。
 
 `force: true` を付けた再 install でも古い cache（`~/.openhands/cache/extensions/bard-agent-*`）が
@@ -114,7 +363,7 @@ curl -sS -H "X-Session-API-Key: $KEY" http://127.0.0.1:8000/api/plugins/installe
 
 GUIを使わない場合は、プロジェクト直下に `plugins/bard` を置く（`$OPENHANDS_PROJECT_DIR/plugins/bard`）か、
 環境変数 `BARD_PLUGIN_ROOT` で plugin ディレクトリを指すか、SDKで
-`PluginSource("github:uist1idrju3i/bard-agent", ref="v0.1.0", repo_path="plugins/bard")` を使います。
+`PluginSource("github:VibeBB/bard-agent", ref="v1.0.0", repo_path="plugins/bard")` を使います。
 
 ## 使い方（Agent Canvas WebGUI）
 

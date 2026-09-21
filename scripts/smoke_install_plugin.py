@@ -9,7 +9,7 @@ default branch and verify ``InstallationInfo.resolved_ref`` equals it; any
 other ref (branch/tag) is passed through to ``install_plugin`` unchanged.
 
 Usage:
-    smoke_install_plugin.py --repo uist1idrju3i/bard-agent --ref <sha> \
+    smoke_install_plugin.py --repo VibeBB/bard-agent --ref <sha> \
         --repo-path plugins/bard
 """
 

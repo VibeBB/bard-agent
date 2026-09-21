@@ -1,12 +1,12 @@
 {
   "name": "bard",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "bard plugin: a fantasy minstrel that writes original lyrics and melodies about the work in an OpenHands workspace",
   "author": {
     "name": "bard-agent contributors",
-    "url": "https://github.com/uist1idrju3i/bard-agent"
+    "url": "https://github.com/VibeBB/bard-agent"
   },
   "license": "BSD-3-Clause",
-  "repository": "https://github.com/uist1idrju3i/bard-agent",
+  "repository": "https://github.com/VibeBB/bard-agent",
   "entry_command": "sing"
 }
