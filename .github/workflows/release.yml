@@ -49,8 +49,16 @@ jobs:
         run: |
           set -euo pipefail
           SET_VERSION="${SET_VERSION#v}"
+          CURRENT=$(python3 -c 'import tomllib,sys;print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+          SKIP_COMMIT=false
           if [ -n "$SET_VERSION" ]; then
-            VERSION=$(python3 scripts/bump_version.py --set "$SET_VERSION")
+            if [ "$SET_VERSION" = "$CURRENT" ]; then
+              VERSION="$CURRENT"
+              python3 scripts/bump_version.py --dry-run --bump patch >/dev/null
+              SKIP_COMMIT=true
+            else
+              VERSION=$(python3 scripts/bump_version.py --set "$SET_VERSION")
+            fi
           else
             VERSION=$(python3 scripts/bump_version.py --bump "$BUMP")
           fi
@@ -58,13 +66,15 @@ jobs:
             echo "::error::tag v${VERSION} already exists" >&2
             exit 1
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add plugins/bard/.plugin/plugin.json pyproject.toml \
-            plugins/bard/skills/bard-render/SKILL.md \
-            plugins/bard/skills/bard-songcraft/SKILL.md uv.lock
-          git commit -m "リリース v${VERSION}: version を更新"
-          git push origin HEAD:main
+          if [ "$SKIP_COMMIT" = false ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add plugins/bard/.plugin/plugin.json pyproject.toml \
+              plugins/bard/skills/bard-render/SKILL.md \
+              plugins/bard/skills/bard-songcraft/SKILL.md uv.lock
+            git commit -m "Release v${VERSION}: update version files"
+            git push origin HEAD:main
+          fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"

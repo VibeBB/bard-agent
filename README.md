@@ -232,6 +232,8 @@ input (`patch`/`minor`/`major`, defaulting to `patch`) or a `version` input
    `plugins/bard/.plugin/plugin.json`, `pyproject.toml`, both `SKILL.md` files,
    and `uv.lock`, writes the new version, and checks that the `v<version>` tag
    does not already exist before committing to `main`.
+   An explicit `version` equal to the current version skips the bump commit and
+   releases the current `main` HEAD.
 2. **verify** — runs the normal CI (lint, type checks, and tests) through the
    reusable workflow.
 3. **install-smoke** — installs from the target SHA with `install_plugin` and
@@ -438,6 +440,7 @@ main上でのみ動き、以下の順で進みます。
 1. **bump-version** — `scripts/bump_version.py`が`plugins/bard/.plugin/plugin.json`、
    `pyproject.toml`、両SKILL.md、`uv.lock`の版を整合確認した上で新しい版を書き込み、
    `v<version>`タグの未存在を検査してからmainへcommitします。
+   `version`入力が現在の版と同じ場合はbump commitを省き、現在のmain HEADをそのままリリースします。
 2. **verify** — 通常CI（lint・type・test）を再利用workflowとして実行します。
 3. **install-smoke** — `install_plugin`で対象SHAから実際に導入し、agent/skill/commandの
    一覧を検査します。
