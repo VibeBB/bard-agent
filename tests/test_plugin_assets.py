@@ -64,6 +64,38 @@ def test_sing_command() -> None:
     assert fm.get("description"), "sing.md frontmatter missing description"
 
 
+def test_bard_agent_budget() -> None:
+    fm = _frontmatter(PLUGIN_ROOT / "agents" / "bard.md")
+    assert int(fm["max_iteration_per_run"]) >= 120
+    assert float(fm["max_budget_per_run"]) >= 6.0
+
+
+def test_sing_command_contract_lines() -> None:
+    text = (PLUGIN_ROOT / "commands" / "sing.md").read_text(encoding="utf-8")
+    for expected in (
+        "実行経路: task sub-agent",
+        "実行経路: fallback（taskなし）",
+        "wc -m",
+        "file_text",
+        "Resume:",
+        "DECISIONS",
+        "not re-rendered",
+    ):
+        assert expected in text
+
+
+def test_bard_agent_recovery_rules() -> None:
+    text = (PLUGIN_ROOT / "agents" / "bard.md").read_text(encoding="utf-8")
+    for expected in ("file_text", "<<'EOF'", "DECLINED: not re-rendered", "继"):
+        assert expected in text
+
+
+def test_readme_palette_note() -> None:
+    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "palette" in text
+    assert "パレット" in text
+
+
 def _markdown_files() -> list[Path]:
     files: list[Path] = []
     for base in (REPO_ROOT / "docs", PLUGIN_ROOT, REPO_ROOT):
