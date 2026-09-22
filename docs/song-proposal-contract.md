@@ -151,7 +151,7 @@ bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skil
 
 | 出力 | 内容 |
 | --- | --- |
-| `score.png` | `scripts/render_score_png.py`が`song.abc`から`abcm2ps`+`gs`で描画する譜面画像。人間レビューとvision検査のための事後成果物であり、決定論的render出力にも読み戻し検査にも含まれない。`abcm2ps`/`gs`不在時は生成しない（スキップ）。既知の制限: `abcm2ps`はCJK文字をフォントエンコーディングに対応づけられず`char XXXX not treated`警告で落とすため、CJKフォントがあっても日本語歌詞が画像から欠落し得る。検査は譜面レイアウトのみを対象とし、歌詞は`lyrics.md`で判定する |
+| `score.png` | `scripts/render_score_png.py`が`song.abc`から`abcm2ps`(`-g`、SVG)+`rsvg-convert`で描画する譜面画像。人間レビューとvision検査のための事後成果物であり、決定論的render出力にも読み戻し検査にも含まれない。`abcm2ps`/`rsvg-convert`不在時は生成しない（スキップ）。SVG経路は全文字をUTF-8の`<text>`として出力するため描画時に文字を落とさない（ADR-0007）。日本語など非ラテン文字の表示には対応フォント（例: fonts-ipafont）が必要で、無い場合は欠落ではなく代替ボックスで描かれる。歌詞内容は`lyrics.md`で判定する |
 | `score-review.json` | `artifact_kind: bard_score_review`、`authority: none`。vision対応モデルが`score.png`を`file_editor view`で目視した所見（`status: inspected|skipped|error`、検査したtool・質問・所見要約・score.pngのsha256・検査時刻）。提案へのpass/fail権限を持たない観察記録 |
 
 ## 読み戻し検査（fail-closed）

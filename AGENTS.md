@@ -101,7 +101,7 @@ input and confirm that the broken proposal is rejected.
 - `.github/workflows/ci.yml` runs on pushes to main, pull requests, merge
   groups, and `workflow_call`. It runs `verify` (Python 3.12/3.13 matrix:
   ruff, format, pyright, and pytest), `independent-check` (required
-  `abcm2ps` and score PNG generation), and `plugin-load` (checks
+  `abcm2ps`/`rsvg-convert` and score PNG generation), and `plugin-load` (checks
   `Plugin.load` with `openhands-sdk==1.49.3` from the `sdk-check` group).
 - `.github/workflows/release.yml` is `workflow_dispatch` only. A `bump` input
   (defaulting to patch) or an explicit `version` input controls the release.

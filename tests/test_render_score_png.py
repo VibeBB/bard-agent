@@ -1,4 +1,4 @@
-"""Tests for render_score_png.py (abcm2ps + gs wrapper, optional advisory artifact)."""
+"""Tests for render_score_png.py (abcm2ps + rsvg-convert, advisory artifact)."""
 
 from __future__ import annotations
 
@@ -37,16 +37,14 @@ def score_module() -> Any:
 
 
 def _fake_run_ok(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-    # Emulate the external tools by writing their -O / -sOutputFile targets.
-    output: str | None = None
+    # Emulate the external tools: abcm2ps -g writes <stem>001.svg next to its
+    # -O target, rsvg-convert writes its -o target.
     if cmd[0] == "abcm2ps":
-        output = cmd[cmd.index("-O") + 1]
-    elif cmd[0] == "gs":
-        output = next(a.split("=", 1)[1] for a in cmd if a.startswith("-sOutputFile="))
-    if output:
-        Path(output).write_bytes(
-            b"%!PS fake\n" if cmd[0] == "abcm2ps" else b"\x89PNG fake"
-        )
+        target = Path(cmd[cmd.index("-O") + 1])
+        output = target.with_name(target.stem + "001" + target.suffix)
+        output.write_bytes(b"<svg>fake</svg>")
+    elif cmd[0] == "rsvg-convert":
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"\x89PNG fake")
     return subprocess.CompletedProcess(cmd, 0, "", "")
 
 
@@ -97,7 +95,8 @@ def test_happy_path_returns_png_sha(
     png = tmp_path / "score.png"
     assert result["score_png"] == str(png)
     assert result["score_png_sha256"] == hashlib.sha256(png.read_bytes()).hexdigest()
-    assert (tmp_path / "score.ps").is_file()
+    assert result["score_svg"] == str(tmp_path / "score001.svg")
+    assert (tmp_path / "score001.svg").is_file()
 
 
 def test_cli_json_ok(
@@ -130,19 +129,21 @@ def test_cli_json_missing_tools(
 
 
 _ABCM2PS = shutil.which("abcm2ps")
-_GS = shutil.which("gs")
+_RSVG = shutil.which("rsvg-convert")
 requires_score_tools = pytest.mark.skipif(
-    _ABCM2PS is None or _GS is None,
-    reason="abcm2ps/gs not installed",
+    _ABCM2PS is None or _RSVG is None,
+    reason="abcm2ps/rsvg-convert not installed",
 )
 
 
 @pytest.fixture()
 def _require_score_tools() -> None:
     if os.environ.get("BARD_REQUIRE_ABCM2PS") == "1" and (
-        _ABCM2PS is None or _GS is None
+        _ABCM2PS is None or _RSVG is None
     ):
-        pytest.fail("BARD_REQUIRE_ABCM2PS=1 is set but abcm2ps/gs are not on PATH")
+        pytest.fail(
+            "BARD_REQUIRE_ABCM2PS=1 is set but abcm2ps/rsvg-convert are not on PATH"
+        )
 
 
 @requires_score_tools
@@ -152,6 +153,29 @@ def test_abcm2ps_score_png_real_render(tmp_path: Path) -> None:
     abc.write_text(
         "X:1\nT:Real render\nC:bard-agent\nM:4/4\nL:1/8\nQ:1/4=96\nK:D\n"
         "%% section verse 1\nD2 D2 E2 F2|G2 F2 E2 D2|]\n",
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), "--abc", str(abc), "--json"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    png = tmp_path / "score.png"
+    assert payload["ok"] is True
+    assert png.is_file() and png.stat().st_size > 0
+    assert png.read_bytes()[:4] == b"\x89PNG"
+
+
+@requires_score_tools
+@pytest.mark.usefixtures("_require_score_tools")
+def test_abcm2ps_score_png_real_render_cjk(tmp_path: Path) -> None:
+    abc = tmp_path / "song.abc"
+    abc.write_text(
+        "X:1\nT:夜のビルドの歌\nC:bard-agent\nM:4/4\nL:1/8\nQ:1/4=96\nK:D\n"
+        "D2 D2 E2 F2|G2 F2 E2 D2|]\nw: さ-く-ら-の し-た-で-う-\n",
         encoding="utf-8",
     )
     proc = subprocess.run(

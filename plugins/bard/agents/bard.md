@@ -199,8 +199,8 @@ not deliver the song.
 ## Stage 8 — Score visual check (writes `score.png`, `score-review.json`; advisory, optional)
 
 The critic reads text only; it never sees the engraved score. When the score-render
-tools are on `PATH` (`abcm2ps` and `gs`; Japanese also needs a CJK font such as
-fonts-ipafont), render the score image and inspect it once:
+tools are on `PATH` (`abcm2ps` and `rsvg-convert`; Japanese also needs a CJK font
+such as fonts-ipafont), render the score image and inspect it once:
 
 ```bash
 python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
@@ -212,11 +212,12 @@ python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
   syllables, cramped chord labels, and malformed bar lines. Fix real engraving
   issues in the proposal (`units`, section order, line length) and re-render; a
   subjective dislike of the engraving is not a proposal defect.
-- CJK limitation: `abcm2ps` drops characters it cannot map to its font encoding
-  (`warning: char XXXX not treated`), so Japanese kana/kanji can be missing from
-  `score.png` even with a CJK font installed. Missing Japanese glyphs are a known
-  renderer limitation, not a proposal defect — do not edit `units` or `reading`
-  to chase them. Judge lyrics coverage from `lyrics.md`, not from the image.
+- Font coverage: the SVG render path keeps every character as UTF-8 text, so
+  nothing is dropped silently; when no CJK font is installed the rasterizer
+  draws fallback boxes instead. Fallback boxes or tofu where lyrics should be
+  mean the environment lacks a font, not that the proposal is wrong — do not
+  edit `units` or `reading` to chase them. Judge lyrics coverage from
+  `lyrics.md`, not from the image.
 - Exit `4` (tools missing): record `status: "skipped"` with the reported reason
   and continue — the score check never blocks delivery.
 - Exit `3` or `5`: record `status: "error"` with the reported reason and

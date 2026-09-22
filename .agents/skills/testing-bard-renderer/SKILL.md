@@ -10,8 +10,9 @@ description: bardレンダラーの生成物を独立ABC・MIDIツールとブ�
 - 製品の依存は`uv sync`で用意する。
 - 検証ツールはリポジトリ外のscratch venvへ導入する。
   `uv venv /tmp/bard-tools`、`uv pip install --python /tmp/bard-tools/bin/python mido music21 markdown pyyaml openhands-sdk==1.49.3`。
-- ABCの独立CLIは`abcmidi abcm2ps`。譜面PNG化にはGhostscript、
-  PDF化には`ps2pdf`が使える。日本語フォントが利用可能か確認する。
+- ABCの独立CLIは`abcmidi abcm2ps`。譜面PNG化には`abcm2ps -g`と
+  `rsvg-convert`（librsvg2-bin）を使う。日本語フォント（fonts-ipafont系）が
+  利用可能か確認する。
 - SDK pinはリポジトリが対象とする版と照合する。LLMを呼ばないPlugin.loadにAPI keyは不要。
 
 ## 実行と独立検査
@@ -24,12 +25,13 @@ description: bardレンダラーの生成物を独立ABC・MIDIツールとブ�
 3. melodyの音高・開始位置・長さを提案JSONから独立に計算して比較する。
    末尾休符がある場合は、旋律トラックのend_tickだけを曲全体の長さと同一視しない。
 4. `abc2midi song.abc -o independent.mid`と
-   `abcm2ps song.abc -O score.ps`を実行し、終了コードと診断を保存する。
-   abc2midiは冒頭に小さなtickオフセットを付けることがあるため、
-   開始tickを正規化して旋律を照合する。
-5. `gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=png16m -r150 -sOutputFile=score.png score.ps`
-   で譜面画像を作る。abcm2psがエラーでもPSを書くことがあるため、
-   画像が存在するだけで成功と判定しない。
+   `abcm2ps -g song.abc -O score.svg`（生成物はscore001.svg）を実行し、
+   終了コードと診断を保存する。abc2midiは冒頭に小さなtickオフセットを
+   付けることがあるため、開始tickを正規化して旋律を照合する。
+5. `rsvg-convert -d 150 -p 150 score001.svg -o score.png`で譜面画像を作る。
+   abcm2psがエラーでもSVGを書くことがあるため、画像が存在するだけで
+   成功と判定しない。日本語フォントが無い環境では文字は欠落せず代替
+   ボックスとして描かれる（ADR-0007）。
 6. 歌詞の`w:`は休符を自動スキップする。休符に`*`を足すと次の音を消費する。
    メリスマ`_`を含む歌詞位置数は休符を除いた音数に対応させ、実譜面で位置を確認する。
    語中メリスマ・語末メリスマ・休符直後を別々に確認する。
