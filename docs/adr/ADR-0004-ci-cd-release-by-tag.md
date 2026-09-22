@@ -17,8 +17,9 @@ public repo向けに無料で、外部配布面を増やさずにタグから導
    入力version・`pyproject.toml`・`plugins/bard/.plugin/plugin.json`の三者一致と
    タグ未存在を検査してから進む。失敗時はタグもReleaseも作られない。
 3. CIは再利用workflow（`workflow_call`）として構成し、PR/pushとリリース前検証で
-   同じ`verify`ジョブを使う。`independent-check`はabcm2ps・abc2midi・ghostscriptによる
-   外部描画の独立検査とし、`BARD_REQUIRE_ABCM2PS=1`でskip不可にする。
+   同じ`verify`ジョブを使う。`independent-check`はabcm2ps・abc2midiによる外部
+   描画の独立検査とし、`BARD_REQUIRE_ABCM2PS=1`でskip不可にする（score.png描画は
+   ADR-0007でSVG+rsvg-convert経路へ移行）。
    `plugin-load`は`sdk-check`依存グループ（`openhands-sdk==1.49.3`）でSDK経由の
    plugin読み込みを検査する。SDKはCI検査用の依存としてのみ使い、実行時依存にしない。
 4. GitHub Actionsはすべて40桁SHAにpinし、zizmorを週次＋全pull request＋

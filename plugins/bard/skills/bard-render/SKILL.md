@@ -104,26 +104,27 @@ timestamp in the provenance record.
 
 ## Optional: score.png for visual review
 
-`scripts/render_score_png.py` turns `song.abc` into `score.png` through `abcm2ps` +
-`gs` — the same commands CI uses. It is not a deterministic render output: it is
-post-render advisory material for human and vision review, needs the two tools on
-`PATH` (Japanese also needs a CJK font such as fonts-ipafont), and is never part of
-the provenance output set.
+`scripts/render_score_png.py` turns `song.abc` into `score.png` through `abcm2ps`
+(`-g`, SVG output) + `rsvg-convert` — the same commands CI uses. It is not a
+deterministic render output: it is post-render advisory material for human and
+vision review, needs the two tools on `PATH`, and is never part of the
+provenance output set.
 
 ```bash
 python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
     --abc <out dir>/song.abc --json
 ```
 
-Exit codes: `0` rendered; `3` I/O error; `4` `abcm2ps`/`gs` missing (skip — not an
-error for the song); `5` a tool failed. `bard` stage 8 consumes this: a
-vision-capable model inspects `score.png` via `file_editor view` and writes the
-finding to `score-review.json` (`authority: none`).
+Exit codes: `0` rendered; `3` I/O error; `4` `abcm2ps`/`rsvg-convert` missing
+(skip — not an error for the song); `5` a tool failed. `bard` stage 8 consumes
+this: a vision-capable model inspects `score.png` via `file_editor view` and
+writes the finding to `score-review.json` (`authority: none`).
 
-`abcm2ps` cannot map CJK characters to its font encoding and drops them with
-`warning: char XXXX not treated`, so Japanese kana/kanji may be missing from the
-image even with a CJK font installed. The check covers staff layout, not CJK
-lyric coverage — judge lyrics from `lyrics.md`.
+The SVG stage emits every character as a UTF-8 `<text>` element, so no text is
+dropped at render time. Non-Latin scripts such as Japanese need a covering font
+installed (e.g. fonts-ipafont); without one the rasterizer draws fallback boxes
+instead of removing the text, so missing coverage is visible in the image rather
+than silent (ADR-0007).
 
 ## Fixing a rejected proposal
 
