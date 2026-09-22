@@ -94,11 +94,11 @@ input and confirm that the broken proposal is rejected.
 
 ## CI/CD
 
-- `.github/workflows/ci.yml` runs on pushes to main, pull requests, and
-  `workflow_call`. It runs `verify` (Python 3.12/3.13 matrix: ruff, format,
-  pyright, and pytest), `independent-check` (required `abcm2ps` and score PNG
-  generation), and `plugin-load` (checks `Plugin.load` with
-  `openhands-sdk==1.49.2` from the `sdk-check` group).
+- `.github/workflows/ci.yml` runs on pushes to main, pull requests, merge
+  groups, and `workflow_call`. It runs `verify` (Python 3.12/3.13 matrix:
+  ruff, format, pyright, and pytest), `independent-check` (required
+  `abcm2ps` and score PNG generation), and `plugin-load` (checks
+  `Plugin.load` with `openhands-sdk==1.49.2` from the `sdk-check` group).
 - `.github/workflows/release.yml` is `workflow_dispatch` only. A `bump` input
   (defaulting to patch) or an explicit `version` input controls the release.
   A greater explicit version runs `scripts/bump_version.py`, updates
@@ -108,8 +108,9 @@ input and confirm that the broken proposal is rejected.
   equal to the current version performs a consistency check, skips the bump
   commit and push, checks that the tag does not exist, and releases the current
   main HEAD.
-- `.github/workflows/workflow-lint.yml` runs zizmor on every pull request, on
-  pushes to main that touch `.github/**`, and weekly. `zizmor` is a required
+- `.github/workflows/workflow-lint.yml` runs zizmor on every pull request,
+  on merge groups, on pushes to main that touch `.github/**`, and weekly,
+  and uploads the results to code scanning as SARIF. `zizmor` is a required
   status check, so the pull-request trigger must not be path-filtered.
 - Every `uses:` entry is pinned to a 40-character SHA with a `# vX.Y.Z`
   comment. Checkout uses `persist-credentials: false`, and every job has a
