@@ -212,6 +212,11 @@ python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
   syllables, cramped chord labels, and malformed bar lines. Fix real engraving
   issues in the proposal (`units`, section order, line length) and re-render; a
   subjective dislike of the engraving is not a proposal defect.
+- CJK limitation: `abcm2ps` drops characters it cannot map to its font encoding
+  (`warning: char XXXX not treated`), so Japanese kana/kanji can be missing from
+  `score.png` even with a CJK font installed. Missing Japanese glyphs are a known
+  renderer limitation, not a proposal defect — do not edit `units` or `reading`
+  to chase them. Judge lyrics coverage from `lyrics.md`, not from the image.
 - Exit `4` (tools missing): record `status: "skipped"` with the reported reason
   and continue — the score check never blocks delivery.
 - Exit `3` or `5`: record `status: "error"` with the reported reason and
