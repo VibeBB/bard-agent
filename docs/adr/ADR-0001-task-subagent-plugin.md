@@ -5,7 +5,7 @@
 
 ## コンテキスト
 
-OpenHands Software Agent SDK v1.49.2にはsub-agentを起こす機構が3つある。
+OpenHands Software Agent SDK v1.49.3にはsub-agentを起こす機構が3つある。
 
 | 機構 | 仕組み | 親の履歴 | hook境界 |
 | --- | --- | --- | --- |
