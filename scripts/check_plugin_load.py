@@ -18,6 +18,7 @@ PLUGIN_DIR = REPO_ROOT / "plugins" / "bard"
 EXPECTED_AGENTS = {"bard", "bard-critic"}
 EXPECTED_SKILLS = {"bard-render", "bard-songcraft"}
 EXPECTED_COMMANDS = {"sing"}
+EXPECTED_STOP_HOOKS = {"report-song-status"}
 
 
 def _registered_tools() -> set[str]:
@@ -68,6 +69,15 @@ def check_plugin(plugin_dir: Path) -> list[str]:
     if commands != EXPECTED_COMMANDS:
         reasons.append(f"commands {sorted(commands)} != {sorted(EXPECTED_COMMANDS)}")
 
+    stop_hooks: set[str] = set()
+    if plugin.hooks is not None:
+        for group in plugin.hooks.stop:
+            stop_hooks.update(h.name for h in group.hooks)
+    if stop_hooks != EXPECTED_STOP_HOOKS:
+        reasons.append(
+            f"stop hooks {sorted(stop_hooks)} != {sorted(EXPECTED_STOP_HOOKS)}"
+        )
+
     registered = _registered_tools()
     min_examples = {"bard": 3, "bard-critic": 2}
     for agent in plugin.agents:
@@ -97,7 +107,8 @@ def main() -> int:
         return 1
     print(
         "plugin-load OK: agents={bard,bard-critic} "
-        "skills={bard-render,bard-songcraft} commands={sing}"
+        "skills={bard-render,bard-songcraft} commands={sing} "
+        "stop-hooks={report-song-status}"
     )
     return 0
 

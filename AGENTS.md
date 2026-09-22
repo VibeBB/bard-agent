@@ -1,6 +1,6 @@
 # Agent Work Contract
 
-> Target: OpenHands Software Agent SDK v1.49.2, Python 3.12+
+> Target: OpenHands Software Agent SDK v1.49.3, Python 3.12+
 
 This document is the working contract for implementation, validation, and
 documentation in this repository. The README is the product overview,
@@ -24,6 +24,7 @@ plugins/bard/
 │   ├── bard.md               # Minstrel that writes songs (task sub-agent)
 │   └── bard-critic.md        # Critic (no pass/fail authority)
 ├── commands/sing.md          # /bard:sing — directs context collection and task invocation
+├── hooks/                    # stop hook reporting song render status (stdlib only)
 ├── skills/
 │   ├── bard-songcraft/       # Songwriting theory decision tables, modes, and copyright contract
 │   └── bard-render/          # Proposal JSON validation and ABC/MIDI/MML/lyrics/provenance rendering (stdlib only)
@@ -69,6 +70,9 @@ tests/                        # Plugin-asset consistency checks
 - A task sub-agent does not receive the parent's conversation history. The
   parent summarizes the subject in `context.md`, and bard reads the workspace
   (git log and files) itself (ADR-0001).
+- The `hooks/` stop hook is advisory (`decision: allow`) and reports each
+  `out/bard/*/song.proposal.json` render status; unreadable proposal or
+  provenance JSON fails closed.
 - AgentDefinitions do not declare `skills:`; reference SKILL.md paths from the
   prompt. Resolve the plugin root in this order:
   `$BARD_PLUGIN_ROOT`,
@@ -98,7 +102,7 @@ input and confirm that the broken proposal is rejected.
   groups, and `workflow_call`. It runs `verify` (Python 3.12/3.13 matrix:
   ruff, format, pyright, and pytest), `independent-check` (required
   `abcm2ps` and score PNG generation), and `plugin-load` (checks
-  `Plugin.load` with `openhands-sdk==1.49.2` from the `sdk-check` group).
+  `Plugin.load` with `openhands-sdk==1.49.3` from the `sdk-check` group).
 - `.github/workflows/release.yml` is `workflow_dispatch` only. A `bump` input
   (defaulting to patch) or an explicit `version` input controls the release.
   A greater explicit version runs `scripts/bump_version.py`, updates
