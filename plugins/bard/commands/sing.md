@@ -84,6 +84,9 @@ bard sub-agentは親の会話履歴を受け取らない。親であるあなた
    `lyrics.md`、`plan.md`、`song.proposal.json`、`song.md`、`song.abc`、`song.mid`、
    `song.mml`、`song.provenance.json`、`critic.md` がすべてあることを確認します。欠落が
    あれば、報告の `Missing:` に列挙し、存在すると主張してはいけません。
+   `score.png`・`score-review.json` はオプションのadvisory成果物です（`abcm2ps`/`gs`
+   があればvision対応モデルが譜面を目視し、所見をscore-review.jsonに書きます）。
+   これらが無くても欠落ではありませんが、存在する場合は `Files:` に列挙します。
    `critic.md`には各所見の`APPLIED`または`DECLINED: <reason>`を含む`DECISIONS`ブロックが
    必要です。`song.provenance.json`がcritic.mdの所見より新しい場合（修正後に再描画した
    場合）だけ`APPLIED`と報告できます。再描画していなければ、所見は

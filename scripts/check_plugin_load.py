@@ -72,7 +72,7 @@ def check_plugin(plugin_dir: Path) -> list[str]:
     stop_hooks: set[str] = set()
     if plugin.hooks is not None:
         for group in plugin.hooks.stop:
-            stop_hooks.update(h.name for h in group.hooks)
+            stop_hooks.update(h.name for h in group.hooks if h.name is not None)
     if stop_hooks != EXPECTED_STOP_HOOKS:
         reasons.append(
             f"stop hooks {sorted(stop_hooks)} != {sorted(EXPECTED_STOP_HOOKS)}"

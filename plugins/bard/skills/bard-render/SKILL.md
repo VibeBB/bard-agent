@@ -102,6 +102,24 @@ one `reason` per line as `<path in proposal>: <message>`, e.g.
 Outputs are byte-for-byte deterministic for the same proposal, except the `generated_at`
 timestamp in the provenance record.
 
+## Optional: score.png for visual review
+
+`scripts/render_score_png.py` turns `song.abc` into `score.png` through `abcm2ps` +
+`gs` — the same commands CI uses. It is not a deterministic render output: it is
+post-render advisory material for human and vision review, needs the two tools on
+`PATH` (Japanese also needs a CJK font such as fonts-ipafont), and is never part of
+the provenance output set.
+
+```bash
+python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
+    --abc <out dir>/song.abc --json
+```
+
+Exit codes: `0` rendered; `3` I/O error; `4` `abcm2ps`/`gs` missing (skip — not an
+error for the song); `5` a tool failed. `bard` stage 8 consumes this: a
+vision-capable model inspects `score.png` via `file_editor view` and writes the
+finding to `score-review.json` (`authority: none`).
+
 ## Fixing a rejected proposal
 
 Read every reason before editing; fix the proposal JSON, not the outputs. The common ones:

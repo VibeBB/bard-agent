@@ -147,6 +147,13 @@ bardエージェント（LLM）が書く歌の提案JSONと、`bard-render` Skil
 
 すべてのテキスト出力は`encoding="utf-8"`、改行`\n`。
 
+### オプションのadvisory成果物（render出力ではない）
+
+| 出力 | 内容 |
+| --- | --- |
+| `score.png` | `scripts/render_score_png.py`が`song.abc`から`abcm2ps`+`gs`で描画する譜面画像。人間レビューとvision検査のための事後成果物であり、決定論的render出力にも読み戻し検査にも含まれない。`abcm2ps`/`gs`不在時は生成しない（スキップ） |
+| `score-review.json` | `artifact_kind: bard_score_review`、`authority: none`。vision対応モデルが`score.png`を`file_editor view`で目視した所見（`status: inspected|skipped|error`、検査したtool・質問・所見要約・score.pngのsha256・検査時刻）。提案へのpass/fail権限を持たない観察記録 |
+
 ## 読み戻し検査（fail-closed）
 
 - MIDI: 自身の出力を再パースし、note-onとnote-offの数がchannelごとに一致し、旋律音数が提案と一致すること。
