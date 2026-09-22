@@ -120,6 +120,11 @@ error for the song); `5` a tool failed. `bard` stage 8 consumes this: a
 vision-capable model inspects `score.png` via `file_editor view` and writes the
 finding to `score-review.json` (`authority: none`).
 
+`abcm2ps` cannot map CJK characters to its font encoding and drops them with
+`warning: char XXXX not treated`, so Japanese kana/kanji may be missing from the
+image even with a CJK font installed. The check covers staff layout, not CJK
+lyric coverage — judge lyrics from `lyrics.md`.
+
 ## Fixing a rejected proposal
 
 Read every reason before editing; fix the proposal JSON, not the outputs. The common ones:
