@@ -50,6 +50,10 @@ def _fake_run_ok(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[s
     return subprocess.CompletedProcess(cmd, 0, "", "")
 
 
+def _which_ok(t: str) -> str:
+    return "/usr/bin/" + t
+
+
 def test_missing_abc_is_io_error(score_module: Any, tmp_path: Path) -> None:
     with pytest.raises(score_module.RenderError) as err:
         score_module.render_score_png(tmp_path / "nope.abc", tmp_path)
@@ -75,6 +79,7 @@ def test_abcm2ps_failure(
     def fail(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(cmd, 1, "", "syntax error")
 
+    monkeypatch.setattr(score_module.shutil, "which", _which_ok)
     monkeypatch.setattr(score_module.subprocess, "run", fail)
     with pytest.raises(score_module.RenderError) as err:
         score_module.render_score_png(tmp_path / "song.abc", tmp_path)
@@ -86,6 +91,7 @@ def test_happy_path_returns_png_sha(
 ) -> None:
     abc = tmp_path / "song.abc"
     abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+    monkeypatch.setattr(score_module.shutil, "which", _which_ok)
     monkeypatch.setattr(score_module.subprocess, "run", _fake_run_ok)
     result = score_module.render_score_png(abc, tmp_path)
     png = tmp_path / "score.png"
@@ -99,6 +105,7 @@ def test_cli_json_ok(
 ) -> None:
     abc = tmp_path / "song.abc"
     abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+    monkeypatch.setattr(score_module.shutil, "which", _which_ok)
     monkeypatch.setattr(score_module.subprocess, "run", _fake_run_ok)
     code = score_module.main(["--abc", str(abc), "--json"])
     assert code == 0
@@ -140,7 +147,7 @@ def _require_score_tools() -> None:
 
 @requires_score_tools
 @pytest.mark.usefixtures("_require_score_tools")
-def test_real_render_en(tmp_path: Path) -> None:
+def test_abcm2ps_score_png_real_render(tmp_path: Path) -> None:
     abc = tmp_path / "song.abc"
     abc.write_text(
         "X:1\nT:Real render\nC:bard-agent\nM:4/4\nL:1/8\nQ:1/4=96\nK:D\n"
