@@ -16,6 +16,7 @@ sdk-check = ["openhands-sdk==1.49.2", "openhands-tools==1.49.2"]
 
 [tool.uv]
 default-groups = ["dev"]
+required-version = "==0.12.17"
 
 [tool.ruff]
 line-length = 88
@@ -41,3 +42,4 @@ reportMissingParameterType = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-rs"
