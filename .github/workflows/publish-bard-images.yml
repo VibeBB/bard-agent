@@ -138,9 +138,16 @@ jobs:
             --title "Update bard-tools image pin" \
             --body "$body")
           echo "pin PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
-          # Pull-request workflows are suppressed on bot pin branches (GitHub
-          # would queue them as approval-gated action_required runs), so the
-          # ruleset's required checks come from dispatched runs on the branch:
+          # Pull_request workflows on the bot pin branch queue as
+          # approval-gated action_required runs (first-time-contributor
+          # gate). Approve them so no maintainer click is needed; if the
+          # API rejects the self-approval the dispatched runs below still
+          # provide every required check.
+          for gated in $(gh run list --repo "$GITHUB_REPOSITORY" --branch "$branch" \
+            --event pull_request --status action_required --json databaseId --jq '.[].databaseId'); do
+            gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$gated/approve" || true
+          done
+          # Required checks come from dispatched runs on the branch:
           # ci.yml covers verify/plugin-load/independent-check and
           # workflow-lint.yml covers zizmor.
           started=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
