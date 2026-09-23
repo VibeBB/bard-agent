@@ -119,7 +119,9 @@ input and confirm that the broken proposal is rejected.
   runs verify, install-smoke, and `gh release create`. An explicit version
   equal to the current version performs a consistency check, skips the bump
   commit and push, checks that the tag does not exist, and releases the current
-  main HEAD.
+  main HEAD. The release job renders the shipped sample scores through the
+  pinned `bard-tools` image (no host ABC tools are installed), which also
+  exercises the docker fallback path of `render_score_png.py`.
 - `.github/workflows/publish-bard-images.yml` builds and publishes the
   `ghcr.io/<owner>/bard-tools` score-render image on `workflow_dispatch` and
   on pushes to main that touch `docker/**` or the lock scripts (excluding
