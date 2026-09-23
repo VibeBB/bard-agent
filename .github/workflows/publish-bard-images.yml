@@ -82,6 +82,20 @@ jobs:
           python3 scripts/measure_image_tools.py \
             --image-ref "$TOOLS_REF" \
             --out "$RUNNER_TEMP/bard-tools-tools.json"
+      # The render toolchain smoke mirrors the Dockerfile build-time check:
+      # run the published image so a push that produced a broken artifact
+      # fails here instead of surfacing at render time.
+      - name: Verify published tools smoke
+        env:
+          TOOLS_REF: ${{ env.TOOLS_REF }}
+        run: |
+          set -euo pipefail
+          docker pull "$TOOLS_REF"
+          docker run --rm "$TOOLS_REF" sh -c \
+            "printf 'X:1\nT:smoke\nM:4/4\nL:1/8\nK:C\nC D E F |]\n' > /tmp/smoke.abc \
+            && abcm2ps -g /tmp/smoke.abc -O /tmp/smoke.svg \
+            && rsvg-convert /tmp/smoke001.svg -o /tmp/smoke.png \
+            && test -s /tmp/smoke.png"
       - name: Record published image summary
         run: |
           {
@@ -91,7 +105,7 @@ jobs:
             echo "- **tag**: \`$TOOLS_TAG\`"
             echo "- **workflow run**: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Open pin update PR
+      - name: Update image pin and merge PR
         env:
           GH_TOKEN: ${{ github.token }}
           TOOLS_REF: ${{ env.TOOLS_REF }}
@@ -99,6 +113,55 @@ jobs:
           TOOLS_TAG: ${{ env.TOOLS_TAG }}
         run: |
           set -euo pipefail
+          retry() {
+            # Transient GitHub API/server errors (HTTP 5xx, TLS resets,
+            # truncated responses) should not hard-fail a multi-minute
+            # publish: retry gh/git calls with backoff before giving up.
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              "$@" && return 0
+              sleep $((attempt * 10))
+            done
+            return 1
+          }
+          dispatch_workflow() {
+            # GITHUB_TOKEN-driven push/pull_request events never produce a real gate:
+            # at most a stillborn pull_request run is recorded, so CI for the
+            # pin branch and the checks after the merge is started explicitly.
+            local workflow="$1" ref="$2" started run_id=""
+            shift 2
+            # Reset per-call so a previous dispatch's conclusion cannot leak
+            # into the summary when this run is not observed.
+            DISPATCH_RUN_URL=""
+            DISPATCH_CONCLUSION=""
+            started=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            retry gh workflow run "$workflow" --repo "$GITHUB_REPOSITORY" --ref "$ref" "$@"
+            for _ in $(seq 1 30); do
+              sleep 10
+              run_id=$(retry gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --branch "$ref" \
+                --event workflow_dispatch --created ">=$started" --json databaseId --jq '.[0].databaseId // empty' || true)
+              [ -n "$run_id" ] && break
+            done
+            if [ -z "$run_id" ]; then
+              echo "workflow_dispatch of $workflow for $ref was not observed" >&2
+              return 1
+            fi
+            DISPATCH_RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+            echo "$workflow run for $ref: ${DISPATCH_RUN_URL}"
+            gh run watch --repo "$GITHUB_REPOSITORY" "$run_id" --interval 30 || true
+            # An empty conclusion is a transient API failure, not a run
+            # verdict: re-query until the API reports the conclusion.
+            DISPATCH_CONCLUSION=""
+            for _ in $(seq 1 6); do
+              DISPATCH_CONCLUSION=$(retry gh run view --repo "$GITHUB_REPOSITORY" "$run_id" \
+                --json conclusion --jq '.conclusion // empty' || true)
+              [ -n "$DISPATCH_CONCLUSION" ] && break
+              sleep 10
+            done
+            DISPATCH_CONCLUSION="${DISPATCH_CONCLUSION:-unknown}"
+            echo "$workflow conclusion for $ref: ${DISPATCH_CONCLUSION}"
+            [ "$DISPATCH_CONCLUSION" = "success" ]
+          }
           published_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           workflow_run="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           # The lock branch starts from the current main tip, not from the
@@ -117,7 +180,9 @@ jobs:
             --published-at "$published_at" \
             --workflow-run "$workflow_run" \
             --tools-json "$RUNNER_TEMP/bard-tools-tools.json"
-          if git diff --quiet -- plugins/bard/skills/bard-render/tools-image.json; then
+          # status --porcelain (not diff --quiet) also catches an untracked
+          # pin file, matching the other agent publish workflows.
+          if [ -z "$(git status --porcelain -- plugins/bard/skills/bard-render/tools-image.json)" ]; then
             echo "Tools image pin is unchanged; no pull request is needed."
             exit 0
           fi
@@ -125,72 +190,45 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add plugins/bard/skills/bard-render/tools-image.json
           git commit -m "Update bard-tools image pin"
-          git push --set-upstream origin "$branch"
+          retry git push --set-upstream origin "$branch"
           body=$(printf '%s\n' \
             "The publish workflow updated the bard-tools image pin." \
             "" \
             "image: ${TOOLS_REF}" \
             "workflow run: ${workflow_run}")
-          pr_url=$(gh pr create \
+          # A stale bot PR from an earlier publish is superseded by this
+          # run's digest: close it and delete its branch so it cannot
+          # linger for manual review (observed: #25 and #31 stayed open).
+          for old_pr in $(retry gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+            --json number,headRefName --jq '.[] | select(.headRefName | startswith("bot/update")) | .number' || true); do
+            retry gh pr close "$old_pr" --repo "$GITHUB_REPOSITORY" \
+              --comment "Superseded by ${workflow_run}" \
+              --delete-branch || true
+          done
+          pr_url=$(retry gh pr create \
             --repo "$GITHUB_REPOSITORY" \
             --base main \
             --head "$branch" \
             --title "Update bard-tools image pin" \
             --body "$body")
           echo "pin PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
-          # Pull_request workflows on the bot pin branch queue as
-          # approval-gated action_required runs (first-time-contributor
-          # gate). They appear asynchronously after the PR opens, so poll
-          # for and approve them — observed on #25: an immediate one-shot
-          # list found none and the runs still sat awaiting approval. If
-          # the API rejects the self-approval the dispatched runs below
-          # still provide every required check.
-          gated_seen=0
-          empty_streak=0
-          for _ in $(seq 1 10); do
-            batch=$(gh run list --repo "$GITHUB_REPOSITORY" --branch "$branch" \
-              --event pull_request --status action_required --json databaseId --jq '.[].databaseId')
-            if [ -z "$batch" ]; then
-              empty_streak=$((empty_streak + 1))
-              if { [ "$gated_seen" -eq 0 ] && [ "$empty_streak" -ge 3 ]; } || \
-                 { [ "$gated_seen" -eq 1 ] && [ "$empty_streak" -ge 2 ]; }; then
-                break
-              fi
-              sleep 30
-              continue
-            fi
-            empty_streak=0
-            gated_seen=1
-            for gated in $batch; do
-              gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$gated/approve" || true
-            done
-            sleep 10
-          done
+          approve_gated_runs() {
+            # Pull_request runs on the bot pin branch queue as
+            # approval-gated action_required runs (first-time-contributor
+            # gate); approve them up front — this job has actions: write.
+            retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?status=action_required&per_page=100" \
+              --jq ".workflow_runs[] | select(.head_branch==\"$branch\") | .id" \
+              | while read -r run_id; do
+                  retry gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/approve" || true
+                done
+          }
+          approve_gated_runs
           # Required checks come from dispatched runs on the branch:
           # ci.yml covers verify/plugin-load/independent-check and
           # workflow-lint.yml covers zizmor.
-          started=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
-          gh workflow run workflow-lint.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
           failed=0
           for wf in ci.yml workflow-lint.yml; do
-            run_id=""
-            for _ in $(seq 1 30); do
-              sleep 10
-              run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$wf" --branch "$branch" \
-                --event workflow_dispatch --created ">=$started" --json databaseId --jq '.[0].databaseId // empty')
-              [ -n "$run_id" ] && break
-            done
-            if [ -z "$run_id" ]; then
-              echo "$wf workflow_dispatch for $branch was not observed; the pin PR was left open" >> "$GITHUB_STEP_SUMMARY"
-              exit 1
-            fi
-            echo "$wf run for $branch: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
-            gh run watch --repo "$GITHUB_REPOSITORY" "$run_id" --interval 30 || true
-            conclusion=$(gh run view --repo "$GITHUB_REPOSITORY" "$run_id" \
-              --json conclusion --jq '.conclusion // "unknown"')
-            echo "$wf conclusion for $branch: $conclusion"
-            if [ "$conclusion" != "success" ]; then
+            if ! dispatch_workflow "$wf" "$branch"; then
               failed=1
             fi
           done
@@ -198,12 +236,82 @@ jobs:
             echo "pin PR checks failed; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          # Auto-merge the pin PR. Every required check is already green at
-          # this point, so --auto merges immediately; when it still cannot
-          # merge (e.g. a check registering late), the flag stays armed and
-          # the merge lands on its own. If arming itself fails the PR is
-          # left open for manual merge.
-          gh pr merge --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch "$pr_url" || {
-            echo "pin PR auto-merge could not be armed; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning::pin PR $pr_url could not be auto-merged"
-          }
+          # Wait for every pull_request run on the pin branch to reach a
+          # conclusion: they are the check suites the ruleset's required
+          # checks read. A stillborn run never starts jobs; it sits in
+          # startup until the branch-deleting merge kills it with a spurious
+          # "workflow file issue" failure, so it is cancelled once nothing
+          # else is pending. An approved-but-still-pending run keeps the
+          # loop going instead.
+          pr_checks_ok=false
+          for _ in $(seq 1 36); do
+            # Runs can surface gated later than the initial sweep, so keep
+            # approving while waiting.
+            approve_gated_runs
+            pending=$(retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${branch}&event=pull_request&per_page=100" \
+              --jq '[.workflow_runs[] | select(.conclusion == null)] | length' || echo 1)
+            if [ "$pending" -eq 0 ]; then
+              pr_checks_ok=true
+              break
+            fi
+            sleep 10
+          done
+          if [ "$pr_checks_ok" != true ]; then
+            for run_id in $(retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${branch}&event=pull_request&per_page=100" \
+              --jq '.workflow_runs[] | select(.conclusion == null) | .id' || true); do
+              jobs=$(retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=1" \
+                --jq '.total_count // 0' || echo 0)
+              if [ "$jobs" -eq 0 ]; then
+                retry gh run cancel --repo "$GITHUB_REPOSITORY" "$run_id" || true
+              fi
+            done
+            pending_after=$(retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${branch}&event=pull_request&per_page=100" \
+              --jq '[.workflow_runs[] | select(.conclusion == null)] | length' || echo 1)
+            [ "$pending_after" -eq 0 ] && pr_checks_ok=true
+          fi
+          # Only hard failures block: skipped/neutral/cancelled conclusions
+          # are benign (a required check that ended cancelled still blocks
+          # the merge call itself, so this stays fail-closed).
+          bad=$(retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${branch}&event=pull_request&per_page=100" \
+            --jq '[.workflow_runs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral" and .conclusion != "cancelled")] | length' || echo 1)
+          if [ "$pr_checks_ok" != true ] || [ "$bad" -gt 0 ]; then
+            echo "pin PR pull_request checks did not all pass (pending=${pr_checks_ok}, non-success=${bad}); the pin PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          # --auto arms auto-merge so required checks that are still
+          # registering do not fail the merge call; when every required
+          # check is already green it merges at once.
+          if ! retry gh pr merge --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch "$pr_url"; then
+            echo "pin PR merge was blocked; the pin PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          # The merge may only be armed: wait for it to land before the
+          # observational post-merge dispatches. A still-pending PR after the
+          # wait merges on its own once checks pass, so that is not a failure.
+          merged=false
+          for _ in $(seq 1 36); do
+            merged_at=$(retry gh api "repos/$GITHUB_REPOSITORY/pulls/${pr_url##*/}" --jq '.merged_at // empty' || true)
+            [ -n "$merged_at" ] && { merged=true; break; }
+            sleep 10
+          done
+          if [ "$merged" != true ]; then
+            echo "auto-merge is armed on $pr_url but the merge did not land within the wait; post-merge checks skipped" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # The post-merge checks are observational: their conclusions (including
+          # 'cancelled' when a newer main push supersedes them via concurrency
+          # groups) are recorded in the step summary and never fail this run.
+          dispatch_workflow ci.yml main || true
+          main_conclusion="${DISPATCH_CONCLUSION:-not_observed}"
+          main_run_url="${DISPATCH_RUN_URL:-no run observed}"
+          echo "post-merge main CI: ${main_conclusion} ${main_run_url}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$main_conclusion" != "success" ]; then
+            echo "::warning::post-merge main CI for ${pr_url} finished as ${main_conclusion}: ${main_run_url}"
+          fi
+          dispatch_workflow workflow-lint.yml main || true
+          lint_conclusion="${DISPATCH_CONCLUSION:-not_observed}"
+          lint_run_url="${DISPATCH_RUN_URL:-no run observed}"
+          echo "post-merge workflow lint: ${lint_conclusion} ${lint_run_url}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$lint_conclusion" != "success" ]; then
+            echo "::warning::post-merge workflow lint for ${pr_url} finished as ${lint_conclusion}: ${lint_run_url}"
+          fi
