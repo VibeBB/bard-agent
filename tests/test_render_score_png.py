@@ -190,3 +190,136 @@ def test_abcm2ps_score_png_real_render_cjk(tmp_path: Path) -> None:
     assert payload["ok"] is True
     assert png.is_file() and png.stat().st_size > 0
     assert png.read_bytes()[:4] == b"\x89PNG"
+
+
+# ---------------------------------------------------------------------------
+# docker fallback
+
+
+def _which_docker_only(t: str) -> str | None:
+    return "/usr/bin/docker" if t == "docker" else None
+
+
+def _pin_file(tmp_path: Path, digest: object = "sha256:" + "ab" * 32) -> Path:
+    pin = tmp_path / "tools-image.json"
+    pin.write_text(
+        json.dumps(
+            {
+                "image": "ghcr.io/vibebb/bard-tools",
+                "tag": "deadbeef-tools",
+                "digest": digest,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return pin
+
+
+def _fake_docker_run_ok(
+    cmd: list[str], **kwargs: Any
+) -> subprocess.CompletedProcess[str]:
+    assert cmd[0].endswith("docker")
+    sub = cmd[1:]
+    if sub[:3] == ["image", "inspect"]:
+        return subprocess.CompletedProcess(cmd, 0, "[]", "")
+    if sub[:2] == ["pull"]:
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    if sub[0] == "run":
+        # Emulate the container: abcm2ps writes score001.svg into the /work
+        # mount, rsvg-convert writes score.png.
+        work = Path(next(a for a in cmd if a.endswith(":/work")).split(":")[0])
+        (work / "score001.svg").write_bytes(b"<svg>fake</svg>")
+        (work / "score.png").write_bytes(b"\x89PNG fake")
+    return subprocess.CompletedProcess(cmd, 0, "", "")
+
+
+def test_docker_fallback_renders(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    abc = tmp_path / "song.abc"
+    abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+    monkeypatch.setattr(score_module.subprocess, "run", _fake_docker_run_ok)
+    result = score_module.render_score_png(abc, tmp_path)
+    assert result["renderer"] == "docker"
+    assert result["image"] == "ghcr.io/vibebb/bard-tools@sha256:" + "ab" * 32
+    assert (tmp_path / "score.png").is_file()
+
+
+def test_docker_fallback_env_override(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    abc = tmp_path / "song.abc"
+    abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+    monkeypatch.setenv("BARD_TOOLS_IMAGE", "example.invalid/tools@sha256:" + "cd" * 32)
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+    monkeypatch.setattr(score_module.subprocess, "run", _fake_docker_run_ok)
+    result = score_module.render_score_png(abc, tmp_path)
+    assert result["renderer"] == "docker"
+    assert result["image"].startswith("example.invalid/tools@sha256:")
+
+
+def test_docker_fallback_no_pin_is_skip(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    abc = tmp_path / "song.abc"
+    abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path, digest=None))
+    monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+    with pytest.raises(score_module.RenderError) as err:
+        score_module.render_score_png(abc, tmp_path)
+    assert err.value.exit_code == score_module.EXIT_NO_TOOLS
+
+
+def test_docker_fallback_missing_docker_is_skip(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    abc = tmp_path / "song.abc"
+    abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
+    monkeypatch.setattr(score_module.shutil, "which", lambda _t: None)
+    with pytest.raises(score_module.RenderError) as err:
+        score_module.render_score_png(abc, tmp_path)
+    assert err.value.exit_code == score_module.EXIT_NO_TOOLS
+    assert "docker not on PATH" in str(err.value)
+
+
+def test_docker_fallback_pull_failure(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    abc = tmp_path / "song.abc"
+    abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+
+    def fail(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert cmd[0].endswith("docker")
+        if cmd[1:4] == ["image", "inspect"]:
+            return subprocess.CompletedProcess(cmd, 1, "", "not found")
+        return subprocess.CompletedProcess(cmd, 1, "", "pull access denied")
+
+    monkeypatch.setattr(score_module.subprocess, "run", fail)
+    with pytest.raises(score_module.RenderError) as err:
+        score_module.render_score_png(abc, tmp_path)
+    assert err.value.exit_code == score_module.EXIT_TOOL_FAILED
+    assert "docker pull" in str(err.value)
+
+
+def test_docker_fallback_corrupt_pin(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    abc = tmp_path / "song.abc"
+    abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+    pin = tmp_path / "tools-image.json"
+    pin.write_text("{not-json", encoding="utf-8")
+    monkeypatch.setattr(score_module, "PIN_PATH", pin)
+    monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+    with pytest.raises(score_module.RenderError) as err:
+        score_module.render_score_png(abc, tmp_path)
+    assert err.value.exit_code == score_module.EXIT_TOOL_FAILED

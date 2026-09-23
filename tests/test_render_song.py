@@ -365,6 +365,14 @@ def test_parse_abc_melody_counts(render_module: Any, valid_en: dict[str, Any]) -
     assert beats == Fraction(48)
 
 
+def test_render_abc_emits_vocalspace(
+    render_module: Any, valid_en: dict[str, Any]
+) -> None:
+    song = render_module.validate_proposal(valid_en)
+    abc = render_module.render_abc(song)
+    assert "%%vocalspace 20pt" in abc.splitlines()
+
+
 def test_parse_midi_counts_roundtrip(
     render_module: Any, valid_en: dict[str, Any]
 ) -> None:

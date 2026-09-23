@@ -880,6 +880,9 @@ def render_abc(song: Song) -> str:
         "L:1/8",
         f"Q:1/4={song.bpm}",
         f"K:{_abc_key(song)}",
+        # The default lyric spacing (14pt) lets adjacent word syllables touch
+        # under dense rhythms; 20pt keeps word boundaries legible.
+        "%%vocalspace 20pt",
     ]
     half = song.beats_per_bar / 2
     for sec in song.sections:

@@ -1,0 +1,172 @@
+name: Publish bard images
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "docker/**"
+      - ".github/workflows/publish-bard-images.yml"
+      - "scripts/measure_image_tools.py"
+      - "scripts/update_tools_image_lock.py"
+      - "!docker/README.md"
+      # The lock file is written by this workflow itself; exclude it so a
+      # merged lock PR does not trigger another publish.
+      - "!plugins/bard/skills/bard-render/tools-image.json"
+
+# Publishes are serialized: concurrent runs race on the `latest` alias and on
+# the lock update branch, so a queued run must wait for the previous one.
+concurrency:
+  group: publish-bard-images
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    permissions:
+      actions: write
+      contents: write
+      packages: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve source commit
+        run: |
+          set -euo pipefail
+          printf 'SOURCE_SHA=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          # GHCR namespaces must be lowercase; repository_owner may contain capitals.
+          printf 'OWNER_LC=%s\n' "${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+      # The immutable `<sha>-tools` tag is what the lock records; `latest` is
+      # only a convenience alias and is never a lock verification target.
+      - name: Build and publish tools image
+        id: tools_publish
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+        with:
+          context: .
+          file: docker/bard-tools.Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER_LC }}/bard-tools:${{ env.SOURCE_SHA }}-tools
+            ghcr.io/${{ env.OWNER_LC }}/bard-tools:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Resolve published digest
+        env:
+          BUILT_DIGEST: ${{ steps.tools_publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          case "$BUILT_DIGEST" in
+            sha256:*) ;;
+            *)
+              echo "unresolved bard-tools digest: $BUILT_DIGEST" >&2
+              exit 1
+              ;;
+          esac
+          printf 'TOOLS_REF=ghcr.io/%s/bard-tools@%s\n' "$OWNER_LC" "$BUILT_DIGEST" >> "$GITHUB_ENV"
+          printf 'TOOLS_DIGEST=%s\n' "$BUILT_DIGEST" >> "$GITHUB_ENV"
+          printf 'TOOLS_TAG=%s-tools\n' "$SOURCE_SHA" >> "$GITHUB_ENV"
+      - name: Measure published tools image
+        env:
+          TOOLS_REF: ${{ env.TOOLS_REF }}
+        run: |
+          set -euo pipefail
+          python3 scripts/measure_image_tools.py \
+            --image-ref "$TOOLS_REF" \
+            --out "$RUNNER_TEMP/bard-tools-tools.json"
+      - name: Record published image summary
+        run: |
+          {
+            echo "## bard-tools image"
+            echo
+            echo "- **image**: \`$TOOLS_REF\`"
+            echo "- **tag**: \`$TOOLS_TAG\`"
+            echo "- **workflow run**: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Open pin update PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TOOLS_REF: ${{ env.TOOLS_REF }}
+          TOOLS_DIGEST: ${{ env.TOOLS_DIGEST }}
+          TOOLS_TAG: ${{ env.TOOLS_TAG }}
+        run: |
+          set -euo pipefail
+          published_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          workflow_run="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # The lock branch starts from the current main tip, not from the
+          # published source commit, so the PR stays mergeable when main moved
+          # during the build.
+          git fetch -q origin main
+          base_sha=$(git rev-parse origin/main)
+          branch="bot/update-tools-image-${TOOLS_DIGEST#sha256:}"
+          branch="${branch:0:70}"
+          git switch -q -c "$branch" "$base_sha"
+          python3 scripts/update_tools_image_lock.py \
+            --pin plugins/bard/skills/bard-render/tools-image.json \
+            --image "ghcr.io/${OWNER_LC}/bard-tools" \
+            --tag "$TOOLS_TAG" \
+            --digest "$TOOLS_DIGEST" \
+            --published-at "$published_at" \
+            --workflow-run "$workflow_run" \
+            --tools-json "$RUNNER_TEMP/bard-tools-tools.json"
+          if git diff --quiet -- plugins/bard/skills/bard-render/tools-image.json; then
+            echo "Tools image pin is unchanged; no pull request is needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add plugins/bard/skills/bard-render/tools-image.json
+          git commit -m "Update bard-tools image pin"
+          git push --set-upstream origin "$branch"
+          body=$(printf '%s\n' \
+            "The publish workflow updated the bard-tools image pin." \
+            "" \
+            "image: ${TOOLS_REF}" \
+            "workflow run: ${workflow_run}")
+          pr_url=$(gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "$branch" \
+            --title "Update bard-tools image pin" \
+            --body "$body")
+          echo "pin PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
+          # GITHUB_TOKEN-created PRs do not fire pull_request workflows, so CI
+          # for the lock branch is started explicitly; the ruleset's required
+          # checks must come from that dispatched run.
+          started=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
+          run_id=""
+          for _ in $(seq 1 30); do
+            sleep 10
+            run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch "$branch" \
+              --event workflow_dispatch --created ">=$started" --json databaseId --jq '.[0].databaseId // empty')
+            [ -n "$run_id" ] && break
+          done
+          if [ -z "$run_id" ]; then
+            echo "CI workflow_dispatch for $branch was not observed; the pin PR was left open" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "CI run for $branch: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+          gh run watch --repo "$GITHUB_REPOSITORY" "$run_id" || true
+          conclusion=$(gh run view --repo "$GITHUB_REPOSITORY" "$run_id" \
+            --json conclusion --jq '.conclusion // "unknown"')
+          echo "CI conclusion for $branch: $conclusion"
+          if [ "$conclusion" != "success" ]; then
+            echo "pin PR checks failed; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          # With the merge-queue ruleset, --auto enqueues the PR so it merges
+          # once its required checks pass. If the queue is not configured or
+          # the merge is blocked, the PR is left open for manual merge.
+          if ! gh pr merge --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch "$pr_url"; then
+            echo "pin PR auto-merge was blocked; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::pin PR $pr_url could not be auto-merged; merge it via the merge queue"
+          fi

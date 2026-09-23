@@ -81,6 +81,13 @@ def main() -> int:
                     + ", ".join(unrendered)
                 )
             context = "\n".join(lines)
+        elif not working_dir.is_dir():
+            context = (
+                f"working_dir {working_dir} does not exist; "
+                "cannot scan for song proposals."
+            )
+        elif not (working_dir / "out" / "bard").is_dir():
+            context = f"No out/bard directory under {working_dir} (no songs written)."
         else:
             context = f"No song proposals found under {working_dir}/out/bard."
         print(json.dumps({"decision": "allow", "additionalContext": context}))
