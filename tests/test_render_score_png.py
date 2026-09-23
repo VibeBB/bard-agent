@@ -62,6 +62,11 @@ def test_missing_tools_reports_skip(
     score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (tmp_path / "song.abc").write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+    # No tools and no usable docker fallback: an absent pin file plus an
+    # empty override keep the skip deterministic once the real pin carries
+    # a digest.
+    monkeypatch.setattr(score_module, "PIN_PATH", tmp_path / "no-pin.json")
+    monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
     monkeypatch.setattr(score_module.shutil, "which", lambda _t: None)
     with pytest.raises(score_module.RenderError) as err:
         score_module.render_score_png(tmp_path / "song.abc", tmp_path)
