@@ -28,7 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `post_tool_use`) instead of only `stop`, matching the other agents'
   checkers.
 
-
 ### Changed
 
 - Bumped `openhands-sdk` / `openhands-tools` pins to `1.49.5` (`sdk-check`
