@@ -18,7 +18,11 @@ PLUGIN_DIR = REPO_ROOT / "plugins" / "bard"
 EXPECTED_AGENTS = {"bard", "bard-critic"}
 EXPECTED_SKILLS = {"bard-proposal-rules", "bard-render", "bard-songcraft"}
 EXPECTED_COMMANDS = {"sing"}
+EXPECTED_SESSION_START_HOOKS: set[str] = set()
+EXPECTED_USER_PROMPT_SUBMIT_HOOKS: set[str] = set()
+EXPECTED_PRE_TOOL_USE_HOOKS: set[str] = set()
 EXPECTED_STOP_HOOKS = {"report-song-status"}
+EXPECTED_POST_TOOL_USE_HOOKS: set[str] = set()
 
 
 def _registered_tools() -> set[str]:
@@ -69,14 +73,32 @@ def check_plugin(plugin_dir: Path) -> list[str]:
     if commands != EXPECTED_COMMANDS:
         reasons.append(f"commands {sorted(commands)} != {sorted(EXPECTED_COMMANDS)}")
 
-    stop_hooks: set[str] = set()
     if plugin.hooks is not None:
-        for group in plugin.hooks.stop:
-            stop_hooks.update(h.name for h in group.hooks if h.name is not None)
-    if stop_hooks != EXPECTED_STOP_HOOKS:
-        reasons.append(
-            f"stop hooks {sorted(stop_hooks)} != {sorted(EXPECTED_STOP_HOOKS)}"
-        )
+        collected: dict[str, set[str]] = {
+            "session_start": set(),
+            "user_prompt_submit": set(),
+            "pre_tool_use": set(),
+            "stop": set(),
+            "post_tool_use": set(),
+        }
+        for event_name in collected:
+            groups = getattr(plugin.hooks, event_name, None) or []
+            for group in groups:
+                names = [h.name for h in group.hooks if h.name is not None]
+                collected[event_name].update(names)
+        expected_hooks = {
+            "session_start": EXPECTED_SESSION_START_HOOKS,
+            "user_prompt_submit": EXPECTED_USER_PROMPT_SUBMIT_HOOKS,
+            "pre_tool_use": EXPECTED_PRE_TOOL_USE_HOOKS,
+            "stop": EXPECTED_STOP_HOOKS,
+            "post_tool_use": EXPECTED_POST_TOOL_USE_HOOKS,
+        }
+        for event_name, expected in expected_hooks.items():
+            if collected[event_name] != expected:
+                reasons.append(
+                    f"{event_name} hooks "
+                    f"{sorted(collected[event_name])} != {sorted(expected)}"
+                )
 
     registered = _registered_tools()
     min_examples = {"bard": 3, "bard-critic": 2}
@@ -105,11 +127,18 @@ def main() -> int:
         for r in reasons:
             print(r)
         return 1
+    all_hooks = (
+        EXPECTED_SESSION_START_HOOKS
+        | EXPECTED_USER_PROMPT_SUBMIT_HOOKS
+        | EXPECTED_PRE_TOOL_USE_HOOKS
+        | EXPECTED_STOP_HOOKS
+        | EXPECTED_POST_TOOL_USE_HOOKS
+    )
     plugin_summary = (
         f"agents={{{','.join(sorted(EXPECTED_AGENTS))}}} "
         f"skills={{{','.join(sorted(EXPECTED_SKILLS))}}} "
         f"commands={{{','.join(sorted(EXPECTED_COMMANDS))}}} "
-        f"stop-hooks={{{','.join(sorted(EXPECTED_STOP_HOOKS))}}}"
+        f"hooks={{{','.join(sorted(all_hooks))}}}"
     )
     print(f"plugin-load OK: {plugin_summary}")
     return 0

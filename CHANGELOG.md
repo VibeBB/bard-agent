@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/check_plugin_load.py` now asserts every hook kind
+  (`session_start`, `user_prompt_submit`, `pre_tool_use`, `stop`,
+  `post_tool_use`) instead of only `stop`, matching the other agents'
+  checkers.
+
+
 ### Changed
 
 - Bumped `openhands-sdk` / `openhands-tools` pins to `1.49.5` (`sdk-check`
