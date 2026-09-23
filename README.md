@@ -12,7 +12,7 @@ development workspace, the user's conversation, and conversations with other
 agents into original lyrics and melodies, then exports lyrics, ABC notation,
 MIDI, and MML.
 
-> Target: OpenHands Software Agent SDK v1.49.3 / OpenHands Agent Canvas
+> Target: OpenHands Software Agent SDK v1.49.4 / OpenHands Agent Canvas
 
 ## What it can do
 
@@ -120,7 +120,7 @@ fallback path and says so in the `実行経路:` line at the end of the response
 The fallback took approximately 34 minutes in one real-world run.
 
 The environment verified in practice was OpenHands 1.46.0, which is separate
-from the target SDK version 1.49.3. A conversation with `task_tool_set`
+from the target SDK version 1.49.4. A conversation with `task_tool_set`
 explicitly listed in the profile's `tools` showed the `task` path (nested
 bard → bard-critic sub-agents) in its events. However, even when `task` is
 available, the model sometimes handles the work in the parent conversation
@@ -129,7 +129,7 @@ available, the model sometimes handles the work in the parent conversation
 often takes 20–70 minutes or fails with a provider timeout; an
 `llm.timeout` of at least 600 seconds is recommended.
 
-Note: in SDK 1.49.3, `AgentSettings.create_agent` adds TaskToolSet through
+Note: in SDK 1.49.4, `AgentSettings.create_agent` adds TaskToolSet through
 `enable_sub_agents` only when the profile's `tools` is `None` (unspecified)
 (source: `openhands-sdk/openhands/sdk/settings/model.py`). If `tools` is
 explicitly set in the profile, `task` does not appear even when the setting is
@@ -260,7 +260,7 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 利用者との会話、他のエージェントとの会話を題材に、オリジナルの歌詞と旋律を作り、
 歌詞・ABC譜・MIDI・MMLとして書き出します。
 
-> 対象: OpenHands Software Agent SDK v1.49.3 / OpenHands Agent Canvas
+> 対象: OpenHands Software Agent SDK v1.49.4 / OpenHands Agent Canvas
 
 ## できること
 
@@ -347,14 +347,14 @@ installed-plugin API の `resolved_ref` が意図した commit と一致する�
 （settings APIは引き続き`enable_sub_agents=false`を返す）。この場合`/bard:sing`はfallback経路で
 動き、返信末尾の`実行経路:`にその旨が出ます。実機ではfallbackで約34分かかった実績があります。
 
-実機確認済みの環境は OpenHands 1.46.0 です（SDKの対象版 1.49.3 とは別の系統）。profile の
+実機確認済みの環境は OpenHands 1.46.0 です（SDKの対象版 1.49.4 とは別の系統）。profile の
 `tools` に `task_tool_set` を明示した会話では `task` 経路（bard → bard-critic の入れ子 sub-agent）
 を events で確認済みです。ただし `task` があってもモデルが親会話内で代行する例（12曲中1曲）が
 あるため、`/bard:sing` の末尾行 `実行経路:` と会話の events で経路を確認してください。critic
 sub-agent の 1 回の LLM 応答が 20〜70 分かかる／provider timeout で失敗する例が多く、
 `llm.timeout` を 600 秒以上にすることを推奨します。
 
-補足: SDK 1.49.3 の `AgentSettings.create_agent` は profile の `tools` が `None`（未指定）の
+補足: SDK 1.49.4 の `AgentSettings.create_agent` は profile の `tools` が `None`（未指定）の
 ときだけ `enable_sub_agents` で TaskToolSet を追加します（ソース: `openhands-sdk/openhands/sdk/settings/model.py`）。
 profile で `tools` を明示していると ON でも `task` が出ません。対処: `tools` を未指定に戻すか、
 `task_tool_set` を明示追加してください。1.46.0 で同じ挙動かは未確認です。
