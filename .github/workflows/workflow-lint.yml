@@ -11,12 +11,20 @@ on:
 
 permissions:
   contents: read
-  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Same policy as ci.yml: superseded pull_request runs are cancelled; main
+  # pushes and dispatched runs are never cancelled.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   zizmor:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
+    permissions:
+      contents: read # actions/checkout
+      security-events: write # uploads the zizmor SARIF to code scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -24,6 +32,24 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
+          cache-suffix: zizmor
+      - name: Install actionlint
+        env:
+          # sha256 from the release's actionlint_1.7.12_checksums.txt.
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          curl -fsSLo actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint
+      - name: Actionlint
+        # Structural errors (duplicate keys, bad expressions) once produced a
+        # zero-jobs main failure that zizmor cannot see. Narrow ignores only:
+        # ubuntu-26.04 is a hosted label newer than actionlint's known list,
+        # and SC2129 is a pre-existing style nit (individual >> redirects to
+        # $GITHUB_ENV) unrelated to workflow validity.
+        run: ./actionlint -oneline -ignore 'label "ubuntu-26\.04" is unknown' -ignore 'SC2129'
       - name: Zizmor
         env:
           # GH_TOKEN enables zizmor's online audits (advisory DB lookups,

@@ -28,9 +28,9 @@ jobs:
     # checks + merge queue wait.
     timeout-minutes: 45
     permissions:
-      actions: write
-      contents: write
-      pull-requests: write
+      actions: write # dispatches ci/workflow-lint and approves action_required runs on the bump branch
+      contents: write # pushes the version-bump commit (or fallback PR branch)
+      pull-requests: write # opens and auto-merges the fallback version-bump PR
     outputs:
       version: ${{ steps.bump.outputs.version }}
       tag: ${{ steps.bump.outputs.tag }}
@@ -223,6 +223,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
+          cache-suffix: install-smoke
       - name: Sync dependencies
         run: uv sync --locked --group sdk-check
       - name: Smoke-test remote install
@@ -237,7 +238,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: write # creates the v<version> tag and GitHub release
     env:
       VERSION: ${{ needs.bump-version.outputs.version }}
       SHA: ${{ needs.bump-version.outputs.sha }}
@@ -249,6 +250,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
+          cache-suffix: release
       - name: Sync dependencies
         run: uv sync --locked
       - name: Render sample scores

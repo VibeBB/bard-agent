@@ -1,18 +1,14 @@
-"""Tests for the bard plugin stop hook scripts."""
+"""Tests for the bard plugin hook scripts (stop + session_start doctor)."""
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT = (
-    Path(__file__).parents[1]
-    / "plugins"
-    / "bard"
-    / "hooks"
-    / "scripts"
-    / "report_song_status.py"
-)
+PLUGIN_ROOT = Path(__file__).parents[1] / "plugins" / "bard"
+SCRIPT = PLUGIN_ROOT / "hooks" / "scripts" / "report_song_status.py"
+DOCTOR_SCRIPT = PLUGIN_ROOT / "hooks" / "scripts" / "bard_doctor.py"
 
 
 def _write_proposal(path: Path) -> None:
@@ -113,3 +109,44 @@ def test_report_song_status_malformed_provenance(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert "report_song_status:" in result.stderr
+
+
+def _run_doctor(env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(DOCTOR_SCRIPT)],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+
+def test_bard_doctor_resolves_plugin_root(tmp_path: Path) -> None:
+    env = {
+        "BARD_PLUGIN_ROOT": str(PLUGIN_ROOT),
+        "HOME": str(tmp_path),
+        "PATH": os.environ.get("PATH", ""),
+    }
+
+    result = _run_doctor(env)
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "allow"
+    assert "plugin layout ok" in payload["additionalContext"]
+    assert str(PLUGIN_ROOT) in payload["additionalContext"]
+
+
+def test_bard_doctor_unresolved_root_is_advisory(tmp_path: Path) -> None:
+    env = {
+        "OPENHANDS_PROJECT_DIR": str(tmp_path),
+        "HOME": str(tmp_path),
+        "PATH": os.environ.get("PATH", ""),
+    }
+
+    result = _run_doctor(env)
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "allow"
+    assert "unresolved" in payload["additionalContext"]
