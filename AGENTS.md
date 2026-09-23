@@ -107,7 +107,10 @@ input and confirm that the broken proposal is rejected.
 
 - `.github/workflows/ci.yml` runs on pushes to main, pull requests, merge
   groups, `workflow_dispatch` (used by the publish workflow to gate the
-  image-pin PR), and `workflow_call`. It runs `verify` (Python 3.12/3.13 matrix:
+  image-pin PR), and `workflow_call`. `pull_request` ignores
+  `bot/update-tools-image-*` branches — those runs would only queue as
+  approval-gated `action_required`, and the pin PR's required checks come
+  from the dispatched run instead. It runs `verify` (Python 3.12/3.13 matrix:
   ruff, format, pyright, and pytest), `independent-check` (required
   `abcm2ps`/`rsvg-convert` and score PNG generation), and `plugin-load` (checks
   `Plugin.load` with `openhands-sdk==1.49.4` from the `sdk-check` group).
@@ -126,10 +129,12 @@ input and confirm that the broken proposal is rejected.
   `docker/README.md` and the pin file itself), then opens a pull request that
   updates the digest pin in `plugins/bard/skills/bard-render/tools-image.json`
   — the file the docker fallback reads at render time.
-- `.github/workflows/workflow-lint.yml` runs zizmor on every pull request,
-  on merge groups, on pushes to main that touch `.github/**`, and weekly,
-  and uploads the results to code scanning as SARIF. `zizmor` is a required
-  status check, so the pull-request trigger must not be path-filtered.
+- `.github/workflows/workflow-lint.yml` runs zizmor on every pull request
+  (excluding `bot/update-tools-image-*` branches, whose zizmor check is
+  dispatched by the publish workflow), on merge groups, on pushes to main
+  that touch `.github/**`, on `workflow_dispatch`, and weekly, and uploads
+  the results to code scanning as SARIF. `zizmor` is a required status
+  check, so the pull-request trigger must not be path-filtered.
 - Every `uses:` entry is pinned to a 40-character SHA with a `# vX.Y.Z`
   comment. Checkout uses `persist-credentials: false`, and every job has a
   `timeout-minutes` setting.
