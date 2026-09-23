@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_DIR = REPO_ROOT / "plugins" / "bard"
 
 EXPECTED_AGENTS = {"bard", "bard-critic"}
-EXPECTED_SKILLS = {"bard-render", "bard-songcraft"}
+EXPECTED_SKILLS = {"bard-proposal-rules", "bard-render", "bard-songcraft"}
 EXPECTED_COMMANDS = {"sing"}
 EXPECTED_STOP_HOOKS = {"report-song-status"}
 
@@ -105,11 +105,13 @@ def main() -> int:
         for r in reasons:
             print(r)
         return 1
-    print(
-        "plugin-load OK: agents={bard,bard-critic} "
-        "skills={bard-render,bard-songcraft} commands={sing} "
-        "stop-hooks={report-song-status}"
+    plugin_summary = (
+        f"agents={{{','.join(sorted(EXPECTED_AGENTS))}}} "
+        f"skills={{{','.join(sorted(EXPECTED_SKILLS))}}} "
+        f"commands={{{','.join(sorted(EXPECTED_COMMANDS))}}} "
+        f"stop-hooks={{{','.join(sorted(EXPECTED_STOP_HOOKS))}}}"
     )
+    print(f"plugin-load OK: {plugin_summary}")
     return 0
 
 
