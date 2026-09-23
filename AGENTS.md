@@ -127,9 +127,9 @@ input and confirm that the broken proposal is rejected.
   A greater explicit version runs `scripts/bump_version.py`, updates
   plugin.json, pyproject.toml, both SKILL.md files, and uv.lock, and commits
   the changes to main — or, when the ruleset rejects the direct push, opens a
-  version-bump pull request and merges it through the merge queue using the
-  same self-approve + dispatched checks + `enqueuePullRequest` flow as the
-  publish workflow — checks that the `v<version>` tag does not exist, and then
+  version-bump pull request and auto-merges it with `gh pr merge --auto`
+  using the same self-approve + dispatched checks flow as the publish
+  workflow — checks that the `v<version>` tag does not exist, and then
   runs verify, install-smoke, and `gh release create`. An explicit version
   equal to the current version performs a consistency check, skips the bump
   commit and push, checks that the tag does not exist, and releases the current
@@ -143,9 +143,10 @@ input and confirm that the broken proposal is rejected.
   updates the digest pin in `plugins/bard/skills/bard-render/tools-image.json`
   — the file the docker fallback reads at render time. The workflow
   self-approves any approval-gated `pull_request` runs on the pin branch,
-  dispatches `ci.yml` and `workflow-lint.yml` there for the required
-  checks, and enqueues the PR into the merge queue via `gh pr merge
-  --auto` — no manual steps.
+  waits for the pull_request check suites, dispatches `ci.yml` and
+  `workflow-lint.yml` there for the required checks, and auto-merges the
+  PR via `gh pr merge --auto` (the merge queue is not enabled) — no
+  manual steps.
 - `.github/workflows/check-dependency-updates.yml` runs
   `scripts/check_dependency_updates.py` weekly and on `workflow_dispatch`,
   aggregating update candidates (PyPI direct/lock drift, uv pin, Python
