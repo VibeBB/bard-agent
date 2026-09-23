@@ -198,25 +198,12 @@ jobs:
             echo "pin PR checks failed; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          # Enqueue the pin PR into the merge queue. gh pr merge --auto only
-          # sets the auto-merge flag — on this repo it did not add the PR to
-          # the queue (observed on #23) — so the GraphQL enqueuePullRequest
-          # mutation is the explicit enqueue. It also requires every required
-          # check green on the head sha, so it is retried while the approved
-          # pull_request runs finish (about ten minutes max). If the queue
-          # still rejects it, the PR is left open for manual merge.
-          pr_id=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${pr_url##*/}" --jq '.node_id')
-          enqueued=0
-          for _ in $(seq 1 20); do
-            if gh api graphql -f query="mutation { enqueuePullRequest(input: {pullRequestId: \"$pr_id\"}) { clientMutationId } }"; then
-              enqueued=1
-              break
-            fi
-            sleep 30
-          done
-          if [ "$enqueued" -eq 0 ]; then
-            gh pr merge --repo "$GITHUB_REPOSITORY" --auto "$pr_url" || {
-              echo "pin PR could not be enqueued; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
-              echo "::warning::pin PR $pr_url could not be auto-merged; merge it via the merge queue"
-            }
-          fi
+          # Auto-merge the pin PR. Every required check is already green at
+          # this point, so --auto merges immediately; when it still cannot
+          # merge (e.g. a check registering late), the flag stays armed and
+          # the merge lands on its own. If arming itself fails the PR is
+          # left open for manual merge.
+          gh pr merge --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch "$pr_url" || {
+            echo "pin PR auto-merge could not be armed; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::pin PR $pr_url could not be auto-merged"
+          }

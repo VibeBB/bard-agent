@@ -157,27 +157,16 @@ jobs:
                 echo "version-bump PR checks failed; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
                 exit 1
               fi
-              # gh pr merge --auto only sets the flag on this repo and does
-              # not enqueue (observed on publish's #23), so use the GraphQL
-              # enqueuePullRequest mutation first.
-              pr_id=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${pr_url##*/}" --jq '.node_id')
-              enqueued=0
-              for _ in $(seq 1 20); do
-                if gh api graphql -f query="mutation { enqueuePullRequest(input: {pullRequestId: \"$pr_id\"}) { clientMutationId } }"; then
-                  enqueued=1
-                  break
-                fi
-                sleep 30
-              done
-              if [ "$enqueued" -eq 0 ]; then
-                gh pr merge --repo "$GITHUB_REPOSITORY" --auto "$pr_url" || {
-                  echo "version-bump PR could not be enqueued; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
-                  echo "::error::version-bump PR $pr_url was not enqueued; merge it via the merge queue, then re-run Release with version=${VERSION}."
-                  exit 1
-                }
-              fi
-              # Wait for the merge (or merge-queue squash) to land on main so
-              # the release SHA is the real main tip, not the branch head.
+              # Arm auto-merge on the version-bump PR. Checks are already
+              # green here so the merge lands immediately; arming failure
+              # leaves the PR open for manual merge.
+              gh pr merge --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch "$pr_url" || {
+                echo "version-bump PR auto-merge could not be armed; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
+                echo "::error::version-bump PR $pr_url was not auto-merged; merge it, then re-run Release with version=${VERSION}."
+                exit 1
+              }
+              # Wait for the merge to land on main so the release SHA is the
+              # real main tip, not the branch head.
               merged=false
               for _ in $(seq 1 40); do
                 merged_at=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${pr_url##*/}" --jq '.merged_at // empty')
@@ -185,8 +174,8 @@ jobs:
                 sleep 30
               done
               if [ "$merged" != true ]; then
-                echo "version-bump PR did not merge within the wait; it was left open (or is still queued)" >> "$GITHUB_STEP_SUMMARY"
-                echo "::error::merge $pr_url via the merge queue, then re-run Release with version=${VERSION}."
+                echo "version-bump PR did not merge within the wait; it was left open" >> "$GITHUB_STEP_SUMMARY"
+                echo "::error::merge $pr_url, then re-run Release with version=${VERSION}."
                 exit 1
               fi
               git fetch -q origin main
