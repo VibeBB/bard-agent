@@ -45,9 +45,11 @@ jobs:
           tar -xzf actionlint.tar.gz actionlint
       - name: Actionlint
         # Structural errors (duplicate keys, bad expressions) once produced a
-        # zero-jobs main failure that zizmor cannot see; the only ignore is
-        # for ubuntu-26.04, a hosted label newer than actionlint's known list.
-        run: ./actionlint -oneline -ignore 'label "ubuntu-26\.04" is unknown'
+        # zero-jobs main failure that zizmor cannot see. Narrow ignores only:
+        # ubuntu-26.04 is a hosted label newer than actionlint's known list,
+        # and SC2129 is a pre-existing style nit (individual >> redirects to
+        # $GITHUB_ENV) unrelated to workflow validity.
+        run: ./actionlint -oneline -ignore 'label "ubuntu-26\.04" is unknown' -ignore 'SC2129'
       - name: Zizmor
         env:
           # GH_TOKEN enables zizmor's online audits (advisory DB lookups,
