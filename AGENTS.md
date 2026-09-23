@@ -1,6 +1,6 @@
 # Agent Work Contract
 
-> Target: OpenHands Software Agent SDK v1.49.4, Python 3.12+
+> Target: OpenHands Software Agent SDK v1.49.5, Python 3.12+
 
 This document is the working contract for implementation, validation, and
 documentation in this repository. The README is the product overview,
@@ -27,7 +27,8 @@ plugins/bard/
 ├── hooks/                    # stop hook reporting song render status (stdlib only)
 ├── skills/
 │   ├── bard-songcraft/       # Songwriting theory decision tables, modes, and copyright contract
-│   └── bard-render/          # Proposal JSON validation and ABC/MIDI/MML/lyrics/provenance rendering (stdlib only)
+│   ├── bard-render/          # Proposal JSON validation and ABC/MIDI/MML/lyrics/provenance rendering (stdlib only)
+│   └── bard-proposal-rules/  # Path-triggered rule on *.proposal.json (contract + originality reminders)
 │       ├── SKILL.md
 │       ├── scripts/
 │       └── tests/
@@ -81,7 +82,10 @@ tests/                        # Plugin-asset consistency checks
   `$BARD_PLUGIN_ROOT`,
   `$OPENHANDS_PROJECT_DIR/plugins/bard`,
   `$HOME/.openhands/plugins/installed/bard`.
-- Skills use `triggers:` (`KeywordTrigger`).
+- Skills use `triggers:` (`KeywordTrigger`). A `paths:` glob list makes a
+  skill a path-triggered rule instead (deterministic injection when a matching
+  file is touched); the two mechanisms are exclusive — keyword skills stay
+  model-invocable, rules live in their own `skills/` entries.
 - `plugins/bard/skills/bard-render/tools-image.json` pins the docker fallback
   image by digest and ships with the plugin install; it is rewritten only by
   the publish workflow's lock-update pull request. While no published digest
@@ -110,7 +114,7 @@ input and confirm that the broken proposal is rejected.
   image-pin PR), and `workflow_call`. It runs `verify` (Python 3.12/3.13 matrix:
   ruff, format, pyright, and pytest), `independent-check` (required
   `abcm2ps`/`rsvg-convert` and score PNG generation), and `plugin-load` (checks
-  `Plugin.load` with `openhands-sdk==1.49.4` from the `sdk-check` group).
+  `Plugin.load` with `openhands-sdk==1.49.5` from the `sdk-check` group).
 - `.github/workflows/release.yml` is `workflow_dispatch` only. A `bump` input
   (defaulting to patch) or an explicit `version` input controls the release.
   A greater explicit version runs `scripts/bump_version.py`, updates

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bumped `openhands-sdk` / `openhands-tools` pins to `1.49.5` (`sdk-check`
+  group) and documented the feature evaluation in
+  `docs/research/sdk-v1.49.5-feature-evaluation.md`.
+- Stage 8 of `agents/bard.md` now states the vision path precisely: when the
+  conversation model is not vision-capable, `file_editor view` does not
+  display `score.png` and `inspect_image_with_vision` cannot substitute (it
+  only covers user-attached images), so the check is recorded as skipped; a
+  note covers inspecting user-attached images via `inspect_image_with_vision`.
+
+### Added
+
+- `skills/bard-proposal-rules`: path-triggered rule (`*.proposal.json`)
+  injecting proposal-contract and originality reminders deterministically.
+
 ## [1.0.0] - 2026-09-21
 
 Initial public release under VibeBB/bard-agent.

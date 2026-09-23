@@ -12,7 +12,7 @@ dev = [
     "ruff==0.16.8",
     "pyright==1.1.414",
 ]
-sdk-check = ["openhands-sdk==1.49.4", "openhands-tools==1.49.4"]
+sdk-check = ["openhands-sdk==1.49.5", "openhands-tools==1.49.5"]
 
 [tool.uv]
 default-groups = ["dev"]

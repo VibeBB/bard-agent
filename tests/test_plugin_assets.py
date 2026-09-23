@@ -59,6 +59,14 @@ def test_skill_files() -> None:
         assert fm.get("description"), f"{path} frontmatter missing description"
 
 
+def test_proposal_rule_is_path_triggered() -> None:
+    head = (PLUGIN_ROOT / "skills" / "bard-proposal-rules" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )[:600]
+    assert "paths:" in head
+    assert "triggers:" not in head
+
+
 def test_sing_command() -> None:
     fm = _frontmatter(PLUGIN_ROOT / "commands" / "sing.md")
     assert fm.get("description"), "sing.md frontmatter missing description"
