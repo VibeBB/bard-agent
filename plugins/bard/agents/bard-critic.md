@@ -8,6 +8,13 @@ tools:
   - glob
 max_iteration_per_run: 24
 max_budget_per_run: 1.0
+hooks:
+  pre_tool_use:
+    - matcher: file_editor|apply_patch|terminal
+      hooks:
+        - type: command
+          name: protect-song-artifacts
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/protect_song_artifacts.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || { echo "bard plugin root unresolved" >&2; exit 2; }; exec python3 "$p/hooks/scripts/protect_song_artifacts.py"'
 permission_mode: never_confirm
 ---
 

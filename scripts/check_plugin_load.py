@@ -20,9 +20,9 @@ EXPECTED_SKILLS = {"bard-proposal-rules", "bard-render", "bard-songcraft"}
 EXPECTED_COMMANDS = {"sing"}
 EXPECTED_SESSION_START_HOOKS: set[str] = set()
 EXPECTED_USER_PROMPT_SUBMIT_HOOKS: set[str] = set()
-EXPECTED_PRE_TOOL_USE_HOOKS: set[str] = set()
+EXPECTED_PRE_TOOL_USE_HOOKS = {"protect-song-artifacts"}
 EXPECTED_STOP_HOOKS = {"report-song-status"}
-EXPECTED_POST_TOOL_USE_HOOKS: set[str] = set()
+EXPECTED_POST_TOOL_USE_HOOKS = {"record-image-observation", "record-vision-tool-event"}
 
 
 def _registered_tools() -> set[str]:

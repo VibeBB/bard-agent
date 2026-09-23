@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `pre_tool_use` hook `protect-song-artifacts` (ported from mechanical-agent's
+  artifact guard): rejects `file_editor`/`apply_patch`/`terminal` writes to
+  render projections (`song.abc`, `song.mid`, `song.mml`, `song.md`,
+  `song.provenance.json`, `score.png`) — `render_song.py`/`render_score_png.py`
+  remain the only writers.
+- `post_tool_use` provenance hooks recording vision calls and image
+  observations to `.openhands/bard/vision-tool-events.jsonl` and
+  `.openhands/bard/image-observations.jsonl`; declared on the bard and
+  bard-critic agent frontmatter as needed (plugin hooks do not propagate to
+  task sub-agents).
+
+
 ### Fixed
 
 - `scripts/check_plugin_load.py` now asserts every hook kind

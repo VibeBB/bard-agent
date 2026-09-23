@@ -24,7 +24,8 @@ plugins/bard/
 │   ├── bard.md               # Minstrel that writes songs (task sub-agent)
 │   └── bard-critic.md        # Critic (no pass/fail authority)
 ├── commands/sing.md          # /bard:sing — directs context collection and task invocation
-├── hooks/                    # stop hook reporting song render status (stdlib only)
+├── hooks/                    # pre_tool_use song-artifact guard, post_tool_use vision
+│                             # records, stop hook reporting song render status (stdlib only)
 ├── skills/
 │   ├── bard-songcraft/       # Songwriting theory decision tables, modes, and copyright contract
 │   ├── bard-render/          # Proposal JSON validation and ABC/MIDI/MML/lyrics/provenance rendering (stdlib only)
@@ -76,7 +77,13 @@ tests/                        # Plugin-asset consistency checks
   (git log and files) itself (ADR-0001).
 - The `hooks/` stop hook is advisory (`decision: allow`) and reports each
   `out/bard/*/song.proposal.json` render status; unreadable proposal or
-  provenance JSON fails closed.
+  provenance JSON fails closed. The `pre_tool_use` guard rejects writes to
+  render projections (`song.abc`, `song.mid`, `song.mml`, `song.md`,
+  `song.provenance.json`, `score.png`); the `post_tool_use` hooks record
+  vision calls and image observations to `.openhands/bard/*.jsonl`.
+  Sub-agents do not inherit plugin hooks, so `agents/bard.md` and
+  `agents/bard-critic.md` declare the guard (and bard the vision record) in
+  their frontmatter.
 - AgentDefinitions do not declare `skills:`; reference SKILL.md paths from the
   prompt. Resolve the plugin root in this order:
   `$BARD_PLUGIN_ROOT`,
