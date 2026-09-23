@@ -24,9 +24,13 @@ concurrency:
 jobs:
   bump-version:
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    # Covers the slow path: direct-push rejection → bump PR + dispatched
+    # checks + merge queue wait.
+    timeout-minutes: 45
     permissions:
+      actions: write
       contents: write
+      pull-requests: write
     outputs:
       version: ${{ steps.bump.outputs.version }}
       tag: ${{ steps.bump.outputs.tag }}
@@ -46,6 +50,7 @@ jobs:
         env:
           BUMP: ${{ inputs.bump }}
           SET_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           SET_VERSION="${SET_VERSION#v}"
@@ -66,24 +71,130 @@ jobs:
             echo "::error::tag v${VERSION} already exists" >&2
             exit 1
           fi
-          if [ "$SKIP_COMMIT" = false ]; then
+          if [ "$SKIP_COMMIT" = true ]; then
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add plugins/bard/.plugin/plugin.json pyproject.toml \
               plugins/bard/skills/bard-render/SKILL.md \
               plugins/bard/skills/bard-songcraft/SKILL.md uv.lock
             git commit -m "Release v${VERSION}: update version files"
-            if ! git push origin HEAD:main; then
-              echo "::error::direct push to main was rejected. Add 'GitHub Actions' " >&2
-              echo "as a bypass actor on the 'main' ruleset (Settings → Rules → " >&2
-              echo "Rulesets → main → Bypass actors), or merge a version-bump PR " >&2
-              echo "first and re-run Release with version=${VERSION}." >&2
-              exit 1
+            if git push origin HEAD:main; then
+              echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            else
+              # The main ruleset enforces the merge queue, so a direct push
+              # is rejected (observed: the bump run failed here and only the
+              # SKIP_COMMIT re-run released). Route the bump commit through a
+              # pull request instead — same self-approve + dispatched checks +
+              # enqueuePullRequest flow as publish-bard-images.yml.
+              echo "::warning::direct push to main rejected; routing the version bump through a pull request"
+              branch="bot/release-bump-v${VERSION}-${GITHUB_RUN_ID}"
+              git push origin "HEAD:refs/heads/${branch}"
+              body=$(printf '%s\n' \
+                "Automated version bump for the Release workflow." \
+                "" \
+                "version: v${VERSION}" \
+                "workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")
+              pr_url=$(gh pr create \
+                --repo "$GITHUB_REPOSITORY" \
+                --base main \
+                --head "$branch" \
+                --title "Release v${VERSION}: update version files" \
+                --body "$body")
+              echo "version-bump PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
+              # Pull_request runs on the bot branch queue as
+              # approval-gated action_required runs; poll and approve as in
+              # publish-bard-images.yml. A rejected approval is non-fatal:
+              # the dispatched runs below still satisfy required checks.
+              gated_seen=0
+              empty_streak=0
+              for _ in $(seq 1 10); do
+                batch=$(gh run list --repo "$GITHUB_REPOSITORY" --branch "$branch" \
+                  --event pull_request --status action_required --json databaseId --jq '.[].databaseId')
+                if [ -z "$batch" ]; then
+                  empty_streak=$((empty_streak + 1))
+                  if { [ "$gated_seen" -eq 0 ] && [ "$empty_streak" -ge 3 ]; } || \
+                     { [ "$gated_seen" -eq 1 ] && [ "$empty_streak" -ge 2 ]; }; then
+                    break
+                  fi
+                  sleep 30
+                  continue
+                fi
+                empty_streak=0
+                gated_seen=1
+                for gated in $batch; do
+                  gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$gated/approve" || true
+                done
+                sleep 10
+              done
+              started=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+              gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
+              gh workflow run workflow-lint.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
+              failed=0
+              for wf in ci.yml workflow-lint.yml; do
+                run_id=""
+                for _ in $(seq 1 30); do
+                  sleep 10
+                  run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$wf" --branch "$branch" \
+                    --event workflow_dispatch --created ">=$started" --json databaseId --jq '.[0].databaseId // empty')
+                  [ -n "$run_id" ] && break
+                done
+                if [ -z "$run_id" ]; then
+                  echo "$wf workflow_dispatch for $branch was not observed; the version-bump PR was left open" >> "$GITHUB_STEP_SUMMARY"
+                  exit 1
+                fi
+                echo "$wf run for $branch: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+                gh run watch --repo "$GITHUB_REPOSITORY" "$run_id" --interval 30 || true
+                conclusion=$(gh run view --repo "$GITHUB_REPOSITORY" "$run_id" \
+                  --json conclusion --jq '.conclusion // "unknown"')
+                echo "$wf conclusion for $branch: $conclusion"
+                if [ "$conclusion" != "success" ]; then
+                  failed=1
+                fi
+              done
+              if [ "$failed" -ne 0 ]; then
+                echo "version-bump PR checks failed; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
+                exit 1
+              fi
+              # gh pr merge --auto only sets the flag on this repo and does
+              # not enqueue (observed on publish's #23), so use the GraphQL
+              # enqueuePullRequest mutation first.
+              pr_id=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${pr_url##*/}" --jq '.node_id')
+              enqueued=0
+              for _ in $(seq 1 20); do
+                if gh api graphql -f query="mutation { enqueuePullRequest(input: {pullRequestId: \"$pr_id\"}) { clientMutationId } }"; then
+                  enqueued=1
+                  break
+                fi
+                sleep 30
+              done
+              if [ "$enqueued" -eq 0 ]; then
+                gh pr merge --repo "$GITHUB_REPOSITORY" --auto "$pr_url" || {
+                  echo "version-bump PR could not be enqueued; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
+                  echo "::error::version-bump PR $pr_url was not enqueued; merge it via the merge queue, then re-run Release with version=${VERSION}."
+                  exit 1
+                }
+              fi
+              # Wait for the merge (or merge-queue squash) to land on main so
+              # the release SHA is the real main tip, not the branch head.
+              merged=false
+              for _ in $(seq 1 40); do
+                merged_at=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${pr_url##*/}" --jq '.merged_at // empty')
+                [ -n "$merged_at" ] && { merged=true; break; }
+                sleep 30
+              done
+              if [ "$merged" != true ]; then
+                echo "version-bump PR did not merge within the wait; it was left open (or is still queued)" >> "$GITHUB_STEP_SUMMARY"
+                echo "::error::merge $pr_url via the merge queue, then re-run Release with version=${VERSION}."
+                exit 1
+              fi
+              git fetch -q origin main
+              echo "sha=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
             fi
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   verify:
     needs: bump-version

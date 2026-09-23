@@ -114,8 +114,11 @@ input and confirm that the broken proposal is rejected.
 - `.github/workflows/release.yml` is `workflow_dispatch` only. A `bump` input
   (defaulting to patch) or an explicit `version` input controls the release.
   A greater explicit version runs `scripts/bump_version.py`, updates
-  plugin.json, pyproject.toml, both SKILL.md files, and uv.lock, commits the
-  changes to main, checks that the `v<version>` tag does not exist, and then
+  plugin.json, pyproject.toml, both SKILL.md files, and uv.lock, and commits
+  the changes to main — or, when the ruleset rejects the direct push, opens a
+  version-bump pull request and merges it through the merge queue using the
+  same self-approve + dispatched checks + `enqueuePullRequest` flow as the
+  publish workflow — checks that the `v<version>` tag does not exist, and then
   runs verify, install-smoke, and `gh release create`. An explicit version
   equal to the current version performs a consistency check, skips the bump
   commit and push, checks that the tag does not exist, and releases the current
