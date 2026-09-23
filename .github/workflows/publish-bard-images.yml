@@ -140,12 +140,31 @@ jobs:
           echo "pin PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
           # Pull_request workflows on the bot pin branch queue as
           # approval-gated action_required runs (first-time-contributor
-          # gate). Approve them so no maintainer click is needed; if the
-          # API rejects the self-approval the dispatched runs below still
-          # provide every required check.
-          for gated in $(gh run list --repo "$GITHUB_REPOSITORY" --branch "$branch" \
-            --event pull_request --status action_required --json databaseId --jq '.[].databaseId'); do
-            gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$gated/approve" || true
+          # gate). They appear asynchronously after the PR opens, so poll
+          # for and approve them — observed on #25: an immediate one-shot
+          # list found none and the runs still sat awaiting approval. If
+          # the API rejects the self-approval the dispatched runs below
+          # still provide every required check.
+          gated_seen=0
+          empty_streak=0
+          for _ in $(seq 1 10); do
+            batch=$(gh run list --repo "$GITHUB_REPOSITORY" --branch "$branch" \
+              --event pull_request --status action_required --json databaseId --jq '.[].databaseId')
+            if [ -z "$batch" ]; then
+              empty_streak=$((empty_streak + 1))
+              if { [ "$gated_seen" -eq 0 ] && [ "$empty_streak" -ge 3 ]; } || \
+                 { [ "$gated_seen" -eq 1 ] && [ "$empty_streak" -ge 2 ]; }; then
+                break
+              fi
+              sleep 30
+              continue
+            fi
+            empty_streak=0
+            gated_seen=1
+            for gated in $batch; do
+              gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$gated/approve" || true
+            done
+            sleep 10
           done
           # Required checks come from dispatched runs on the branch:
           # ci.yml covers verify/plugin-load/independent-check and
