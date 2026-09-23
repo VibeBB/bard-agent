@@ -4,11 +4,7 @@ on:
   push:
     branches: [main]
     paths: [".github/**"]
-  # See ci.yml: pin PRs are gated by the dispatched run instead, so the
-  # approval-gated pull_request run on bot branches is suppressed here too.
   pull_request:
-    branches-ignore:
-      - "bot/update-tools-image-*"
   merge_group:
   workflow_dispatch:
   schedule:
