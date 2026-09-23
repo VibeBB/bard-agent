@@ -1,9 +1,14 @@
 {
   "image": "ghcr.io/vibebb/bard-tools",
-  "tag": null,
-  "digest": null,
-  "published_at": null,
-  "workflow_run": null,
+  "tag": "bcfecaef516b5b2c88347df1aa3df70398b29c57-tools",
+  "digest": "sha256:da0bc2e2c6ae677f6f6d301412dd5294c4444a1e9101ef6af69379497a97e0a0",
+  "published_at": "2026-09-23T11:14:00Z",
+  "workflow_run": "https://github.com/VibeBB/bard-agent/actions/runs/35853299762",
   "dockerfile": "docker/bard-tools.Dockerfile",
-  "tools": {}
+  "tools": {
+    "abcm2ps": "8.14.17",
+    "abc2midi": "5.02",
+    "rsvg-convert": "2.61.3",
+    "fonts-ipafont": "00303-23ubuntu1"
+  }
 }
