@@ -164,11 +164,12 @@ jobs:
             exit 1
           fi
           # With the merge-queue ruleset, --auto enqueues the PR so it merges
-          # once its required checks pass; the queue deletes the branch, so
-          # --delete-branch must be omitted (gh rejects it on queue-enabled
-          # repos). If the queue is not configured or the merge is blocked,
-          # the PR is left open for manual merge.
-          if ! gh pr merge --repo "$GITHUB_REPOSITORY" --auto --squash "$pr_url"; then
+          # once its required checks pass. The queue owns both the merge
+          # strategy and branch deletion, so no --squash/--delete-branch may
+          # be passed (gh rejects both on queue-enabled repos). If the queue
+          # is not configured or the merge is blocked, the PR is left open
+          # for manual merge.
+          if ! gh pr merge --repo "$GITHUB_REPOSITORY" --auto "$pr_url"; then
             echo "pin PR auto-merge was blocked; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
             echo "::warning::pin PR $pr_url could not be auto-merged; merge it via the merge queue"
           fi
