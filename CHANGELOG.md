@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [1.1.0] - 2026-09-23
+
+- OpenHands Software Agent SDK v1.49.4 (from 1.46-era target).
+- Optional `score.png` visual check (Stage 8, advisory), rendered through
+  abcm2ps → SVG → `rsvg-convert`, with a digest-pinned `bard-tools` docker
+  image fallback (ADR-0005, ADR-0007, ADR-0008).
+- Stop hook reporting song render status; hardened agent prompts from
+  real-environment verification.
+- CI on `ubuntu-26.04` runners with pinned tool versions and zizmor SARIF
+  upload to code scanning.
+
+
 ### Added
 
 - `pre_tool_use` hook `protect-song-artifacts` (ported from mechanical-agent's
@@ -59,5 +72,6 @@ Initial public release under VibeBB/bard-agent.
   sub-agents are unavailable.
 - Tag-based release workflow with verification and installation smoke tests.
 
-[Unreleased]: https://github.com/VibeBB/bard-agent/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/VibeBB/bard-agent/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/VibeBB/bard-agent/releases/tag/v1.1.0
 [1.0.0]: https://github.com/VibeBB/bard-agent/releases/tag/v1.0.0

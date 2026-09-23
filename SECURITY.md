@@ -4,7 +4,7 @@
 
 | Version | Supported |
 | --- | --- |
-| 0.1.x | Yes |
+| 1.1.x | Yes |
 
 ## Reporting a vulnerability
 
@@ -21,8 +21,12 @@ fix and disclosure with you before publishing details.
 
 ## Scope notes
 
-bard writes and renders song artifacts locally via the pinned `bard-tools`
-image. The validator fails closed on malformed proposals, but the renderer
-is not a sandbox: do not render untrusted proposals in environments where
-crafted ABC/MIDI content could reach other tooling. The plugin runs inside
-the parent agent's workspace and opens no network listeners itself.
+bard renders songs from proposal JSON using Python-standard-library-only
+scripts; the optional `score.png` advisory path shells out to `abcm2ps` and
+`rsvg-convert` (from `PATH` or the digest-pinned `bard-tools` image), which
+parse external ABC/SVG data as native code. Do not render untrusted
+proposals where a crafted file could reach other tooling. The plugin adds
+no network listeners.
+
+Secrets must never be written to logs, inputs, or commits; see the
+invariants in [AGENTS.md](AGENTS.md).

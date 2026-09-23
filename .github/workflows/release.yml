@@ -265,7 +265,11 @@ jobs:
           done
       - name: Build release zips
         run: |
+          # Ship the project license and third-party notices inside the
+          # plugin zip so the distributed artifact is self-contained.
+          cp LICENSE THIRD_PARTY_NOTICES.md plugins/bard/
           (cd plugins && zip -r "../dist/bard-plugin-v${VERSION}.zip" bard)
+          rm plugins/bard/LICENSE plugins/bard/THIRD_PARTY_NOTICES.md
           zip -r "dist/bard-samples-v${VERSION}.zip" dist/samples
       - name: Create release and tag
         env:

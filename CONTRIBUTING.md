@@ -26,7 +26,9 @@ uv run pytest -q
 ```
 
 For a Markdown-only change, `git diff --check` and a check of relative links
-are sufficient.
+are sufficient — `uv run python scripts/verify_docs.py` runs both the link
+check and the ADR-index check that CI enforces. The documentation map (specs,
+ADRs, research) lives in [docs/README.md](docs/README.md).
 
 ## Project invariants
 
