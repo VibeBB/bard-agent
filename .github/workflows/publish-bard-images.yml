@@ -179,14 +179,25 @@ jobs:
             echo "pin PR checks failed; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          # With repository auto-merge enabled, --auto enqueues the PR into
-          # the merge queue so it merges once its required checks pass —
-          # zero manual steps. The queue owns both the merge strategy and
-          # branch deletion, so no --squash/--delete-branch may be passed
-          # (gh rejects both on queue-enabled repos). If auto-merge is
-          # disabled or the merge is blocked, the PR is left open for
-          # manual merge.
-          if ! gh pr merge --repo "$GITHUB_REPOSITORY" --auto "$pr_url"; then
-            echo "pin PR auto-merge was blocked; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning::pin PR $pr_url could not be auto-merged; merge it via the merge queue"
+          # Enqueue the pin PR into the merge queue. gh pr merge --auto only
+          # sets the auto-merge flag — on this repo it did not add the PR to
+          # the queue (observed on #23) — so the GraphQL enqueuePullRequest
+          # mutation is the explicit enqueue. It also requires every required
+          # check green on the head sha, so it is retried while the approved
+          # pull_request runs finish (about ten minutes max). If the queue
+          # still rejects it, the PR is left open for manual merge.
+          pr_id=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${pr_url##*/}" --jq '.node_id')
+          enqueued=0
+          for _ in $(seq 1 20); do
+            if gh api graphql -f query="mutation { enqueuePullRequest(input: {pullRequestId: \"$pr_id\"}) { clientMutationId } }"; then
+              enqueued=1
+              break
+            fi
+            sleep 30
+          done
+          if [ "$enqueued" -eq 0 ]; then
+            gh pr merge --repo "$GITHUB_REPOSITORY" --auto "$pr_url" || {
+              echo "pin PR could not be enqueued; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
+              echo "::warning::pin PR $pr_url could not be auto-merged; merge it via the merge queue"
+            }
           fi
