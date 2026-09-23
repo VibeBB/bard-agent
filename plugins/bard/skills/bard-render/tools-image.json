@@ -1,0 +1,9 @@
+{
+  "image": "ghcr.io/vibebb/bard-tools",
+  "tag": null,
+  "digest": null,
+  "published_at": null,
+  "workflow_run": null,
+  "dockerfile": "docker/bard-tools.Dockerfile",
+  "tools": {}
+}

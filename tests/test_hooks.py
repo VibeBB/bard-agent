@@ -71,7 +71,23 @@ def test_report_song_status_none(tmp_path: Path) -> None:
     result = _run_hook(tmp_path)
 
     assert result.returncode == 0
+    assert "No out/bard directory" in json.loads(result.stdout)["additionalContext"]
+
+
+def test_report_song_status_empty_out_bard(tmp_path: Path) -> None:
+    (tmp_path / "out" / "bard").mkdir(parents=True)
+
+    result = _run_hook(tmp_path)
+
+    assert result.returncode == 0
     assert "No song proposals found" in json.loads(result.stdout)["additionalContext"]
+
+
+def test_report_song_status_missing_working_dir(tmp_path: Path) -> None:
+    result = _run_hook(tmp_path / "nonexistent")
+
+    assert result.returncode == 0
+    assert "does not exist" in json.loads(result.stdout)["additionalContext"]
 
 
 def test_report_song_status_malformed_proposal(tmp_path: Path) -> None:

@@ -199,8 +199,10 @@ not deliver the song.
 ## Stage 8 — Score visual check (writes `score.png`, `score-review.json`; advisory, optional)
 
 The critic reads text only; it never sees the engraved score. When the score-render
-tools are on `PATH` (`abcm2ps` and `rsvg-convert`; Japanese also needs a CJK font
-such as fonts-ipafont), render the score image and inspect it once:
+tools are available — on `PATH` (`abcm2ps` and `rsvg-convert`; Japanese also needs a
+CJK font such as fonts-ipafont) or through the pinned `bard-tools` docker image
+(when docker is on `PATH` and `tools-image.json` carries a digest) — render the
+score image and inspect it once:
 
 ```bash
 python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \

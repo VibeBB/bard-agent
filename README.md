@@ -39,6 +39,9 @@ are written to `out/bard/<slug>/`:
   files for each stage
 - `context.md` / `critic.md` — the parent's conversation summary and the
   critic's observations and disposition
+- `score.png` / `score-review.json` — optional visual check output (advisory;
+  only when `abcm2ps` + `rsvg-convert` are on `PATH` or the pinned
+  `bard-tools` docker image is available — see [docker/README.md](docker/README.md))
 
 The proposal contract is schema 0.3. Repeated sections can use `melody_from`
 to copy chords and melody from an earlier section, keeping proposal JSON short.
@@ -282,6 +285,9 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 - `song.proposal.json` / `song.provenance.json` — 歌の正となる提案と来歴
 - `notes.md` / `story.md` / `lyrics.md` / `plan.md` — 作詞過程の中間ファイル（stage別）
 - `context.md` / `critic.md` — 親が書いた会話の要約と、critic の所見・採否
+- `score.png` / `score-review.json` — 任意の譜面目視チェック出力（advisory。
+  `abcm2ps` + `rsvg-convert` が PATH 上にあるか、digest 固定の `bard-tools`
+  docker image が利用できる場合のみ — [docker/README.md](docker/README.md) 参照）
 
 提案契約はschema 0.3。反復するセクションは`melody_from`で前のセクションのコードと
 メロディを複製できるので、提案JSONが短くなります。検証だけしたいときは`--check`を

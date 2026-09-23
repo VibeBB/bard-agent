@@ -35,6 +35,9 @@ docs/
 ├── song-proposal-contract.md # Canonical proposal JSON contract
 ├── adr/
 └── research/
+docker/                       # bard-tools image (abcm2ps + rsvg-convert + IPA font) for the
+                              # render_score_png.py docker fallback; see docker/README.md
+scripts/                      # Release and image-lock helper scripts (stdlib only)
 tests/                        # Plugin-asset consistency checks
 ```
 
@@ -79,6 +82,10 @@ tests/                        # Plugin-asset consistency checks
   `$OPENHANDS_PROJECT_DIR/plugins/bard`,
   `$HOME/.openhands/plugins/installed/bard`.
 - Skills use `triggers:` (`KeywordTrigger`).
+- `plugins/bard/skills/bard-render/tools-image.json` pins the docker fallback
+  image by digest and ships with the plugin install; it is rewritten only by
+  the publish workflow's lock-update pull request. While no published digest
+  exists the `digest` stays `null` and the fallback stays inert.
 
 ## Verification
 
@@ -99,7 +106,8 @@ input and confirm that the broken proposal is rejected.
 ## CI/CD
 
 - `.github/workflows/ci.yml` runs on pushes to main, pull requests, merge
-  groups, and `workflow_call`. It runs `verify` (Python 3.12/3.13 matrix:
+  groups, `workflow_dispatch` (used by the publish workflow to gate the
+  image-pin PR), and `workflow_call`. It runs `verify` (Python 3.12/3.13 matrix:
   ruff, format, pyright, and pytest), `independent-check` (required
   `abcm2ps`/`rsvg-convert` and score PNG generation), and `plugin-load` (checks
   `Plugin.load` with `openhands-sdk==1.49.4` from the `sdk-check` group).
@@ -112,6 +120,12 @@ input and confirm that the broken proposal is rejected.
   equal to the current version performs a consistency check, skips the bump
   commit and push, checks that the tag does not exist, and releases the current
   main HEAD.
+- `.github/workflows/publish-bard-images.yml` builds and publishes the
+  `ghcr.io/<owner>/bard-tools` score-render image on `workflow_dispatch` and
+  on pushes to main that touch `docker/**` or the lock scripts (excluding
+  `docker/README.md` and the pin file itself), then opens a pull request that
+  updates the digest pin in `plugins/bard/skills/bard-render/tools-image.json`
+  — the file the docker fallback reads at render time.
 - `.github/workflows/workflow-lint.yml` runs zizmor on every pull request,
   on merge groups, on pushes to main that touch `.github/**`, and weekly,
   and uploads the results to code scanning as SARIF. `zizmor` is a required
