@@ -9,7 +9,7 @@ description: bardレンダラーの生成物を独立ABC・MIDIツールとブ�
 
 - 製品の依存は`uv sync`で用意する。
 - 検証ツールはリポジトリ外のscratch venvへ導入する。
-  `uv venv /tmp/bard-tools`、`uv pip install --python /tmp/bard-tools/bin/python mido music21 markdown pyyaml openhands-sdk==1.49.3`。
+  `uv venv /tmp/bard-tools`、`uv pip install --python /tmp/bard-tools/bin/python mido music21 markdown pyyaml openhands-sdk==1.49.4`。
 - ABCの独立CLIは`abcmidi abcm2ps`。譜面PNG化には`abcm2ps -g`と
   `rsvg-convert`（librsvg2-bin）を使う。日本語フォント（fonts-ipafont系）が
   利用可能か確認する。
