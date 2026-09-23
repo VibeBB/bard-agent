@@ -140,12 +140,31 @@ jobs:
           echo "pin PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
           # Pull_request workflows on the bot pin branch queue as
           # approval-gated action_required runs (first-time-contributor
-          # gate). Approve them so no maintainer click is needed; if the
-          # API rejects the self-approval the dispatched runs below still
-          # provide every required check.
-          for gated in $(gh run list --repo "$GITHUB_REPOSITORY" --branch "$branch" \
-            --event pull_request --status action_required --json databaseId --jq '.[].databaseId'); do
-            gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$gated/approve" || true
+          # gate). They appear asynchronously after the PR opens, so poll
+          # for and approve them — observed on #25: an immediate one-shot
+          # list found none and the runs still sat awaiting approval. If
+          # the API rejects the self-approval the dispatched runs below
+          # still provide every required check.
+          gated_seen=0
+          empty_streak=0
+          for _ in $(seq 1 10); do
+            batch=$(gh run list --repo "$GITHUB_REPOSITORY" --branch "$branch" \
+              --event pull_request --status action_required --json databaseId --jq '.[].databaseId')
+            if [ -z "$batch" ]; then
+              empty_streak=$((empty_streak + 1))
+              if { [ "$gated_seen" -eq 0 ] && [ "$empty_streak" -ge 3 ]; } || \
+                 { [ "$gated_seen" -eq 1 ] && [ "$empty_streak" -ge 2 ]; }; then
+                break
+              fi
+              sleep 30
+              continue
+            fi
+            empty_streak=0
+            gated_seen=1
+            for gated in $batch; do
+              gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$gated/approve" || true
+            done
+            sleep 10
           done
           # Required checks come from dispatched runs on the branch:
           # ci.yml covers verify/plugin-load/independent-check and
@@ -179,14 +198,25 @@ jobs:
             echo "pin PR checks failed; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          # With repository auto-merge enabled, --auto enqueues the PR into
-          # the merge queue so it merges once its required checks pass —
-          # zero manual steps. The queue owns both the merge strategy and
-          # branch deletion, so no --squash/--delete-branch may be passed
-          # (gh rejects both on queue-enabled repos). If auto-merge is
-          # disabled or the merge is blocked, the PR is left open for
-          # manual merge.
-          if ! gh pr merge --repo "$GITHUB_REPOSITORY" --auto "$pr_url"; then
-            echo "pin PR auto-merge was blocked; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning::pin PR $pr_url could not be auto-merged; merge it via the merge queue"
+          # Enqueue the pin PR into the merge queue. gh pr merge --auto only
+          # sets the auto-merge flag — on this repo it did not add the PR to
+          # the queue (observed on #23) — so the GraphQL enqueuePullRequest
+          # mutation is the explicit enqueue. It also requires every required
+          # check green on the head sha, so it is retried while the approved
+          # pull_request runs finish (about ten minutes max). If the queue
+          # still rejects it, the PR is left open for manual merge.
+          pr_id=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${pr_url##*/}" --jq '.node_id')
+          enqueued=0
+          for _ in $(seq 1 20); do
+            if gh api graphql -f query="mutation { enqueuePullRequest(input: {pullRequestId: \"$pr_id\"}) { clientMutationId } }"; then
+              enqueued=1
+              break
+            fi
+            sleep 30
+          done
+          if [ "$enqueued" -eq 0 ]; then
+            gh pr merge --repo "$GITHUB_REPOSITORY" --auto "$pr_url" || {
+              echo "pin PR could not be enqueued; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
+              echo "::warning::pin PR $pr_url could not be auto-merged; merge it via the merge queue"
+            }
           fi
