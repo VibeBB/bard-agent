@@ -5,6 +5,9 @@
 # by digest in plugins/bard/skills/bard-render/tools-image.json.
 FROM ubuntu:26.04
 
+LABEL org.opencontainers.image.source="https://github.com/VibeBB/bard-agent" \
+      org.opencontainers.image.licenses="BSD-3-Clause"
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \

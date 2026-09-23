@@ -2,6 +2,12 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/VibeBB/bard-agent)
 
+Part of the [VibeBB](https://github.com/VibeBB) agent family:
+[bard-agent](https://github.com/VibeBB/bard-agent) ·
+[electrical-circuit-agent](https://github.com/VibeBB/electrical-circuit-agent) ·
+[mechanical-agent](https://github.com/VibeBB/mechanical-agent) ·
+[wire-agent](https://github.com/VibeBB/wire-agent)
+
 **English** | [日本語](#日本語)
 
 <a id="english"></a>
@@ -61,16 +67,16 @@ User ── /bard:sing ──▶ parent agent
 ```
 
 - A `task` sub-agent does not receive the parent's conversation history, so the
-  parent summarizes it in `context.md` while bard reads the workspace itself
-  ([ADR-0001](docs/adr/ADR-0001-task-subagent-plugin.md)).
+  parent summarizes it in `context.md` while bard reads the workspace itself.
 - The proposal JSON is the sole source of truth. ABC, MIDI, and MML are derived
   deterministically by a Python-standard-library-only script and read back for
-  equality checks ([contract](docs/song-proposal-contract.md),
-  [ADR-0002](docs/adr/ADR-0002-song-proposal-contract.md)).
+  equality checks ([contract](docs/song-proposal-contract.md)).
 - Quoting or adapting existing songs, imitating real artists, and mocking real
   people are prohibited. Rendering requires every `originality` declaration to
-  be `true`
-  ([ADR-0003](docs/adr/ADR-0003-copyright-and-license-policy.md)).
+  be `true`.
+
+Design decisions are recorded in [docs/adr/](docs/adr/) — see the index in
+[docs/README.md](docs/README.md).
 
 ## Installation via Agent Canvas WebGUI
 
@@ -97,55 +103,9 @@ release tag. The following procedure was verified with OpenHands agent-server
 4. To use sub-agents, optionally enable `enable_sub_agents` in Agent Canvas
    settings. The plugin also works with it disabled (see the fallback below).
 
-### Updating
-
-Agent Canvas caches a plugin repository per source string. Because the refspec
-fetches tags only, specifying a new ref with the same source string can leave an
-old `resolved_ref` in place. A workaround confirmed with 1.46.0 is to
-uninstall the plugin, then add it again using a source with different casing
-(for example, `github:VIBEBB/bard-agent`) or the full URL
-`https://github.com/VibeBB/bard-agent.git`. Confirm that the plugin details'
-`resolved_ref` matches the new tag's SHA.
-
-Reinstalling with `force: true` can still use the old cache
-(`~/.openhands/cache/extensions/bard-agent-*`), leaving `resolved_ref`
-unchanged; this was confirmed with 1.46.0. The reliable procedure is
-“uninstall → delete the cache directory above and its `.lock` file → install”.
-After installation, confirm that the installed-plugin API's `resolved_ref`
-matches the intended commit.
-
-### If sub-agents don't activate
-
-With 1.46.0, there are cases where enabling “sub-agents” in the agent profile
-still leaves `task` unavailable in the conversation (the settings API continues
-to return `enable_sub_agents=false`). In that case `/bard:sing` uses its
-fallback path and says so in the `実行経路:` line at the end of the response.
-The fallback took approximately 34 minutes in one real-world run.
-
-The environment verified in practice was OpenHands 1.46.0, which is separate
-from the target SDK version 1.49.4. A conversation with `task_tool_set`
-explicitly listed in the profile's `tools` showed the `task` path (nested
-bard → bard-critic sub-agents) in its events. However, even when `task` is
-available, the model sometimes handles the work in the parent conversation
-(one of twelve songs in testing), so check the `/bard:sing` trailing
-`実行経路:` line and the conversation events. A critic sub-agent LLM response
-often takes 20–70 minutes or fails with a provider timeout; an
-`llm.timeout` of at least 600 seconds is recommended.
-
-Note: in SDK 1.49.4, `AgentSettings.create_agent` adds TaskToolSet through
-`enable_sub_agents` only when the profile's `tools` is `None` (unspecified)
-(source: `openhands-sdk/openhands/sdk/settings/model.py`). If `tools` is
-explicitly set in the profile, `task` does not appear even when the setting is
-ON. Either leave `tools` unspecified or explicitly add `task_tool_set`. Whether
-1.46.0 behaves identically was not verified.
-
-Installation status can also be checked through the API (an
-`X-Session-API-Key` is required). When `resolved_ref` matches the tag's commit
-SHA, the intended version is installed.
-
-```bash
-curl -sS -H "X-Session-API-Key: $KEY" http://127.0.0.1:8000/api/plugins/installed
-```
+For update caveats (Agent Canvas caches plugin sources per source string),
+sub-agent activation notes, and API-based install verification, see
+[docs/operations.md](docs/operations.md).
 
 For a non-GUI installation, place `plugins/bard` in the project directory
 (`$OPENHANDS_PROJECT_DIR/plugins/bard`), point `BARD_PLUGIN_ROOT` at the plugin
@@ -200,12 +160,13 @@ plugins/bard/
 ├── .plugin/plugin.json
 ├── agents/bard.md, bard-critic.md
 ├── commands/sing.md
+├── hooks/                               # stop hook reporting song render status
 └── skills/
     ├── bard-songcraft/SKILL.md          # songwriting decision tables and copyright contract
     └── bard-render/                     # proposal JSON validation and rendering (stdlib only)
         ├── SKILL.md
         └── scripts/render_song.py
-docs/                                    # contract, ADRs, and research
+docs/                                    # contract, ADRs, research, and the docs index
 tests/                                   # renderer and plugin-asset checks
 ```
 
@@ -225,29 +186,9 @@ uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
     --proposal tests/fixtures/valid_en.json --out-dir out/bard/example
 ```
 
-See [AGENTS.md](AGENTS.md) for the working contract.
-
-## Release process
-
-Distribution uses git tags ([ADR-0004](docs/adr/ADR-0004-ci-cd-release-by-tag.md)).
-Run the `release` workflow manually with `workflow_dispatch`. Select a `bump`
-input (`patch`/`minor`/`major`, defaulting to `patch`) or a `version` input
-(an explicit `X.Y.Z` override). It runs only on `main` and proceeds as follows:
-
-1. **bump-version** — `scripts/bump_version.py` checks the versions in
-   `plugins/bard/.plugin/plugin.json`, `pyproject.toml`, both `SKILL.md` files,
-   and `uv.lock`, writes the new version, and checks that the `v<version>` tag
-   does not already exist before committing to `main`.
-   An explicit `version` equal to the current version skips the bump commit and
-   releases the current `main` HEAD.
-2. **verify** — runs the normal CI (lint, type checks, and tests) through the
-   reusable workflow.
-3. **install-smoke** — installs from the target SHA with `install_plugin` and
-   checks the agent, skill, and command listings.
-4. **release** — creates plugin and score-sample ZIP files, then creates the
-   `v<version>` tag and Release with `gh release create`.
-
-If any step fails, neither a tag nor a Release is created.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contributor setup and
+[AGENTS.md](AGENTS.md) for the working contract. The release process is
+documented in [docs/operations.md](docs/operations.md).
 
 ## License
 
@@ -306,12 +247,14 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 ```
 
 - `task` sub-agentは親の会話履歴を受け取らないため、親が`context.md`へ要約し、bardが
-  ワークスペースを自ら読む二本立てにしています（[ADR-0001](docs/adr/ADR-0001-task-subagent-plugin.md)）。
+  ワークスペースを自ら読む二本立てにしています。
 - 歌の唯一の正は提案JSONで、ABC・MIDI・MMLはPython標準ライブラリだけのscriptが決定論的に
-  導出し、読み戻して一致を確認します（[契約](docs/song-proposal-contract.md)、
-  [ADR-0002](docs/adr/ADR-0002-song-proposal-contract.md)）。
+  導出し、読み戻して一致を確認します（[契約](docs/song-proposal-contract.md)）。
 - 既存楽曲の引用・翻案、実在アーティストの模倣、実在人物への嘲笑は禁止し、`originality`
-  宣言がすべて`true`でなければ描画しません（[ADR-0003](docs/adr/ADR-0003-copyright-and-license-policy.md)）。
+  宣言がすべて`true`でなければ描画しません。
+
+設計の決定は [docs/adr/](docs/adr/) に記録しています — 索引は
+[docs/README.md](docs/README.md) を参照してください。
 
 ## インストール（Agent Canvas WebGUI）
 
@@ -334,43 +277,8 @@ Agent Canvas（OpenHands のWeb GUI）からGitHubのリリースタグを指定
 4. （任意）sub-agent を使う場合は Agent Canvas の設定で `enable_sub_agents` を有効にします。
    無効のままでも動きます（後述の fallback）。
 
-### 更新時の注意
-
-Agent Canvasはsource文字列ごとにplugin repositoryをcacheします（tagのみを取得する
-refspecのため、同じsource文字列で新しいrefを指定しても古い`resolved_ref`が残ることがあります）。
-1.46.0で確認した回避策: いったんアンインストールしてから、大文字小文字を変えたsource表記
-（例: `github:VIBEBB/bard-agent`）または完全な`https://github.com/VibeBB/bard-agent.git`
-URLで再追加し、plugin詳細の`resolved_ref`が新しいタグのSHAと一致することを確認してください。
-
-`force: true` を付けた再 install でも古い cache（`~/.openhands/cache/extensions/bard-agent-*`）が
-使われ、`resolved_ref` が更新されないことを 1.46.0 で確認しています。確実な手順は
-「アンインストール → 上記 cache ディレクトリと `.lock` を削除 → install」で、install 後に
-installed-plugin API の `resolved_ref` が意図した commit と一致することを確認してください。
-
-### sub-agentが有効にならない場合
-
-1.46.0では agent profileで"sub-agents"を有効にしても会話で`task`が使えないケースを確認しています
-（settings APIは引き続き`enable_sub_agents=false`を返す）。この場合`/bard:sing`はfallback経路で
-動き、返信末尾の`実行経路:`にその旨が出ます。実機ではfallbackで約34分かかった実績があります。
-
-実機確認済みの環境は OpenHands 1.46.0 です（SDKの対象版 1.49.4 とは別の系統）。profile の
-`tools` に `task_tool_set` を明示した会話では `task` 経路（bard → bard-critic の入れ子 sub-agent）
-を events で確認済みです。ただし `task` があってもモデルが親会話内で代行する例（12曲中1曲）が
-あるため、`/bard:sing` の末尾行 `実行経路:` と会話の events で経路を確認してください。critic
-sub-agent の 1 回の LLM 応答が 20〜70 分かかる／provider timeout で失敗する例が多く、
-`llm.timeout` を 600 秒以上にすることを推奨します。
-
-補足: SDK 1.49.4 の `AgentSettings.create_agent` は profile の `tools` が `None`（未指定）の
-ときだけ `enable_sub_agents` で TaskToolSet を追加します（ソース: `openhands-sdk/openhands/sdk/settings/model.py`）。
-profile で `tools` を明示していると ON でも `task` が出ません。対処: `tools` を未指定に戻すか、
-`task_tool_set` を明示追加してください。1.46.0 で同じ挙動かは未確認です。
-
-導入状態はAPIでも確認できます（`X-Session-API-Key` が必要）。`resolved_ref` がタグの
-commit SHA と一致していれば、意図した版が入っています。
-
-```bash
-curl -sS -H "X-Session-API-Key: $KEY" http://127.0.0.1:8000/api/plugins/installed
-```
+更新時の注意（Agent Canvas は source 文字列ごとに plugin を cache します）、sub-agent
+有効化の挙動、API での導入確認は [docs/operations.md](docs/operations.md) を参照してください。
 
 GUIを使わない場合は、プロジェクト直下に `plugins/bard` を置く（`$OPENHANDS_PROJECT_DIR/plugins/bard`）か、
 環境変数 `BARD_PLUGIN_ROOT` で plugin ディレクトリを指すか、SDKで
@@ -415,12 +323,13 @@ plugins/bard/
 ├── .plugin/plugin.json
 ├── agents/bard.md, bard-critic.md
 ├── commands/sing.md
+├── hooks/                               # 歌の描画状態を報告する stop hook
 └── skills/
     ├── bard-songcraft/SKILL.md          # 作詞作曲の決定表と著作権契約
     └── bard-render/                     # 提案JSONの検証と描画（stdlibのみ）
         ├── SKILL.md
         └── scripts/render_song.py
-docs/                                    # 契約、ADR、リサーチ
+docs/                                    # 契約、ADR、リサーチ、ドキュメント索引
 tests/                                   # 描画scriptとplugin資材の検査
 ```
 
@@ -440,26 +349,9 @@ uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
     --proposal tests/fixtures/valid_en.json --out-dir out/bard/example
 ```
 
-作業契約は[AGENTS.md](AGENTS.md)を参照してください。
-
-## リリース
-
-配布はgit tagで行います（[ADR-0004](docs/adr/ADR-0004-ci-cd-release-by-tag.md)）。
-`release` workflowを`workflow_dispatch`で手動起動します。`bump`入力（patch/minor/major、
-既定patch）か`version`入力（明示的な`X.Y.Z`上書き）を選ぶだけで版は自動決定されます。
-main上でのみ動き、以下の順で進みます。
-
-1. **bump-version** — `scripts/bump_version.py`が`plugins/bard/.plugin/plugin.json`、
-   `pyproject.toml`、両SKILL.md、`uv.lock`の版を整合確認した上で新しい版を書き込み、
-   `v<version>`タグの未存在を検査してからmainへcommitします。
-   `version`入力が現在の版と同じ場合はbump commitを省き、現在のmain HEADをそのままリリースします。
-2. **verify** — 通常CI（lint・type・test）を再利用workflowとして実行します。
-3. **install-smoke** — `install_plugin`で対象SHAから実際に導入し、agent/skill/commandの
-   一覧を検査します。
-4. **release** — pluginと楽譜サンプルのzipを作り、`gh release create`でタグ`v<version>`と
-   Releaseを作成します。
-
-途中で失敗した場合はタグもReleaseも作られません。
+貢献者向けのセットアップは [CONTRIBUTING.md](CONTRIBUTING.md)、作業契約は
+[AGENTS.md](AGENTS.md) を参照してください。リリース手順は
+[docs/operations.md](docs/operations.md) に記載しています。
 
 ## ライセンス
 

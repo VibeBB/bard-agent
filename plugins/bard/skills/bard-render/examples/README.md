@@ -1,6 +1,7 @@
-# 例
+# Examples
 
-`minimal.en.json`は英語のverse-chorus例、`minimal.ja.json`は日本語（漢字`text`+仮名`reading`）の
-反復形式（`melody_from`）の例です。schema 0.3の完全な提案としてそのまま`--check`・描画できます。
-新しい歌はこれらを複製して書き換えると早く作れます。
-CIで両方とも描画検証されています。
+`minimal.en.json` is an English verse-chorus example; `minimal.ja.json` is a
+Japanese example (kanji `text` + kana `reading`) using strophic repetition
+(`melody_from`). Both are complete schema 0.3 proposals and can be passed to
+`--check` or rendered as-is. New songs are fastest to build by copying one of
+these and editing it. Both are render-verified in CI.
