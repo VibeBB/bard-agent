@@ -135,6 +135,20 @@ input and confirm that the broken proposal is rejected.
   dispatches `ci.yml` and `workflow-lint.yml` there for the required
   checks, and enqueues the PR into the merge queue via `gh pr merge
   --auto` — no manual steps.
+- `.github/workflows/check-dependency-updates.yml` runs
+  `scripts/check_dependency_updates.py` weekly and on `workflow_dispatch`,
+  aggregating update candidates (PyPI direct/lock drift, uv pin, Python
+  minor, GitHub Actions `uses:` pins, uvx tool pins, Docker ARGs and base
+  image) into the "Dependency update check report" Issue labeled
+  `dependency-updates`; it closes the issue when nothing is outdated.
+  Deferrals with reasons and re-check deadlines live in
+  `scripts/dependency_update_deferrals.json`. When adding, removing, or
+  moving a dependency, adding a new version ARG to a Dockerfile, or starting
+  to use a new external source (other than PyPI, a different Git repository,
+  apt/PPA, etc.), update the target definitions in
+  `scripts/check_dependency_updates.py` and its tests in the same change, and
+  run `uv run python scripts/check_dependency_updates.py` locally to confirm
+  nothing is missing.
 - `.github/workflows/workflow-lint.yml` runs zizmor on every pull request,
   on merge groups, on pushes to main that touch `.github/**`, on
   `workflow_dispatch` (used by the publish workflow to gate the image-pin
