@@ -3,7 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+  # Bot-authored pin branches never run pull_request CI: GitHub queues those
+  # runs as approval-gated (action_required) anyway, and publish-bard-images
+  # provides the required checks via workflow_dispatch.
   pull_request:
+    branches-ignore:
+      - "bot/update-tools-image-*"
   merge_group:
   workflow_dispatch:
   workflow_call:
