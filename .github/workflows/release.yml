@@ -83,11 +83,12 @@ jobs:
             if git push origin HEAD:main; then
               echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
             else
-              # The main ruleset enforces the merge queue, so a direct push
-              # is rejected (observed: the bump run failed here and only the
-              # SKIP_COMMIT re-run released). Route the bump commit through a
-              # pull request instead — same self-approve + dispatched checks +
-              # enqueuePullRequest flow as publish-bard-images.yml.
+              # No bypass actor is configured, so the pull_request rule
+              # rejects a direct push (observed: the bump run failed here
+              # and only the SKIP_COMMIT re-run released). Route the bump
+              # commit through a pull request instead — same self-approve +
+              # dispatched checks + auto-merge flow as
+              # publish-bard-images.yml.
               echo "::warning::direct push to main rejected; routing the version bump through a pull request"
               branch="bot/release-bump-v${VERSION}-${GITHUB_RUN_ID}"
               git push origin "HEAD:refs/heads/${branch}"
