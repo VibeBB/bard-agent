@@ -6,6 +6,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
+    inputs:
+      ref:
+        type: string
+        required: false
+        default: ""
   workflow_call:
     inputs:
       ref:
@@ -26,6 +31,10 @@ jobs:
   verify:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
+    # Bot-branch PRs are skipped: publish/release already dispatch ci.yml on
+    # those branches and gate on the dispatched runs, so a duplicate
+    # pull_request-triggered run is not needed for required checks.
+    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'bot/')
     strategy:
       fail-fast: false
       matrix:
@@ -38,6 +47,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ matrix.python-version }}
+          cache-suffix: verify-${{ matrix.python-version }}
       - name: Sync dependencies
         run: uv sync --locked
       - name: Ruff
@@ -54,6 +64,8 @@ jobs:
   independent-check:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
+    # Skipped on bot-branch PRs for the same reason as `verify` above.
+    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'bot/')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,6 +78,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
+          cache-suffix: independent-check
       - name: Sync dependencies
         run: uv sync --locked
       - name: abcm2ps tests
@@ -101,6 +114,8 @@ jobs:
   plugin-load:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
+    # Skipped on bot-branch PRs for the same reason as `verify` above.
+    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'bot/')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -109,6 +124,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
+          cache-suffix: plugin-load
       - name: Sync dependencies
         run: uv sync --locked --group sdk-check
       - name: Check plugin loads via SDK

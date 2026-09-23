@@ -24,8 +24,9 @@ plugins/bard/
 │   ├── bard.md               # Minstrel that writes songs (task sub-agent)
 │   └── bard-critic.md        # Critic (no pass/fail authority)
 ├── commands/sing.md          # /bard:sing — directs context collection and task invocation
-├── hooks/                    # pre_tool_use song-artifact guard, post_tool_use vision
-│                             # records, stop hook reporting song render status (stdlib only)
+├── hooks/                    # session_start doctor, pre_tool_use song-artifact guard,
+│                             # post_tool_use vision records, stop hook reporting song
+│                             # render status (stdlib only)
 ├── skills/
 │   ├── bard-songcraft/       # Songwriting theory decision tables, modes, and copyright contract
 │   ├── bard-render/          # Proposal JSON validation and ABC/MIDI/MML/lyrics/provenance rendering (stdlib only)
@@ -81,13 +82,18 @@ tests/                        # Plugin-asset consistency checks
   render projections (`song.abc`, `song.mid`, `song.mml`, `song.md`,
   `song.provenance.json`, `score.png`); the `post_tool_use` hooks record
   vision calls and image observations to `.openhands/bard/*.jsonl`.
-  Sub-agents do not inherit plugin hooks, so `agents/bard.md` and
+  The `session_start` `bard-doctor` hook is advisory too: it resolves the
+  plugin root, probes for `abcm2ps`/`rsvg-convert`/`docker` on `PATH` (docker
+  powers the pinned fallback), checks the plugin layout, and reports findings
+  as context — it never blocks the session. Sub-agents do not inherit
+  plugin hooks, so `agents/bard.md` and
   `agents/bard-critic.md` declare the guard (and bard the vision record) in
   their frontmatter.
 - AgentDefinitions do not declare `skills:`; reference SKILL.md paths from the
   prompt. Resolve the plugin root in this order:
   `$BARD_PLUGIN_ROOT`,
   `$OPENHANDS_PROJECT_DIR/plugins/bard`,
+  `$HOME/.agents/plugins/bard`,
   `$HOME/.openhands/plugins/installed/bard`.
 - Skills use `triggers:` (`KeywordTrigger`). A `paths:` glob list makes a
   skill a path-triggered rule instead (deterministic injection when a matching
@@ -116,9 +122,12 @@ input and confirm that the broken proposal is rejected.
 
 ## CI/CD
 
-- `.github/workflows/ci.yml` runs on pushes to main, pull requests, merge
-  groups, `workflow_dispatch` (used by the publish workflow to gate the
-  image-pin PR), and `workflow_call`. It runs `verify` (Python 3.12/3.13 matrix:
+- `.github/workflows/ci.yml` runs on pushes to main, pull requests,
+  `workflow_dispatch` (used by the publish workflow to gate the image-pin
+  PR; accepts a `ref` input like `workflow_call`), and `workflow_call`.
+  Pull-request jobs are skipped on `bot/` branches because publish/release
+  already dispatch ci.yml on those branches and gate on the dispatched
+  runs. It runs `verify` (Python 3.12/3.13 matrix:
   ruff, format, pyright, and pytest), `independent-check` (required
   `abcm2ps`/`rsvg-convert` and score PNG generation), and `plugin-load` (checks
   `Plugin.load` with `openhands-sdk==1.49.5` from the `sdk-check` group).
@@ -146,7 +155,9 @@ input and confirm that the broken proposal is rejected.
   waits for the pull_request check suites, dispatches `ci.yml` and
   `workflow-lint.yml` there for the required checks, and auto-merges the
   PR via `gh pr merge --auto` (the merge queue is not enabled) — no
-  manual steps.
+  manual steps. After the merge lands it dispatches both workflows on
+  main fire-and-forget; `main-ci-failure-issue.yml` turns a failed main
+  run into a tracking issue.
 - `.github/workflows/check-dependency-updates.yml` runs
   `scripts/check_dependency_updates.py` weekly and on `workflow_dispatch`,
   aggregating update candidates (PyPI direct/lock drift, uv pin, Python
@@ -161,8 +172,12 @@ input and confirm that the broken proposal is rejected.
   `scripts/check_dependency_updates.py` and its tests in the same change, and
   run `uv run python scripts/check_dependency_updates.py` locally to confirm
   nothing is missing.
-- `.github/workflows/workflow-lint.yml` runs zizmor on every pull request,
-  on merge groups, on pushes to main that touch `.github/**`, on
+- `.github/workflows/main-ci-failure-issue.yml` watches completed main
+  runs of CI, Publish bard images, and Workflow lint (`workflow_run`), and
+  files or closes a `ci-main-failure` tracking issue on failure/success.
+- `.github/workflows/workflow-lint.yml` runs actionlint (structural YAML
+  checks) and zizmor on every pull request, on pushes to main that touch
+  `.github/**`, on
   `workflow_dispatch` (used by the publish workflow to gate the image-pin
   PR), and weekly, and uploads the results to code scanning as SARIF.
   `zizmor` is a required status check, so the pull-request trigger must
@@ -170,8 +185,10 @@ input and confirm that the broken proposal is rejected.
 - Every `uses:` entry is pinned to a 40-character SHA with a `# vX.Y.Z`
   comment. Checkout uses `persist-credentials: false`, and every job has a
   `timeout-minutes` setting.
-- `dependabot.yml` monitors GitHub Actions and uv weekly (`uv` has a seven-day
-  cooldown).
+- `dependabot.yml` monitors GitHub Actions weekly. The uv ecosystem is
+  intentionally excluded (Dependabot's bundled uv cannot satisfy
+  `[tool.uv] required-version`), so Python dependency updates stay covered
+  by the weekly check-dependency-updates.yml report.
 
 ## Git
 

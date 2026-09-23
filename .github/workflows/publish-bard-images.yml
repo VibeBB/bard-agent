@@ -14,6 +14,9 @@ on:
       # merged lock PR does not trigger another publish.
       - "!plugins/bard/skills/bard-render/tools-image.json"
 
+# Elevated scopes live on the job; the workflow default stays empty.
+permissions: {}
+
 # Publishes are serialized: concurrent runs race on the `latest` alias and on
 # the lock update branch, so a queued run must wait for the previous one.
 concurrency:
@@ -25,10 +28,10 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
-      actions: write
-      contents: write
-      packages: write
-      pull-requests: write
+      actions: write # dispatches ci/workflow-lint and approves action_required runs on the pin branch
+      contents: write # pushes the bot lock branch
+      packages: write # pushes the ghcr.io bard-tools image
+      pull-requests: write # opens, auto-merges, and cleans up the lock PR
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -169,7 +172,7 @@ jobs:
           # during the build.
           git fetch -q origin main
           base_sha=$(git rev-parse origin/main)
-          branch="bot/update-tools-image-${TOOLS_DIGEST#sha256:}"
+          branch="bot/update-image-digests-${TOOLS_DIGEST#sha256:}"
           branch="${branch:0:70}"
           git switch -q -c "$branch" "$base_sha"
           python3 scripts/update_tools_image_lock.py \
@@ -298,20 +301,27 @@ jobs:
             echo "auto-merge is armed on $pr_url but the merge did not land within the wait; post-merge checks skipped" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          # The post-merge checks are observational: their conclusions (including
-          # 'cancelled' when a newer main push supersedes them via concurrency
-          # groups) are recorded in the step summary and never fail this run.
-          dispatch_workflow ci.yml main || true
-          main_conclusion="${DISPATCH_CONCLUSION:-not_observed}"
-          main_run_url="${DISPATCH_RUN_URL:-no run observed}"
-          echo "post-merge main CI: ${main_conclusion} ${main_run_url}" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$main_conclusion" != "success" ]; then
-            echo "::warning::post-merge main CI for ${pr_url} finished as ${main_conclusion}: ${main_run_url}"
-          fi
-          dispatch_workflow workflow-lint.yml main || true
-          lint_conclusion="${DISPATCH_CONCLUSION:-not_observed}"
-          lint_run_url="${DISPATCH_RUN_URL:-no run observed}"
-          echo "post-merge workflow lint: ${lint_conclusion} ${lint_run_url}" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$lint_conclusion" != "success" ]; then
-            echo "::warning::post-merge workflow lint for ${pr_url} finished as ${lint_conclusion}: ${lint_run_url}"
-          fi
+          # Post-merge verification is fire-and-forget: the runs are dispatched
+          # and their URLs logged, but this job does not wait on them (~10-21min
+          # of the run). main-ci-failure-issue.yml files a tracking issue when
+          # a completed main run fails, so nothing is lost by not watching here.
+          dispatch_only() {
+            local workflow="$1" ref="$2" started run_id=""
+            started=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            retry gh workflow run "$workflow" --repo "$GITHUB_REPOSITORY" --ref "$ref" || return 1
+            for _ in $(seq 1 6); do
+              sleep 10
+              run_id=$(retry gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --branch "$ref" \
+                --event workflow_dispatch --created ">=$started" --json databaseId --jq '.[0].databaseId // empty' || true)
+              [ -n "$run_id" ] && break
+            done
+            if [ -n "$run_id" ]; then
+              echo "post-merge $workflow run for $ref: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "post-merge $workflow dispatch for $ref was accepted but the run was not observed" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          }
+          for wf in ci.yml workflow-lint.yml; do
+            dispatch_only "$wf" main || true
+          done
+          echo "::notice::post-merge main verification delegated to the main-ci-failure-issue workflow; dispatched ci.yml and workflow-lint.yml without waiting"
