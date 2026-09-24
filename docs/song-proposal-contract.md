@@ -20,7 +20,7 @@ all derived from it deterministically.
   "mode": "chronicle",
   "language": "en",
   "sources": [
-    {"kind": "conversation_summary", "ref": "out/bard/red-pipeline/context.md", "sha256": "..."},
+    {"kind": "conversation_summary", "ref": "songs/red-pipeline/context.md", "sha256": "..."},
     {"kind": "git_log", "ref": "HEAD~20..HEAD"}
   ],
   "rationale": "Why this key, mode, meter and imagery fit the story.",

@@ -7,7 +7,7 @@
   "sources": [
     {
       "kind": "conversation_summary",
-      "ref": "out/bard/night-build/context.md"
+      "ref": "songs/night-build/context.md"
     }
   ],
   "rationale": "Aマイナーと3/4のワルツは夜通しのビルドとの戦いの物語に合う。メリスマと休符を節目に置き、最後は主音で休ませる。",

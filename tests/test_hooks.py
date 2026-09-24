@@ -47,8 +47,8 @@ def _run_hook(working_dir: Path) -> subprocess.CompletedProcess[str]:
 
 
 def test_report_song_status_rendered_and_unrendered(tmp_path: Path) -> None:
-    rendered = tmp_path / "out" / "bard" / "done-ja"
-    unrendered = tmp_path / "out" / "bard" / "pending-en"
+    rendered = tmp_path / "songs" / "done-ja"
+    unrendered = tmp_path / "songs" / "pending-en"
     _write_proposal(rendered / "song.proposal.json")
     _write_provenance(rendered)
     _write_proposal(unrendered / "song.proposal.json")
@@ -67,11 +67,11 @@ def test_report_song_status_none(tmp_path: Path) -> None:
     result = _run_hook(tmp_path)
 
     assert result.returncode == 0
-    assert "No out/bard directory" in json.loads(result.stdout)["additionalContext"]
+    assert "No songs directory" in json.loads(result.stdout)["additionalContext"]
 
 
-def test_report_song_status_empty_out_bard(tmp_path: Path) -> None:
-    (tmp_path / "out" / "bard").mkdir(parents=True)
+def test_report_song_status_empty_songs(tmp_path: Path) -> None:
+    (tmp_path / "songs").mkdir(parents=True)
 
     result = _run_hook(tmp_path)
 
@@ -87,7 +87,7 @@ def test_report_song_status_missing_working_dir(tmp_path: Path) -> None:
 
 
 def test_report_song_status_malformed_proposal(tmp_path: Path) -> None:
-    proposal = tmp_path / "out" / "bard" / "bad-ja" / "song.proposal.json"
+    proposal = tmp_path / "songs" / "bad-ja" / "song.proposal.json"
     proposal.parent.mkdir(parents=True)
     proposal.write_text("{not-json", encoding="utf-8")
 
@@ -98,7 +98,7 @@ def test_report_song_status_malformed_proposal(tmp_path: Path) -> None:
 
 
 def test_report_song_status_malformed_provenance(tmp_path: Path) -> None:
-    out_dir = tmp_path / "out" / "bard" / "odd-en"
+    out_dir = tmp_path / "songs" / "odd-en"
     _write_proposal(out_dir / "song.proposal.json")
     (out_dir / "song.provenance.json").write_text(
         json.dumps({"artifact_kind": "something_else"}),

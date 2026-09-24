@@ -7,7 +7,7 @@
   "sources": [
     {
       "kind": "conversation_summary",
-      "ref": "out/bard/red-pipeline/context.md",
+      "ref": "songs/red-pipeline/context.md",
       "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     },
     {

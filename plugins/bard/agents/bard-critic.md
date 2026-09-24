@@ -1,6 +1,6 @@
 ---
 name: bard-critic
-description: USE THIS when a song proposal from the bard needs a second opinion on singability, prosody, imagery, mode fit, factual grounding and originality risks. Returns findings only; never rewrites the song. <example>Review out/bard/red-pipeline/song.proposal.json before we deliver it.</example> <example>この歌の歌いやすさと独創性を批評して。</example>
+description: USE THIS when a song proposal from the bard needs a second opinion on singability, prosody, imagery, mode fit, factual grounding and originality risks. Returns findings only; never rewrites the song. <example>Review songs/red-pipeline/song.proposal.json before we deliver it.</example> <example>この歌の歌いやすさと独創性を批評して。</example>
 model: inherit
 tools:
   - terminal

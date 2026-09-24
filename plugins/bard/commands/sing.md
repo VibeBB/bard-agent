@@ -24,7 +24,7 @@ and do not go silent mid-run.
 
    ```text
    モード: <mode> / 言語: <ja|en> / 題材: <one line>
-   出力: out/bard/<slug>/
+   出力: songs/<slug>/
    実行経路: task sub-agent | fallback（taskなし）
    ```
 
@@ -38,12 +38,12 @@ and do not go silent mid-run.
    and run its Stages yourself (songs handled inside the parent
    conversation were confirmed in real runs to be shorter and weaker).
    `fallback（taskなし）` may only be written when `task` is absent.
-3. Create `out/bard/<slug>/`. `<slug>` is a short lowercase-and-hyphen
+3. Create `songs/<slug>/`. `<slug>` is a short lowercase-and-hyphen
    name derived from the subject, suffixed with the language (e.g.
    `welcome-developer-ja`). If that directory already exists and is not
    empty, use `<slug>-2`, `<slug>-3`, … instead. Never delete or overwrite
-   existing files under `out/bard/`.
-4. Write `out/bard/<slug>/context.md` (in the conversation language,
+   existing files under `songs/`.
+4. Write `songs/<slug>/context.md` (in the conversation language,
    300..1500 characters). Tag each item's source with `[会話]` `[git]`
    `[file:<path>]` `[依頼]`. Do not write anything not present in the
    conversation:
@@ -68,8 +68,8 @@ and do not go silent mid-run.
    terminal rejects the heredoc as multiple commands, use
    `printf '%s\n' '<line>' '<line>' > <path>`. Never restart the stage
    from the beginning. Verify 300..1500 characters with
-   `wc -m out/bard/<slug>/context.md`, and verify each item is tagged with
-   `grep -c '\[会話\]\|\[git\]\|\[file:\|\[依頼\]' out/bard/<slug>/context.md`
+   `wc -m songs/<slug>/context.md`, and verify each item is tagged with
+   `grep -c '\[会話\]\|\[git\]\|\[file:\|\[依頼\]' songs/<slug>/context.md`
    returning at least 1. If too long, shorten the chronological items
    without dropping the emotional beats or the word lists, and rewrite
    until both checks pass before calling `task`.
@@ -78,11 +78,11 @@ and do not go silent mid-run.
    ```text
    task(subagent_type="bard",
         description="Compose a song about this session",
-        prompt="Mode: <mode>. Language: <ja|en>. Output directory: out/bard/<slug>/. Read out/bard/<slug>/context.md first, then the workspace. Subject: <subject>.")
+        prompt="Mode: <mode>. Language: <ja|en>. Output directory: songs/<slug>/. Read songs/<slug>/context.md first, then the workspace. Subject: <subject>.")
    ```
 
    If `task` returns an iteration-limit/timeout error, run
-   `ls out/bard/<slug>/` and immediately call `task` again with the same
+   `ls songs/<slug>/` and immediately call `task` again with the same
    `subagent_type="bard"`, appending to the prompt:
    `Resume: the following stage files already exist: <list>. Continue from
    the first missing stage; do not rewrite existing files.` Do this at
@@ -104,7 +104,7 @@ and do not go silent mid-run.
    `$OPENHANDS_PROJECT_DIR/plugins/bard`,
    `$HOME/.openhands/plugins/installed/bard`.
 6. When you receive bard's report, display it in this order:
-   First run `ls -l --time-style=full-iso out/bard/<slug>/` and confirm
+   First run `ls -l --time-style=full-iso songs/<slug>/` and confirm
    that `notes.md`, `story.md`, `lyrics.md`, `plan.md`,
    `song.proposal.json`, `song.md`, `song.abc`, `song.mid`, `song.mml`,
    `song.provenance.json`, and `critic.md` are all present. If any are
@@ -123,7 +123,7 @@ and do not go silent mid-run.
    1. Title, mode, language, key/meter/tempo
    2. The complete lyrics — one Markdown line per lyric line (trailing
       hard break or a code block); do not collapse them into one paragraph
-   3. `Files:` `out/bard/<slug>/song.md` (chord sheet and ABC score),
+   3. `Files:` `songs/<slug>/song.md` (chord sheet and ABC score),
       `song.mid`, `song.mml`, `song.provenance.json`, `critic.md`
    4. `Critic:` applied findings and declined findings (one line each)
    5. The last line of the message must be exactly one of these literal
