@@ -23,4 +23,5 @@
 | [0006](adr/ADR-0006-oracle-consult-tools-not-adopted.md) | `ask_oracle` / `tom_consult` not adopted |
 | [0007](adr/ADR-0007-svg-score-rendering.md) | score.png rendering via SVG + `rsvg-convert` |
 | [0008](adr/ADR-0008-score-tools-docker-image.md) | Score-render toolchain distributed as a pinned container image |
-| [0009](adr/ADR-0009-score-review-vision-contract.md) | `score-review.json` adopts the shared `vision_review` record contract |
+| [0009](adr/ADR-0009-docker-only-score-render.md) | Docker-only score rendering (image is the only render path) |
+| [0010](adr/ADR-0010-score-review-vision-contract.md) | `score-review.json` adopts the shared `vision_review` record contract |

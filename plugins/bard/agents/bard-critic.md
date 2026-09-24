@@ -1,7 +1,7 @@
 ---
 name: bard-critic
-description: USE THIS when a song proposal from the bard needs a second opinion on singability, prosody, imagery, mode fit, factual grounding and originality risks. Returns findings only; never rewrites the song. <example>Review out/bard/red-pipeline/song.proposal.json before we deliver it.</example> <example>この歌の歌いやすさと独創性を批評して。</example>
-model: inherit
+description: USE THIS when a song proposal from the bard needs a second opinion on singability, prosody, imagery, mode fit, factual grounding and originality risks. Returns findings only; never rewrites the song. <example>Review songs/red-pipeline/song.proposal.json before we deliver it.</example> <example>この歌の歌いやすさと独創性を批評して。</example>
+model: vibebb-review
 tools:
   - terminal
   - grep
@@ -15,6 +15,11 @@ hooks:
         - type: command
           name: protect-song-artifacts
           command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/protect_song_artifacts.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || { echo "bard plugin root unresolved" >&2; exit 2; }; exec python3 "$p/hooks/scripts/protect_song_artifacts.py"'
+    - matcher: terminal
+      hooks:
+        - type: command
+          name: safety-rail
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/safety_rail.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/safety_rail.py"'
 permission_mode: never_confirm
 ---
 

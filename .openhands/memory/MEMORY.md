@@ -1,0 +1,5 @@
+- The proposal JSON (`docs/song-proposal-contract.md`) is the sole source of truth for a song; ABC/MIDI/MML are deterministic projections — regenerate, never hand-edit.
+- bard and bard-critic never judge work pass/fail; a song is an observation only.
+- Originality contract: no quoted/adapted lyrics or melodies, no real-artist imitation targets; render only when every `originality` flag is true.
+- Never put API keys, tokens, or secrets in logs, inputs, or commits.
+- Sub-agents resolve `model: vibebb-author`/`vibebb-review` from `~/.openhands/profiles/`; create those profiles before invoking `task` agents.

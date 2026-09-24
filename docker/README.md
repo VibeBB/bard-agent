@@ -1,18 +1,19 @@
 # bard-tools image
 
-`bard-tools.Dockerfile` packages the optional score-render toolchain —
-`abcm2ps`, `abcmidi`, `rsvg-convert`, and `fonts-ipafont` — for hosts where
-installing them is inconvenient (e.g. an OpenHands runtime). The image is
-published to `ghcr.io/vibebb/bard-tools` and consumed by
-`plugins/bard/skills/bard-render/scripts/render_score_png.py`: when
-`abcm2ps`/`rsvg-convert` are not on `PATH` and docker is, the script pulls the
-digest-pinned image recorded in
+`bard-tools.Dockerfile` packages the score-render toolchain — `abcm2ps`,
+`abcmidi`, `rsvg-convert`, and `fonts-ipafont` — as the single execution
+environment for `score.png`. The image is published to
+`ghcr.io/vibebb/bard-tools` and consumed by
+`plugins/bard/skills/bard-render/scripts/render_score_png.py`: the script
+pulls the digest-pinned image recorded in
 [`plugins/bard/skills/bard-render/tools-image.json`](../plugins/bard/skills/bard-render/tools-image.json)
-and runs the same render pipeline inside the container with `--network none`
-and a read-only root filesystem. The song directory is the only bind mount.
+and runs the render pipeline inside the container with `--network none` and
+a read-only root filesystem. The song directory is the only bind mount. The
+host needs nothing but docker — host installs of `abcm2ps`/`rsvg-convert`
+are never consulted.
 
 An empty `digest` in `tools-image.json` means no published image exists yet;
-the fallback then stays inert and the script reports the tools as missing.
+the render then stays inert and the script reports the tools as missing.
 
 ## Publishing
 

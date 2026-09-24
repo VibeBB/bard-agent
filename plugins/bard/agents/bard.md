@@ -1,7 +1,7 @@
 ---
 name: bard
 description: USE THIS when someone asks for a song, ballad, lyrics, melody, jingle, chant, lament or minstrel's tale about the work in this workspace, a conversation, or another agent's deeds. Composes original lyrics and melodies and renders them as ABC, MIDI and MML through the bard-render Skill. <example>Write a ballad about how we fixed the flaky CI today.</example> <example>今日のリファクタリングを叙事詩にして。</example> <example>Sing a short victory jingle for the release.</example> <example>このリポジトリの由来を伝承（lore）として歌って。</example>
-model: inherit
+model: vibebb-author
 tools:
   - terminal
   - file_editor
@@ -18,6 +18,11 @@ hooks:
         - type: command
           name: protect-song-artifacts
           command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/protect_song_artifacts.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || { echo "bard plugin root unresolved" >&2; exit 2; }; exec python3 "$p/hooks/scripts/protect_song_artifacts.py"'
+    - matcher: terminal
+      hooks:
+        - type: command
+          name: safety-rail
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/safety_rail.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/safety_rail.py"'
   post_tool_use:
     - matcher: inspect_image_with_vision
       hooks:
@@ -74,7 +79,7 @@ Tool rules that cost real minutes when ignored:
 
 ## Stage 1 — Gather (writes `notes.md`)
 
-1. The prompt names an output directory (default `out/bard/<slug>/`) and usually a
+1. The prompt names an output directory (default `songs/<slug>/`) and usually a
    `context.md` written by the parent agent. Read it first; it is the parent's summary of the
    conversation: events, roles, emotional arc, wanted and unwanted words.
 2. Read the workspace yourself: `git --no-pager log --oneline -n 30`,

@@ -32,7 +32,7 @@ MIDI, and MML.
 | `lore` | Tell the design history preserved in a README or ADR as lore |
 
 Lyrics follow the language of the conversation (Japanese or English). Outputs
-are written to `out/bard/<slug>/`:
+are written to `songs/<slug>/`:
 
 - `song.md` — one-page Agent Canvas preview (lyrics, compact chord lines, and
   the complete ABC score)
@@ -46,8 +46,8 @@ are written to `out/bard/<slug>/`:
 - `context.md` / `critic.md` — the parent's conversation summary and the
   critic's observations and disposition
 - `score.png` / `score-review.json` — optional visual check output (advisory;
-  only when `abcm2ps` + `rsvg-convert` are on `PATH` or the pinned
-  `bard-tools` docker image is available — see [docker/README.md](docker/README.md))
+  rendered inside the pinned `bard-tools` docker image when docker and the
+  image pin are available — see [docker/README.md](docker/README.md))
 
 The proposal contract is schema 0.3. Repeated sections can use `melody_from`
 to copy chords and melody from an earlier section, keeping proposal JSON short.
@@ -133,13 +133,13 @@ PluginSource("github:VibeBB/bard-agent", ref="v1.0.0", repo_path="plugins/bard")
    happened in this conversation”. Lyrics use the language of the argument or
    conversation (`ja`/`en`).
 3. The parent agent summarizes the conversation in
-   `out/bard/<slug>/context.md`. bard reads the workspace (`git log`, README,
+   `songs/<slug>/context.md`. bard reads the workspace (`git log`, README,
    and ADRs), writes the song, and validates and renders it with
    `render_song.py`. Completion usually takes 10–15 minutes in practice,
    depending on the LLM and workspace size.
 4. When complete, the conversation displays the title, mode, key, time
    signature, tempo, full lyrics, and a list of output files. Outputs are in
-   `out/bard/<slug>/`; open them from **Show panel** in the upper right or read
+   `songs/<slug>/`; open them from **Show panel** in the upper right or read
    `song.md` in Markdown preview. Play `song.mid` with any MIDI player and
    render or play `song.abc` with an ABC tool such as abcjs.
 
@@ -183,7 +183,7 @@ Try the renderer directly:
 
 ```bash
 uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
-    --proposal tests/fixtures/valid_en.json --out-dir out/bard/example
+    --proposal tests/fixtures/valid_en.json --out-dir songs/example
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contributor setup and
@@ -217,7 +217,7 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 | `inspire` | 次の一歩を鼓舞する短い歌 |
 | `lore` | READMEやADRに残る設計の由来を伝承として |
 
-歌詞の言語は会話に合わせて日本語または英語。出力は`out/bard/<slug>/`に
+歌詞の言語は会話に合わせて日本語または英語。出力は`songs/<slug>/`に
 
 - `song.md` — Agent Canvasのpreviewで読む一枚（歌詞・コンパクトなコード行・ABC譜全文）
 - `song.abc` — ABC 2.1
@@ -227,8 +227,8 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 - `notes.md` / `story.md` / `lyrics.md` / `plan.md` — 作詞過程の中間ファイル（stage別）
 - `context.md` / `critic.md` — 親が書いた会話の要約と、critic の所見・採否
 - `score.png` / `score-review.json` — 任意の譜面目視チェック出力（advisory。
-  `abcm2ps` + `rsvg-convert` が PATH 上にあるか、digest 固定の `bard-tools`
-  docker image が利用できる場合のみ — [docker/README.md](docker/README.md) 参照）
+  digest 固定の `bard-tools` docker image 内でレンダリングされます。docker と
+  image pin が利用できる場合のみ — [docker/README.md](docker/README.md) 参照）
 
 提案契約はschema 0.3。反復するセクションは`melody_from`で前のセクションのコードと
 メロディを複製できるので、提案JSONが短くなります。検証だけしたいときは`--check`を
@@ -300,11 +300,11 @@ GUIを使わない場合は、プロジェクト直下に `plugins/bard` を置�
 
    モードを省くと `chronicle`、題材を省くと「この会話で起きたこと」になります。歌詞の言語は
    引数か会話の言語（`ja`/`en`）に合わせます。
-3. 親エージェントが会話を `out/bard/<slug>/context.md` に要約し、bard が workspace（`git log`、README、
+3. 親エージェントが会話を `songs/<slug>/context.md` に要約し、bard が workspace（`git log`、README、
    ADR）を読んで作詞作曲、`render_song.py` で検証・描画します。実機では完了までおおむね 10〜15 分
    （LLMとworkspaceの規模に依存）でした。
 4. 完了すると会話に題名・モード・調・拍子・テンポ・歌詞全文と、書き出したファイルの一覧が表示されます。
-   成果物はワークスペース内の `out/bard/<slug>/` にあり、右上の **パネルを表示** からファイルを
+   成果物はワークスペース内の `songs/<slug>/` にあり、右上の **パネルを表示** からファイルを
    開くか、`song.md` を Markdown preview で読みます。`song.mid` は任意のMIDIプレイヤー、`song.abc` は
    abcjs 等の ABC 描画ツールで再生・表示できます。
 
@@ -346,7 +346,7 @@ uv run pytest -q
 
 ```bash
 uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
-    --proposal tests/fixtures/valid_en.json --out-dir out/bard/example
+    --proposal tests/fixtures/valid_en.json --out-dir songs/example
 ```
 
 貢献者向けのセットアップは [CONTRIBUTING.md](CONTRIBUTING.md)、作業契約は

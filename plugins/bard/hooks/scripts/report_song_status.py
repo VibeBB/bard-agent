@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Report song-artifact render status when an agent stops.
 
-Reads the stop-hook event on stdin, scans `out/bard/*/song.proposal.json`
+Reads the stop-hook event on stdin, scans `songs/*/song.proposal.json`
 under the working directory, and reports each proposal as rendered (a
 valid `song.provenance.json` exists next to it) or unrendered. Unrendered
 proposals are surfaced so the agent states the render verdict explicitly
@@ -43,7 +43,7 @@ def _is_rendered(out_dir: Path) -> bool:
 
 def _find_proposals(root: Path) -> list[Path]:
     proposals: list[Path] = []
-    search_root = root / "out" / "bard"
+    search_root = root / "songs"
     if not search_root.is_dir():
         return proposals
     for path in search_root.rglob(PROPOSAL_NAME):
@@ -86,10 +86,10 @@ def main() -> int:
                 f"working_dir {working_dir} does not exist; "
                 "cannot scan for song proposals."
             )
-        elif not (working_dir / "out" / "bard").is_dir():
-            context = f"No out/bard directory under {working_dir} (no songs written)."
+        elif not (working_dir / "songs").is_dir():
+            context = f"No songs directory under {working_dir} (no songs written)."
         else:
-            context = f"No song proposals found under {working_dir}/out/bard."
+            context = f"No song proposals found under {working_dir}/songs."
         print(json.dumps({"decision": "allow", "additionalContext": context}))
         return 0
     except Exception as exc:  # noqa: BLE001 - report and fail closed

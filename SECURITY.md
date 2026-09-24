@@ -23,7 +23,7 @@ fix and disclosure with you before publishing details.
 
 bard renders songs from proposal JSON using Python-standard-library-only
 scripts; the optional `score.png` advisory path shells out to `abcm2ps` and
-`rsvg-convert` (from `PATH` or the digest-pinned `bard-tools` image), which
+`rsvg-convert` inside the digest-pinned `bard-tools` image, which
 parse external ABC/SVG data as native code. Do not render untrusted
 proposals where a crafted file could reach other tooling. The plugin adds
 no network listeners.

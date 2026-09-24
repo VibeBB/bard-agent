@@ -65,19 +65,20 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
-      - name: Install ABC tools
+      - name: Pull pinned bard-tools image
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends abcm2ps abcmidi librsvg2-bin fonts-ipafont
+          ref=$(python3 -c \
+            "import json; d = json.load(open('plugins/bard/skills/bard-render/tools-image.json', encoding='utf-8')); print(d['image'] + '@' + d['digest'])")
+          docker pull "$ref"
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
           cache-suffix: independent-check
       - name: Sync dependencies
         run: uv sync --locked
-      - name: abcm2ps tests
+      - name: abcm2ps tests (inside pinned image)
         env:
-          BARD_REQUIRE_ABCM2PS: "1"
+          BARD_REQUIRE_DOCKER: "1"
         run: uv run pytest -q -k abcm2ps -p no:cacheprovider -rs
       - name: Render sample scores
         run: |

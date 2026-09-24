@@ -20,7 +20,7 @@ all derived from it deterministically.
   "mode": "chronicle",
   "language": "en",
   "sources": [
-    {"kind": "conversation_summary", "ref": "out/bard/red-pipeline/context.md", "sha256": "..."},
+    {"kind": "conversation_summary", "ref": "songs/red-pipeline/context.md", "sha256": "..."},
     {"kind": "git_log", "ref": "HEAD~20..HEAD"}
   ],
   "rationale": "Why this key, mode, meter and imagery fit the story.",
@@ -178,8 +178,8 @@ All text outputs use `encoding="utf-8"` with `\n` newlines.
 
 | Output | Contents |
 | --- | --- |
-| `score.png` | A score image rendered by `scripts/render_score_png.py` from `song.abc` via `abcm2ps` (`-g`, SVG) + `rsvg-convert`. A post-artifact for human review and vision inspection; part of neither the deterministic render outputs nor the read-back checks. Skipped when `abcm2ps`/`rsvg-convert` are absent. The SVG path emits every character as a UTF-8 `<text>` element so no glyphs are dropped at render time (ADR-0007). Non-Latin scripts such as Japanese need a suitable font (e.g. fonts-ipafont); without one, glyphs render as substitute boxes rather than disappearing. Lyric content is judged on `lyrics.md` |
-| `score-review.json` | `artifact_kind: bard_score_review`, `authority: none`. Observations from a vision-capable model viewing `score.png` through `file_editor view`, written in the shared `vision_review` record contract (`tool: vision_review`, `stage: review`, `status: ok\|error\|not_applicable`, `summary`, `artifacts`, and — when the image was actually inspected — a typed `detail` with `image_path`, `image_sha256`, `model`, `checklist: score_engraving`, `findings`), plus `checked_at` (ADR-0009). An observational record with no pass/fail authority over the proposal |
+| `score.png` | A score image rendered by `scripts/render_score_png.py` from `song.abc` via `abcm2ps` (`-g`, SVG) + `rsvg-convert` inside the digest-pinned `bard-tools` image (ADR-0008, ADR-0009). A post-artifact for human review and vision inspection; part of neither the deterministic render outputs nor the read-back checks. Skipped when docker or a usable image pin is absent. The SVG path emits every character as a UTF-8 `<text>` element so no glyphs are dropped at render time (ADR-0007); the image bundles fonts-ipafont so Japanese lyrics render as glyphs rather than substitute boxes. Lyric content is judged on `lyrics.md` |
+| `score-review.json` | `artifact_kind: bard_score_review`, `authority: none`. Observations from a vision-capable model viewing `score.png` through `file_editor view`, written in the shared `vision_review` record contract (`tool: vision_review`, `stage: review`, `status: ok\|error\|not_applicable`, `summary`, `artifacts`, and — when the image was actually inspected — a typed `detail` with `image_path`, `image_sha256`, `model`, `checklist: score_engraving`, `findings`), plus `checked_at` (ADR-0010). An observational record with no pass/fail authority over the proposal |
 | `song.lint.json` | `artifact_kind: score_lint`, `authority: none`. Advisory report emitted by `scripts/lint_score.py`: residual melody/accompaniment clash findings parsed from the emitted `song.mid`, the deterministic re-voicing substitutions and drops applied per chord event, and note counts checked. A review aid with no pass/fail authority; `verdict: fail` means only that the lint itself could not run |
 
 ## Read-back checks (fail-closed)
