@@ -26,7 +26,7 @@ Python 3.12+, standard library only.
 
 Usage::
 
-    python3 render_score_png.py --abc out/bard/<slug>/song.abc [--out-dir DIR]
+    python3 render_score_png.py --abc songs/<slug>/song.abc [--out-dir DIR]
     python3 render_score_png.py --abc song.abc --json
 
 Exit codes: ``0`` rendered; ``3`` input/output I/O error; ``4`` ``abcm2ps`` or

@@ -74,7 +74,7 @@ Tool rules that cost real minutes when ignored:
 
 ## Stage 1 — Gather (writes `notes.md`)
 
-1. The prompt names an output directory (default `out/bard/<slug>/`) and usually a
+1. The prompt names an output directory (default `songs/<slug>/`) and usually a
    `context.md` written by the parent agent. Read it first; it is the parent's summary of the
    conversation: events, roles, emotional arc, wanted and unwanted words.
 2. Read the workspace yourself: `git --no-pager log --oneline -n 30`,
