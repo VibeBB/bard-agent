@@ -77,3 +77,34 @@ SHA, the intended version is installed.
 ```bash
 curl -sS -H "X-Session-API-Key: $KEY" http://127.0.0.1:8000/api/plugins/installed
 ```
+
+## OpenHands runtime surfaces
+
+Runtime policy surfaces that the plugin declares but the host executes:
+
+- `permission_mode: never_confirm` on bard and bard-critic — correct for a
+  read-only creative sub-agent whose only write path is `out/bard/*` under
+  the proposal contract. (For completeness: the SDK's task path never
+  attaches a `security_analyzer` to the child conversation, so
+  `confirm_risky` would see every action as `UNKNOWN` and auto-resume
+  anyway — zero gating either way.)
+- `model:` resolves through `LLMProfileStore` (`~/.openhands/profiles/`):
+  `vibebb-author` for bard, `vibebb-review` for bard-critic. A missing
+  profile raises `ValueError` at task spawn — create the profiles (canvas
+  LLM settings or `LLMProfileStore.save`) before invoking the agents. To
+  fall back to the conversation model, set `model: inherit` locally.
+- Secrets: bard declares no MCP servers; if one is added later,
+  `${VAR}` / `${VAR:-default}` in `mcp_config` expands through the
+  conversation `SecretRegistry` before env, and registry values reach
+  bash commands that name the key.
+- The `safety-rail` `pre_tool_use` hook (`hooks/scripts/safety_rail.py`)
+  denies a deterministic denylist on terminal commands: root/home `rm
+  -rf`, block-device writes, power commands, and the git operations the
+  work contract bans. Advisory depth, not a security analyzer — it passes
+  everything it does not positively recognize.
+- `.openhands/memory/MEMORY.md` seeds the project-tier persistent memory
+  loaded when the host enables `AgentContext(load_memory)` (canvas
+  "Settings > Agent Context"). The agent maintains the index; keep the
+  seed to durable facts only.
+- `StuckDetector` is on by default for every conversation including task
+  sub-agents; `max_iteration_per_run` remains the repo-side bound.
