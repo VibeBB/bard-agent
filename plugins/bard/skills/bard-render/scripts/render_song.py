@@ -829,6 +829,93 @@ def _chord_events(song: Song) -> list[tuple[Fraction, Fraction, Chord, Section]]
 
 
 # ---------------------------------------------------------------------------
+# accompaniment voicing (shared by MIDI + MML)
+
+# pitch-class offsets vs the melody that read as clashes: a compound
+# semitone above (minor 9th, offset 1) or a major 7th (offset 11).
+_CLASH_OFFSETS = (1, 11)
+
+
+def _melody_pcs_during(song: Song, start: Fraction, end: Fraction) -> set[int]:
+    """Melody pitch classes sounding at any point of [start, end)."""
+    pcs: set[int] = set()
+    for n_start, note, _sec, _line in _melody_events(song):
+        if note.midi is None:
+            continue
+        if n_start < end and n_start + note.beats > start:
+            pcs.add(note.midi % 12)
+    return pcs
+
+
+def _clashes(pc: int, melody_pcs: set[int]) -> bool:
+    return any((m - pc) % 12 in _CLASH_OFFSETS for m in melody_pcs)
+
+
+def _n_chord_voices(song: Song) -> int:
+    return max(
+        3,
+        max(
+            (len(c.tones) for s in song.sections for bar in s.chords for c in bar),
+            default=3,
+        ),
+    )
+
+
+def _accompaniment_slots(
+    song: Song,
+) -> tuple[
+    list[list[int | None]],
+    list[dict[str, Any]],
+]:
+    """Per chord event, the pitch class each voice slot sounds (None = rest).
+
+    Voice 0 is the bass; the rest are upper voices. When a chord tone would
+    clash with the sounding melody (minor-9th / major-7th pitch-class
+    offsets) or duplicate an already-assigned tone, the slot is re-voiced
+    deterministically: substitute the first non-clashing, not-yet-used
+    chord tone; drop the voice when no substitute works.
+    """
+    n_voices = _n_chord_voices(song)
+    slots: list[list[int | None]] = []
+    adjustments: list[dict[str, Any]] = []
+    for start, dur, chord, sec in _chord_events(song):
+        melody_pcs = _melody_pcs_during(song, start, start + dur)
+        defaults: list[int | None] = [chord.root_pc, *chord.tones[1:]]
+        defaults += [None] * (n_voices - len(defaults))
+        event: list[int | None] = []
+        used: set[int] = set()
+        for vi, pc in enumerate(defaults):
+            if pc is not None and (pc in used or _clashes(pc, melody_pcs)):
+                substitute = next(
+                    (
+                        cand
+                        for cand in chord.tones
+                        if cand not in used and not _clashes(cand, melody_pcs)
+                    ),
+                    None,
+                )
+                adj: dict[str, Any] = {
+                    "section": sec.name,
+                    "beat": float(start),
+                    "chord": chord.symbol,
+                    "voice": vi + 1,
+                    "from_pc": pc,
+                }
+                if substitute is None:
+                    adj["action"] = "dropped"
+                else:
+                    adj["action"] = "substituted"
+                    adj["to_pc"] = substitute
+                adjustments.append(adj)
+                pc = substitute
+            event.append(pc)
+            if pc is not None:
+                used.add(pc)
+        slots.append(event)
+    return slots, adjustments
+
+
+# ---------------------------------------------------------------------------
 # ABC rendering
 
 ABC_PC_FLAT = ["c", "_d", "d", "_e", "e", "f", "_g", "g", "_a", "a", "_b", "b"]
@@ -1048,10 +1135,17 @@ def render_midi(song: Song) -> bytes:
     accomp: list[tuple[int, bytes]] = [
         (0, bytes([0xC1, song.accompaniment_program])),
     ]
-    for start, dur, chord, _sec in _chord_events(song):
+    slots, _adjustments = _accompaniment_slots(song)
+    for (start, dur, chord, _sec), event_slots in zip(
+        _chord_events(song), slots, strict=True
+    ):
         on = int(start * PPQ)
         off = int((start + dur) * PPQ)
-        pitches = [48 + chord.root_pc] + [60 + pc for pc in chord.tones[1:]]
+        pitches = [
+            (48 if vi == 0 else 60) + pc
+            for vi, pc in enumerate(event_slots[: len(chord.tones)])
+            if pc is not None
+        ]
         for p in pitches:
             accomp.append((on, bytes([0x91, p, 60])))
         for p in pitches:
@@ -1138,21 +1232,16 @@ def render_mml(song: Song) -> str:
     lines.append("@melody")
     lines.append(" ".join(melody.tokens))
 
-    n_chord_voices = max(
-        3,
-        max(
-            (len(c.tones) for s in song.sections for bar in s.chords for c in bar),
-            default=3,
-        ),
-    )
+    n_chord_voices = _n_chord_voices(song)
+    slots, _adjustments = _accompaniment_slots(song)
     voice_events: list[list[tuple[Fraction, str | None, int, Fraction]]] = [
         [] for _ in range(n_chord_voices)
     ]
-    for start, dur, chord, _sec in _chord_events(song):
-        pcs = [chord.root_pc, *chord.tones[1:]]
-        pcs += [None] * (n_chord_voices - len(pcs))
+    for (start, dur, _chord, _sec), event_slots in zip(
+        _chord_events(song), slots, strict=True
+    ):
         for vi in range(n_chord_voices):
-            pc = pcs[vi]
+            pc = event_slots[vi] if vi < len(event_slots) else None
             octave = 3 if vi == 0 else 4
             if pc is None:
                 voice_events[vi].append((start, None, octave, dur))
@@ -1375,6 +1464,158 @@ def parse_midi_counts(data: bytes) -> dict[int, list[int]]:
                 continue
             i += 2
     return counts
+
+
+def _midi_note_spans(data: bytes) -> dict[int, list[tuple[int, int, int]]]:
+    """Parse an SMF and return {channel: [(start_tick, end_tick, pitch)]}."""
+    if len(data) < 14 or data[:4] != b"MThd":
+        raise ProposalError(["lint.midi: missing MThd header"])
+    hlen = struct.unpack(">I", data[4:8])[0]
+    fmt, ntrks = struct.unpack(">HH", data[8:12])
+    if fmt != 1 or ntrks < 2:
+        raise ProposalError([f"lint.midi: bad format {fmt} or track count {ntrks}"])
+    pos = 8 + hlen
+    spans: dict[int, list[tuple[int, int, int]]] = {}
+    for _ in range(ntrks):
+        if pos + 8 > len(data) or data[pos : pos + 4] != b"MTrk":
+            raise ProposalError(["lint.midi: missing MTrk header"])
+        tlen = struct.unpack(">I", data[pos + 4 : pos + 8])[0]
+        if pos + 8 + tlen > len(data):
+            raise ProposalError(["lint.midi: truncated track data"])
+        track = data[pos + 8 : pos + 8 + tlen]
+        pos += 8 + tlen
+        i = 0
+        tick = 0
+        running = 0
+        open_notes: dict[tuple[int, int], int] = {}
+        while i < len(track):
+            delta, i = _read_vlq(track, i)
+            tick += delta
+            if i >= len(track):
+                raise ProposalError(["lint.midi: truncated event"])
+            status = track[i]
+            if status < 0x80:
+                status = running
+            else:
+                i += 1
+                if status < 0xF0:
+                    running = status
+            kind = status & 0xF0
+            ch = status & 0x0F
+            if status == 0xFF:
+                if i >= len(track):
+                    raise ProposalError(["lint.midi: truncated meta event"])
+                i += 1
+                meta_len, i = _read_vlq(track, i)
+                i += meta_len
+                if i > len(track):
+                    raise ProposalError(["lint.midi: truncated meta payload"])
+                continue
+            if status in (0xF0, 0xF7):
+                syx_len, i = _read_vlq(track, i)
+                i += syx_len
+                if i > len(track):
+                    raise ProposalError(["lint.midi: truncated sysex payload"])
+                continue
+            if kind in (0xC0, 0xD0):
+                i += 1
+                continue
+            if i + 1 >= len(track):
+                raise ProposalError(["lint.midi: truncated note event"])
+            if kind == 0x90:
+                pitch, vel = track[i], track[i + 1]
+                i += 2
+                if vel > 0:
+                    open_notes[(ch, pitch)] = tick
+                else:
+                    start = open_notes.pop((ch, pitch), None)
+                    if start is not None:
+                        spans.setdefault(ch, []).append((start, tick, pitch))
+                continue
+            if kind == 0x80:
+                pitch = track[i]
+                i += 2
+                start = open_notes.pop((ch, pitch), None)
+                if start is not None:
+                    spans.setdefault(ch, []).append((start, tick, pitch))
+                continue
+            i += 2
+        for (ch, pitch), start in open_notes.items():
+            spans.setdefault(ch, []).append((start, tick, pitch))
+    return spans
+
+
+def lint_song(song: Song, midi: bytes, *, source: str) -> dict[str, Any]:
+    """Advisory score lint: residual melody/accompaniment clashes on the
+    emitted MIDI plus the deterministic re-voicing adjustments applied.
+
+    Warnings never block a render; verdict fails only when the report
+    itself cannot be produced (callers report that separately)."""
+    spans = _midi_note_spans(midi)
+    melody = spans.get(0, [])
+    accomp = spans.get(1, [])
+    findings: list[dict[str, Any]] = []
+    for m_start, m_end, m_pitch in melody:
+        for a_start, a_end, a_pitch in accomp:
+            if (
+                a_start < m_end
+                and a_end > m_start
+                and (m_pitch - a_pitch) % 12 in _CLASH_OFFSETS
+            ):
+                findings.append(
+                    {
+                        "type": "residual_clash",
+                        "severity": "warning",
+                        "description": (
+                            f"melody pitch {m_pitch} vs accompaniment "
+                            f"{a_pitch} at beat {m_start / PPQ:g}"
+                        ),
+                    }
+                )
+    _, adjustments = _accompaniment_slots(song)
+    substitutions = [
+        {
+            "section": a["section"],
+            "beat": a["beat"],
+            "chord": a["chord"],
+            "voice": a["voice"],
+            "from_pc": a["from_pc"],
+            "to_pc": a["to_pc"],
+        }
+        for a in adjustments
+        if a["action"] == "substituted"
+    ]
+    for a in adjustments:
+        if a["action"] == "dropped":
+            findings.append(
+                {
+                    "type": "voice_dropped",
+                    "severity": "warning",
+                    "description": (
+                        f"{a['section']} beat {a['beat']:g} chord {a['chord']}: "
+                        f"voice {a['voice']} (pc {a['from_pc']}) dropped, "
+                        "every chord tone clashed"
+                    ),
+                }
+            )
+    warnings = sum(1 for f in findings if f["severity"] == "warning")
+    return {
+        "artifact_kind": "score_lint",
+        "authority": "none",
+        "schema_version": "1.0",
+        "kind": "score_lint",
+        "source": source,
+        "verdict": "pass",
+        "errors": 0,
+        "warnings": warnings,
+        "notes_checked": len(melody) + len(accomp),
+        "voicing": {
+            "substituted": len(substitutions),
+            "dropped": len(adjustments) - len(substitutions),
+            "substitutions": substitutions,
+        },
+        "findings": findings,
+    }
 
 
 MML_TOKEN_RE = re.compile(r"(t\d+|o\d+|l\d+\.?|<|>|&|[cdefgab][+-]?\d*\.?|r\d*\.?)")

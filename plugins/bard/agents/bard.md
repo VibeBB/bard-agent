@@ -184,6 +184,20 @@ python3 "<bard plugin root>/skills/bard-render/scripts/render_song.py" \
 Success prints every written path with its sha256. A rejection writes nothing; treat it like
 a failed `--check`.
 
+Then run the advisory score lint:
+
+```bash
+python3 "<bard plugin root>/skills/bard-render/scripts/lint_score.py" \
+    --proposal <out dir>/song.proposal.json --mid <out dir>/song.mid \
+    --out <out dir>/song.lint.json
+```
+
+`voice_dropped` and `voicing.substituted` entries are observations about how the deterministic
+clash-avoidance re-voiced the accompaniment — they need no action. A `residual_clash` warning
+means a minor-9th or major-7th clash survived in the emitted MIDI and is worth reviewing the
+bar's chord or melody for; never edit `song.mid` by hand. Exit `1` means the lint itself could
+not run — record it and continue; the lint never blocks delivery.
+
 ## Stage 7 — Critic (writes `critic.md`)
 
 Once the render succeeds, ask the critic:
@@ -279,7 +293,7 @@ Reply in the song's language with, in this order:
 2. The full lyrics, one sung line per Markdown line (two trailing spaces or a code block), with
    section headings.
 3. `Files:` the written files (`song.md`, `song.abc`, `song.mid`, `song.mml`,
-   `song.provenance.json`, `critic.md`, and the stage files `notes.md`, `story.md`,
+   `song.provenance.json`, `song.lint.json`, `critic.md`, and the stage files `notes.md`, `story.md`,
    `lyrics.md`, `plan.md`; plus `score.png`/`score-review.json` when the optional
    score check ran). Point the reader at `song.md` for the chord chart and ABC.
 4. `Critic:` findings applied and declined, one line each. Only findings whose fix is in the

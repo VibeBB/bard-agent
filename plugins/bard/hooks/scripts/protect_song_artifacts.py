@@ -1,9 +1,10 @@
 """Reject writes to rendered song artifacts.
 
-song.abc, song.mid, song.mml, song.md, song.provenance.json and score.png are
-projections of the proposal — render_song.py and render_score_png.py are the
-only writers. Editing them by hand breaks the proposal-is-truth invariant;
-they must be re-rendered from the proposal.
+song.abc, song.mid, song.mml, song.md, song.provenance.json, song.lint.json
+and score.png are projections of the proposal — render_song.py,
+lint_score.py and render_score_png.py are the only writers. Editing them by
+hand breaks the proposal-is-truth invariant; they must be re-rendered from
+the proposal.
 
 Only path-bearing arguments decide the verdict: file bodies such as
 file_text/new_str may legitimately mention artifact names, so payload content
@@ -28,6 +29,7 @@ ARTIFACT_NAMES = (
     "song.mml",
     "song.md",
     "song.provenance.json",
+    "song.lint.json",
     "score.png",
 )
 WRITE_TOOLS = {"file_editor", "apply_patch"}
@@ -213,7 +215,8 @@ def main() -> int:
     if _is_artifact_write(payload):
         print(
             "song artifacts (song.abc/.mid/.mml/.md, song.provenance.json,"
-            " score.png) are render projections; regenerate them with"
+            " song.lint.json, score.png) are render projections; regenerate "
+            "them with"
             " render_song.py / render_score_png.py, never edit them directly",
             file=sys.stderr,
         )
