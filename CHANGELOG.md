@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI `independent-check` pulls the pinned image instead of apt-installing the
   ABC tools; the opt-in render test gate is now `BARD_REQUIRE_DOCKER=1`
   (previously `BARD_REQUIRE_ABCM2PS=1`).
+- `score-review.json` now follows the shared `vision_review` record
+  contract (`tool`/`stage`/`status`/`summary`/`artifacts` + typed
+  `detail` with `image_sha256`, `checklist`, and `findings`) while
+  keeping bard's `artifact_kind`/`authority`/`checked_at` envelope
+  fields (ADR-0010). `status: skipped` is now `not_applicable`.
 
 ## [1.1.0] - 2026-09-23
 
