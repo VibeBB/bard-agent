@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `score-review.json` now follows the shared `vision_review` record
+  contract (`tool`/`stage`/`status`/`summary`/`artifacts` + typed
+  `detail` with `image_sha256`, `checklist`, and `findings`) while
+  keeping bard's `artifact_kind`/`authority`/`checked_at` envelope
+  fields (ADR-0009). `status: skipped` is now `not_applicable`.
+
 
 ## [1.1.0] - 2026-09-23
 

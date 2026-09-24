@@ -126,7 +126,8 @@ Exit codes: `0` rendered; `3` I/O error; `4` `abcm2ps`/`rsvg-convert` missing
 and no usable docker fallback (skip — not an error for the song); `5` a tool
 failed. `bard` stage 8 consumes
 this: a vision-capable model inspects `score.png` via `file_editor view` and
-writes the finding to `score-review.json` (`authority: none`).
+writes the finding to `score-review.json` (`authority: none`, shared
+`vision_review` record contract — see ADR-0009).
 
 The SVG stage emits every character as a UTF-8 `<text>` element, so no text is
 dropped at render time. Non-Latin scripts such as Japanese need a covering font

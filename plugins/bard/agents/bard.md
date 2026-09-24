@@ -244,7 +244,7 @@ python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
   subjective dislike of the engraving is not a proposal defect.
   If your model is not vision-capable there is no fallback for `score.png`:
   `inspect_image_with_vision` inspects only images attached to the latest user
-  message, never workspace files, so record `status: "skipped"` with reason
+  message, never workspace files, so record `status: "not_applicable"` with reason
   `model not vision-capable` and continue.
 - Font coverage: the SVG render path keeps every character as UTF-8 text, so
   nothing is dropped silently; when no CJK font is installed the rasterizer
@@ -252,21 +252,46 @@ python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
   mean the environment lacks a font, not that the proposal is wrong — do not
   edit `units` or `reading` to chase them. Judge lyrics coverage from
   `lyrics.md`, not from the image.
-- Exit `4` (tools missing): record `status: "skipped"` with the reported reason
+- Exit `4` (tools missing): record `status: "not_applicable"` with the reported reason
   and continue — the score check never blocks delivery.
 - Exit `3` or `5`: record `status: "error"` with the reported reason and
   continue.
 
-Then write `<out dir>/score-review.json`, `authority: none`, as one JSON object:
+Then write `<out dir>/score-review.json`, `authority: none`, as one JSON object
+using the shared `vision_review` record contract (ADR-0009):
 
 ```json
 {"artifact_kind": "bard_score_review", "authority": "none",
- "status": "inspected | skipped | error",
- "tool": "file_editor view | none", "question": "what you asked or would check",
- "response": "one-paragraph summary of the visual findings, or null",
- "score_png_sha256": "<from render_score_png --json output, or null>",
+ "tool": "vision_review", "stage": "review",
+ "status": "ok | error | not_applicable",
+ "summary": "inspected: <one-line outcome> | skipped: <reason> | error: <reason>",
+ "artifacts": ["<out dir>/score.png"],
+ "detail": {
+   "image_path": "<out dir>/score.png",
+   "image_sha256": "<from render_score_png --json output>",
+   "model": "<your model id, or \"none\">",
+   "checklist": "score_engraving",
+   "findings": [
+     {"category": "lyric_collision", "severity": "warning",
+      "note": "chorus bar 3: two syllables overlap", "bbox": [x, y, w, h]}
+   ]
+ },
  "checked_at": "<UTC ISO 8601>"}
 ```
+
+- `status` is `ok` when the score was inspected, `not_applicable` when the
+  check was skipped (tools missing or model not vision-capable), `error` on a
+  render or inspection failure. Put the reason in `summary`.
+- `detail` appears only when `score.png` was actually produced and inspected;
+  skip the key entirely for `not_applicable`/`error`. `findings` may be empty
+  for a clean score. Finding categories: `lyric_collision`,
+  `orphaned_syllable`, `cramped_chord_label`, `malformed_barline`,
+  `font_fallback_tofu`, `other`; `bbox` is optional normalized
+  `[x, y, w, h]`. Keep `image_sha256` lowercase hex (64 chars).
+- `artifact_kind`/`authority`/`checked_at` are bard's envelope fields; the
+  `tool`/`stage`/`status`/`summary`/`artifacts`/`detail` block matches the
+  `vision_review` contract shared with the other agents, so a common parser
+  can validate `detail`.
 
 This artifact is an observation, exactly like `critic.md`: it has no pass/fail
 authority over the proposal and never feeds back into the work the song
