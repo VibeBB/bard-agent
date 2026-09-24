@@ -1,4 +1,4 @@
-# ADR-0009: score-review.json adopts the shared vision_review record contract
+# ADR-0010: score-review.json adopts the shared vision_review record contract
 
 ## Status
 
@@ -32,6 +32,9 @@ shared contract:
   `lyric_collision`, `orphaned_syllable`, `cramped_chord_label`,
   `malformed_barline`, `font_fallback_tofu`, `other`.
 - `detail` is omitted entirely for `not_applicable`/`error` statuses.
+
+(Originally drafted as ADR-0009; renumbered — ADR-0009 is the docker-only
+score-render decision.)
 
 ## Consequences
 

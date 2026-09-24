@@ -230,11 +230,11 @@ not deliver the song.
 
 ## Stage 8 — Score visual check (writes `score.png`, `score-review.json`; advisory, optional)
 
-The critic reads text only; it never sees the engraved score. When the score-render
-tools are available — on `PATH` (`abcm2ps` and `rsvg-convert`; Japanese also needs a
-CJK font such as fonts-ipafont) or through the pinned `bard-tools` docker image
-(when docker is on `PATH` and `tools-image.json` carries a digest) — render the
-score image and inspect it once:
+The critic reads text only; it never sees the engraved score. When the
+pinned `bard-tools` docker image is usable (docker on `PATH` and
+`tools-image.json` carrying a digest — the image bundles `abcm2ps`,
+`rsvg-convert`, and the IPA font), render the score image and inspect it
+once:
 
 ```bash
 python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
@@ -249,21 +249,22 @@ python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
   subjective dislike of the engraving is not a proposal defect.
   If your model is not vision-capable there is no fallback for `score.png`:
   `inspect_image_with_vision` inspects only images attached to the latest user
-  message, never workspace files, so record `status: "not_applicable"` with reason
-  `model not vision-capable` and continue.
+  message, never workspace files, so record `status: "not_applicable"` with
+  reason `model not vision-capable` and continue.
 - Font coverage: the SVG render path keeps every character as UTF-8 text, so
   nothing is dropped silently; when no CJK font is installed the rasterizer
   draws fallback boxes instead. Fallback boxes or tofu where lyrics should be
   mean the environment lacks a font, not that the proposal is wrong — do not
   edit `units` or `reading` to chase them. Judge lyrics coverage from
   `lyrics.md`, not from the image.
-- Exit `4` (tools missing): record `status: "not_applicable"` with the reported reason
-  and continue — the score check never blocks delivery.
+- Exit `4` (docker missing or no usable pinned image): record
+  `status: "not_applicable"` with the reported reason and continue — the
+  score check never blocks delivery.
 - Exit `3` or `5`: record `status: "error"` with the reported reason and
   continue.
 
 Then write `<out dir>/score-review.json`, `authority: none`, as one JSON object
-using the shared `vision_review` record contract (ADR-0009):
+using the shared `vision_review` record contract (ADR-0010):
 
 ```json
 {"artifact_kind": "bard_score_review", "authority": "none",
