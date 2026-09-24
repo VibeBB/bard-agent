@@ -105,25 +105,24 @@ timestamp in the provenance record.
 ## Optional: score.png for visual review
 
 `scripts/render_score_png.py` turns `song.abc` into `score.png` through `abcm2ps`
-(`-g`, SVG output) + `rsvg-convert` — the same commands CI uses. It is not a
+(`-g`, SVG output) + `rsvg-convert`. It is not a
 deterministic render output: it is post-render advisory material for human and
 vision review, and is never part of the provenance output set.
 
-The tools run on `PATH` when present. When they are missing and docker is on
-`PATH`, the script pulls the digest-pinned `bard-tools` image recorded in
-`tools-image.json` (overridable via `BARD_TOOLS_IMAGE`) and runs the same
-pipeline inside the container — `--network none`, read-only root filesystem,
-the ABC directory mounted read-only — and the result JSON reports
-`renderer: "docker"` with the image ref. An empty `digest` in the pin file
-disables the fallback.
+The pipeline always runs inside the digest-pinned `bard-tools` image recorded
+in `tools-image.json` (overridable via `BARD_TOOLS_IMAGE`), which bundles the
+exact tool versions and the IPA font. The script pulls the image and runs
+`docker run` with `--network none`, a read-only root filesystem, and the ABC
+directory mounted read-only; the result JSON reports the `image` ref. An empty
+`digest` in the pin file or a missing docker disables the render.
 
 ```bash
 python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
     --abc <out dir>/song.abc --json
 ```
 
-Exit codes: `0` rendered; `3` I/O error; `4` `abcm2ps`/`rsvg-convert` missing
-and no usable docker fallback (skip — not an error for the song); `5` a tool
+Exit codes: `0` rendered; `3` I/O error; `4` docker not on PATH or no usable
+pinned image (skip — not an error for the song); `5` a tool
 failed. `bard` stage 8 consumes
 this: a vision-capable model inspects `score.png` via `file_editor view` and
 writes the finding to `score-review.json` (`authority: none`).

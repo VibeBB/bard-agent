@@ -1,26 +1,22 @@
 #!/usr/bin/env python3
-"""Render ``song.abc`` to ``score.png`` via abcm2ps (SVG) and rsvg-convert.
+"""Render ``song.abc`` to ``score.png`` inside the pinned bard-tools image.
 
 Optional post-render step for the bard plugin. ``render_song.py`` stays the
 only deterministic writer of song artifacts; this script only translates its
-``song.abc`` output into a score image through the same external tools the CI
-workflows use (``abcm2ps -g`` then ``rsvg-convert``). It is advisory material
-for human and vision review — the PNG is not part of the provenance output
-set and nothing about it gates the song.
+``song.abc`` output into a score image through ``abcm2ps -g`` then
+``rsvg-convert``, always executed inside the digest-pinned ``bard-tools``
+container image recorded in ``tools-image.json`` next to this directory
+(overridable via ``BARD_TOOLS_IMAGE``). The image bundles the exact tool
+versions and the IPA font covering Japanese lyrics, so the render never
+depends on host packages: the script pulls the image once and runs the
+pipeline with the input and output directories bind-mounted, no network, and
+a read-only root filesystem. Docker itself must be on ``PATH``. The PNG is
+advisory material for human and vision review — it is not part of the
+provenance output set and nothing about it gates the song.
 
 The SVG stage emits every character as a UTF-8 ``<text>`` element, so text is
-never dropped at render time; font coverage is resolved by the rasterizer.
-Non-Latin scripts such as Japanese still need a covering font installed on
-the system (e.g. fonts-ipafont) — without one the glyphs appear as fallback
-boxes instead of being silently removed. This is the same dependency CI
-installs.
-
-When the tools are not on ``PATH`` the script falls back to the digest-pinned
-``bard-tools`` container image recorded in ``tools-image.json`` next to this
-directory (overridable via ``BARD_TOOLS_IMAGE``): it pulls the image once and
-runs the same abcm2ps + rsvg-convert pipeline inside the container with the
-input and output directories bind-mounted, no network, and a read-only root
-filesystem. Docker itself must be on ``PATH`` for the fallback to engage.
+never dropped at render time; the image ships fonts-ipafont so non-Latin
+lyrics render instead of appearing as fallback boxes.
 
 Python 3.12+, standard library only.
 
@@ -29,9 +25,9 @@ Usage::
     python3 render_score_png.py --abc out/bard/<slug>/song.abc [--out-dir DIR]
     python3 render_score_png.py --abc song.abc --json
 
-Exit codes: ``0`` rendered; ``3`` input/output I/O error; ``4`` ``abcm2ps`` or
-``rsvg-convert`` not on PATH and no usable docker fallback; ``5`` an external
-tool failed or produced no PNG.
+Exit codes: ``0`` rendered; ``3`` input/output I/O error; ``4`` docker not on
+PATH or no usable pinned image (score render skipped — not an error for the
+song); ``5`` an external tool failed or produced no PNG.
 """
 
 from __future__ import annotations
@@ -54,8 +50,8 @@ EXIT_TOOL_FAILED = 5
 # used, keeping the score legible in ``file_editor view`` and CI artifacts.
 RSVG_DPI = "150"
 
-# Digest-pinned tools image for the docker fallback; populated by the
-# publish-bard-images workflow's lock-update pull request.
+# Digest-pinned tools image; populated by the publish-bard-images workflow's
+# lock-update pull request.
 PIN_PATH = Path(__file__).resolve().parents[1] / "tools-image.json"
 IMAGE_ENV = "BARD_TOOLS_IMAGE"
 
@@ -102,7 +98,7 @@ def _run(cmd: list[str], tool: str, timeout: int = 120) -> None:
 
 
 def _docker_ref() -> str | None:
-    """Return the pinned ``image@digest`` fallback ref, or None when unset."""
+    """Return the pinned ``image@digest`` ref, or None when unset."""
     override = os.environ.get(IMAGE_ENV, "").strip()
     if override:
         return override
@@ -112,21 +108,17 @@ def _docker_ref() -> str | None:
         data = json.loads(PIN_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise RenderError(
-            f"cannot read docker fallback pin {PIN_PATH}: {exc}", EXIT_TOOL_FAILED
+            f"cannot read tools image pin {PIN_PATH}: {exc}", EXIT_TOOL_FAILED
         ) from exc
     if not isinstance(data, dict):
         raise RenderError(
-            f"docker fallback pin {PIN_PATH} is not a JSON object", EXIT_TOOL_FAILED
+            f"tools image pin {PIN_PATH} is not a JSON object", EXIT_TOOL_FAILED
         )
     image = data.get("image")
     digest = data.get("digest")
     if not image or not digest:
         return None
     return f"{image}@{digest}"
-
-
-def _render_host(abc_path: Path, out_dir: Path) -> None:
-    _run(["abcm2ps", "-g", str(abc_path), "-O", str(out_dir / "score.svg")], "abcm2ps")
 
 
 def _render_container(abc_path: Path, out_dir: Path, ref: str) -> None:
@@ -165,17 +157,13 @@ def render_score_png(abc_path: Path, out_dir: Path) -> dict[str, str]:
     """Render ``abc_path`` to ``out_dir/score.png``; return artifact details."""
     if not abc_path.is_file():
         raise RenderError(f"abc not found: {abc_path}", EXIT_IO)
-    missing = [t for t in ("abcm2ps", "rsvg-convert") if shutil.which(t) is None]
-    ref: str | None = None
-    if missing:
-        ref = _docker_ref()
-        if ref is None:
-            raise RenderError(
-                "not on PATH: "
-                + ", ".join(missing)
-                + "; no pinned docker fallback image (score render skipped)",
-                EXIT_NO_TOOLS,
-            )
+    ref = _docker_ref()
+    if ref is None:
+        raise RenderError(
+            f"no pinned bard-tools image ({PIN_PATH} missing or digest unset; "
+            "score render skipped)",
+            EXIT_NO_TOOLS,
+        )
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -184,41 +172,21 @@ def render_score_png(abc_path: Path, out_dir: Path) -> dict[str, str]:
     png_path = out_dir / "score.png"
     # abcm2ps -g appends a per-tune index (score001.svg, score002.svg, ...);
     # the proposal contract emits a single tune, so the first file is the score.
-    if ref is None:
-        _render_host(abc_path, out_dir)
-    else:
-        _render_container(abc_path, out_dir, ref)
+    _render_container(abc_path, out_dir, ref)
     svg_paths = sorted(out_dir.glob("score*.svg"))
     if not svg_paths:
         raise RenderError("abcm2ps produced no SVG output", EXIT_TOOL_FAILED)
     svg_path = svg_paths[0]
-    if ref is None:
-        _run(
-            [
-                "rsvg-convert",
-                "-d",
-                RSVG_DPI,
-                "-p",
-                RSVG_DPI,
-                str(svg_path),
-                "-o",
-                str(png_path),
-            ],
-            "rsvg-convert",
-        )
 
     if not png_path.is_file() or png_path.stat().st_size == 0:
         raise RenderError("rsvg-convert produced no score.png", EXIT_TOOL_FAILED)
-    result = {
+    return {
         "abc": str(abc_path),
         "score_svg": str(svg_path),
         "score_png": str(png_path),
         "score_png_sha256": _sha256(png_path),
-        "renderer": "docker" if ref is not None else "host",
+        "image": ref,
     }
-    if ref is not None:
-        result["image"] = ref
-    return result
 
 
 def main(argv: list[str] | None = None) -> int:

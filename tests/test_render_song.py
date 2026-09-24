@@ -451,18 +451,59 @@ def test_w_line_en_pieces(
 # ---------------------------------------------------------------------------
 # external ABC tools
 
-_ABCM2PS = shutil.which("abcm2ps")
+_PIN_PATH = (
+    REPO_ROOT / "plugins" / "bard" / "skills" / "bard-render" / "tools-image.json"
+)
+
+
+def _tools_image() -> str | None:
+    override = os.environ.get("BARD_TOOLS_IMAGE", "").strip()
+    if override:
+        return override
+    try:
+        data = json.loads(_PIN_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    image, digest = data.get("image"), data.get("digest")
+    return f"{image}@{digest}" if image and digest else None
+
+
+_DOCKER = shutil.which("docker")
+_IMAGE = _tools_image()
 requires_abcm2ps = pytest.mark.skipif(
-    _ABCM2PS is None and not os.environ.get("BARD_REQUIRE_ABCM2PS"),
-    reason="abcm2ps not installed",
+    _DOCKER is None or _IMAGE is None,
+    reason="docker or the pinned bard-tools image is unavailable",
 )
 
 
 def _abcm2ps_or_fail(tmp_path: Path, abc_path: Path) -> None:
-    if _ABCM2PS is None:
-        pytest.fail("BARD_REQUIRE_ABCM2PS=1 is set but abcm2ps is not on PATH")
+    if _DOCKER is None or _IMAGE is None:
+        pytest.fail(
+            "BARD_REQUIRE_DOCKER=1 is set but docker or the pinned "
+            "bard-tools image is unavailable"
+        )
     proc = subprocess.run(
-        ["abcm2ps", str(abc_path), "-O", str(tmp_path / "song.ps")],
+        [
+            _DOCKER,
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--read-only",
+            "--tmpfs",
+            "/tmp",
+            "-v",
+            f"{abc_path.parent}:/in:ro",
+            "-v",
+            f"{tmp_path}:/work",
+            "-w",
+            "/work",
+            _IMAGE,
+            "abcm2ps",
+            f"/in/{abc_path.name}",
+            "-O",
+            "/work/song.ps",
+        ],
         capture_output=True,
         text=True,
         check=False,

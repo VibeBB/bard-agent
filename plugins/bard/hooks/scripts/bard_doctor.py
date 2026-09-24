@@ -4,10 +4,10 @@
 Resolves the plugin root through the same env-var chain the hooks use
 (`BARD_PLUGIN_ROOT`, `$OPENHANDS_PROJECT_DIR/plugins/bard`,
 `~/.agents/plugins/bard`, `~/.openhands/plugins/installed/bard`), probes for
-the optional score-render tools (`abcm2ps` + `rsvg-convert`, or `docker` for
-the pinned `bard-tools` fallback image), and checks the plugin layout
-(`.plugin/plugin.json`, `agents/`, `skills/`). Findings are reported as
-additional context; the hook is advisory and always exits 0, even when the
+`docker` on `PATH` (the pinned `bard-tools` image renders `score.png`), reads
+the image pin (`skills/bard-render/tools-image.json`), and checks the plugin
+layout (`.plugin/plugin.json`, `agents/`, `skills/`). Findings are reported
+as additional context; the hook is advisory and always exits 0, even when the
 plugin root cannot be resolved or a probe itself fails.
 
 Python standard library only.
@@ -25,7 +25,8 @@ ROOT_ENV = "BARD_PLUGIN_ROOT"
 PROJECT_ENV = "OPENHANDS_PROJECT_DIR"
 SELF_PATH = Path("hooks") / "scripts" / "bard_doctor.py"
 REQUIRED_PATHS = (".plugin/plugin.json", "agents", "skills")
-PROBE_TOOLS = ("abcm2ps", "rsvg-convert", "docker")
+PROBE_TOOLS = ("docker",)
+PIN_REL = Path("skills") / "bard-render" / "tools-image.json"
 
 
 def _candidate_roots() -> list[Path]:
@@ -71,17 +72,20 @@ def _findings(root: Path | None) -> list[str]:
             f"{tool}={'ok' if found[tool] else 'missing'}" for tool in PROBE_TOOLS
         )
     )
-    if not (found["abcm2ps"] and found["rsvg-convert"]):
-        if found["docker"]:
-            lines.append(
-                "host ABC tools missing; score.png falls back to the pinned "
-                "bard-tools docker image"
-            )
-        else:
-            lines.append(
-                "score.png unavailable: needs abcm2ps + rsvg-convert on PATH "
-                "or docker for the pinned bard-tools fallback"
-            )
+    pin_ok = False
+    if root is not None:
+        pin_path = root / PIN_REL
+        try:
+            pin = json.loads(pin_path.read_text(encoding="utf-8"))
+            pin_ok = bool(pin.get("image") and pin.get("digest"))
+        except (OSError, json.JSONDecodeError):
+            pin_ok = False
+    lines.append(f"bard-tools pin: {'ok' if pin_ok else 'missing or unpinned'}")
+    if not (found["docker"] and pin_ok):
+        lines.append(
+            "score.png unavailable: needs docker on PATH and a pinned "
+            "bard-tools digest in tools-image.json"
+        )
     return lines
 
 
