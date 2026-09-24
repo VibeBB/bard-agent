@@ -1,9 +1,9 @@
 {
   "image": "ghcr.io/vibebb/bard-tools",
-  "tag": "8be3369e25c01fb04cf3c07f9f94922bf1764888-tools",
-  "digest": "sha256:cc2975dbe81f5e775c642805bd403e24f31dbb0940b445d5e4f0dd69c7e89721",
-  "published_at": "2026-09-24T15:43:08Z",
-  "workflow_run": "https://github.com/VibeBB/bard-agent/actions/runs/36022171454",
+  "tag": "0a2ebf25cae9806503df7b3b2fd3d9dd80cfa15a-tools",
+  "digest": "sha256:a63320c9cea6bf209879f9ee832af88a8f40a1d5b88ab91a0e8106e634ad1e51",
+  "published_at": "2026-09-24T16:13:40Z",
+  "workflow_run": "https://github.com/VibeBB/bard-agent/actions/runs/36025759373",
   "dockerfile": "docker/bard-tools.Dockerfile",
   "tools": {
     "abcm2ps": "8.14.17",
