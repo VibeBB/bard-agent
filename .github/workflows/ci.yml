@@ -31,10 +31,6 @@ jobs:
   verify:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
-    # Bot-branch PRs are skipped: publish/release already dispatch ci.yml on
-    # those branches and gate on the dispatched runs, so a duplicate
-    # pull_request-triggered run is not needed for required checks.
-    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'bot/')
     strategy:
       fail-fast: false
       matrix:
@@ -64,8 +60,6 @@ jobs:
   independent-check:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
-    # Skipped on bot-branch PRs for the same reason as `verify` above.
-    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'bot/')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -114,8 +108,6 @@ jobs:
   plugin-load:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
-    # Skipped on bot-branch PRs for the same reason as `verify` above.
-    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'bot/')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

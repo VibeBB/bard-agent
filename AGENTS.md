@@ -125,9 +125,9 @@ input and confirm that the broken proposal is rejected.
 - `.github/workflows/ci.yml` runs on pushes to main, pull requests,
   `workflow_dispatch` (used by the publish workflow to gate the image-pin
   PR; accepts a `ref` input like `workflow_call`), and `workflow_call`.
-  Pull-request jobs are skipped on `bot/` branches because publish/release
-  already dispatch ci.yml on those branches and gate on the dispatched
-  runs. It runs `verify` (Python 3.12/3.13 matrix:
+  Pull-request jobs also run on `bot/` automation branches: required checks
+  are read from the pull_request check suite, so skipping them there
+  would leave the pin/bump PRs permanently blocked. It runs `verify` (Python 3.12/3.13 matrix:
   ruff, format, pyright, and pytest), `independent-check` (required
   `abcm2ps`/`rsvg-convert` and score PNG generation), and `plugin-load` (checks
   `Plugin.load` with `openhands-sdk==1.49.5` from the `sdk-check` group).
