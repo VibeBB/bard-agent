@@ -80,7 +80,7 @@ tests/                        # Plugin-asset consistency checks
   `out/bard/*/song.proposal.json` render status; unreadable proposal or
   provenance JSON fails closed. The `pre_tool_use` guard rejects writes to
   render projections (`song.abc`, `song.mid`, `song.mml`, `song.md`,
-  `song.provenance.json`, `score.png`); the `post_tool_use` hooks record
+  `song.provenance.json`, `song.lint.json`, `score.png`); the `post_tool_use` hooks record
   vision calls and image observations to `.openhands/bard/*.jsonl`.
   The `session_start` `bard-doctor` hook is advisory too: it resolves the
   plugin root, probes for `abcm2ps`/`rsvg-convert`/`docker` on `PATH` (docker

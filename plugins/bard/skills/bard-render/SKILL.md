@@ -134,6 +134,25 @@ installed (e.g. fonts-ipafont); without one the rasterizer draws fallback boxes
 instead of removing the text, so missing coverage is visible in the image rather
 than silent (ADR-0007).
 
+## Optional: song.lint.json advisory lint
+
+`scripts/lint_score.py` writes `song.lint.json` (`artifact_kind: score_lint`,
+`authority: none`). It parses the emitted `song.mid` for residual
+melody/accompaniment clashes (minor-9th / major-7th pitch-class offsets) and
+lists the deterministic re-voicing substitutions and voice drops the renderer
+applied per chord event. It is a review aid only — never a gate; `verdict:
+fail` means the lint itself could not run, not that the proposal is bad.
+
+```bash
+python3 "<bard plugin root>/skills/bard-render/scripts/lint_score.py" \
+    --proposal <out dir>/song.proposal.json \
+    --mid <out dir>/song.mid --out <out dir>/song.lint.json
+```
+
+Exit codes: `0` lint ran (warnings are advisory); `1` the lint could not run.
+`--mid` may be omitted — `song.mid` next to the proposal is used when present,
+otherwise the MIDI is re-rendered in memory.
+
 ## Fixing a rejected proposal
 
 Read every reason before editing; fix the proposal JSON, not the outputs. The common ones:
