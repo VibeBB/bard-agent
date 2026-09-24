@@ -10,9 +10,11 @@ Use [uv](https://docs.astral.sh/uv/) with Python 3.12 or newer:
 uv sync
 ```
 
-Optional: installing `abcm2ps` enables the external-renderer tests (otherwise
-they are skipped). Rendering Japanese lyrics additionally needs a CJK font —
-`fonts-ipafont` on Debian/Ubuntu — or abcm2ps drops the lyric glyphs.
+Optional: the score-render tests run `abcm2ps`/`rsvg-convert` inside the
+pinned `bard-tools` image, so they need docker and a resolvable image pin
+(`tools-image.json`); otherwise they are skipped. `BARD_REQUIRE_DOCKER=1`
+fails instead of skipping. The image bundles fonts-ipafont for Japanese
+lyrics.
 
 ## Checks
 

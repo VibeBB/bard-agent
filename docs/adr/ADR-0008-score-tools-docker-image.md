@@ -1,6 +1,7 @@
 # ADR-0008: Score-render toolchain distributed as a pinned container image
 
-> Status: Accepted
+> Status: Accepted — host-tools branch superseded by ADR-0009 (the image is
+> now the only render path, not a fallback)
 > Date: 2026-09-23
 
 ## Context
