@@ -1,14 +1,14 @@
 {
   "image": "ghcr.io/vibebb/bard-tools",
-  "tag": "0a2ebf25cae9806503df7b3b2fd3d9dd80cfa15a-tools",
-  "digest": "sha256:a63320c9cea6bf209879f9ee832af88a8f40a1d5b88ab91a0e8106e634ad1e51",
-  "published_at": "2026-09-24T16:13:40Z",
-  "workflow_run": "https://github.com/VibeBB/bard-agent/actions/runs/36025759373",
+  "tag": "1e90bd4598deb8114720f04f544a5164f1409f4a-tools",
+  "digest": "sha256:42806afd1e79d0c3bf611dfeab12fe8b95c00d76f8f2ebde905392f08aa76ef7",
+  "published_at": "2026-09-24T23:54:29Z",
+  "workflow_run": "https://github.com/VibeBB/bard-agent/actions/runs/36074991287",
   "dockerfile": "docker/bard-tools.Dockerfile",
   "tools": {
     "abcm2ps": "8.14.17",
     "abc2midi": "5.02",
-    "rsvg-convert": "2.61.3",
-    "fonts-ipafont": "00303-23ubuntu1"
+    "rsvg-convert": "2.60.0",
+    "fonts-ipafont": "00303-23"
   }
 }
