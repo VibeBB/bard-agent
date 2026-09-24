@@ -26,7 +26,7 @@ OpenHandsアプリ（Agent Canvas）の既定toolには`task`だけが含まれ�
    用途に対して過剰で、かつアプリの標準経路にないためである。
 2. task sub-agentは親の会話履歴を受け取らない。題材は次の二本立てで渡す。
    - 親が`/bard:sing`（`commands/sing.md`）の手順で直近の会話・出来事・登場人物・感情の起伏を
-     `out/bard/<slug>/context.md`へ要約し、そのpathをpromptで渡す。
+     `songs/<slug>/context.md`へ要約し、そのpathをpromptで渡す。
    - bardは親と同じworkspaceを共有するため、`git log`、diff、README、ADR等を自ら読む。
 3. `task`が使えない環境（`enable_sub_agents`がoff、または`task_tool_set`が無い）では、
    `/bard:sing`は親エージェント自身に`agents/bard.md`の手順を実行させる（fallback）。
