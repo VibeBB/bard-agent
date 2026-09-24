@@ -12,7 +12,7 @@ linked into bard's code, keeping the license boundary described in
 ### abcm2ps
 
 - License: GPL-3.0-or-later
-- Package: `abcm2ps` (Ubuntu 26.04 apt)
+- Package: `abcm2ps` (Debian 13 apt)
 - Source: <https://github.com/lewdlime/abcm2ps>
 - Role: renders `song.abc` to SVG inside the optional score-check image.
   Invoked as a subprocess only.
@@ -20,7 +20,7 @@ linked into bard's code, keeping the license boundary described in
 ### abcmidi (abc2midi)
 
 - License: GPL-2.0-or-later
-- Package: `abcmidi` (Ubuntu 26.04 apt)
+- Package: `abcmidi` (Debian 13 apt)
 - Source: <https://ifdo.ca/~seymour/runabc/top.html>
 - Copyright: James Allwright, Seymour Shlien, et al.
 - Role: ABC → MIDI conversion utility, smoke-checked in the image.
@@ -29,7 +29,7 @@ linked into bard's code, keeping the license boundary described in
 ### librsvg2 (rsvg-convert)
 
 - License: LGPL-2.1-or-later
-- Package: `librsvg2-bin` (Ubuntu 26.04 apt)
+- Package: `librsvg2-bin` (Debian 13 apt)
 - Source: <https://gitlab.gnome.org/GNOME/librsvg>
 - Role: SVG → PNG rasterization inside the score-check image.
   Invoked as a subprocess only; not linked.
@@ -37,7 +37,7 @@ linked into bard's code, keeping the license boundary described in
 ### fonts-ipafont
 
 - License: IPA Font License Agreement v1.0
-- Package: `fonts-ipafont` (Ubuntu 26.04 apt)
+- Package: `fonts-ipafont` (Debian 13 apt)
 - Source: <https://ipafont.ipa.go.jp/>
 - Role: Japanese (IPA) glyphs for rendered scores. Font files are used at
   render time only and are not modified.
@@ -45,14 +45,14 @@ linked into bard's code, keeping the license boundary described in
 ### fontconfig
 
 - License: MIT-style (fontconfig license)
-- Package: `fontconfig` (Ubuntu 26.04 apt)
+- Package: `fontconfig` (Debian 13 apt)
 - Source: <https://www.freedesktop.org/wiki/Software/fontconfig/>
 
-### Ubuntu base image
+### Debian base image
 
-- Image: `ubuntu:26.04`
-- Source: <https://hub.docker.com/_/ubuntu>
-- Ubuntu copyright notices and licenses follow the base image.
+- Image: `debian:13-slim`
+- Source: <https://hub.docker.com/_/debian>
+- Debian copyright notices and licenses follow the base image.
 
 ## Development tools
 

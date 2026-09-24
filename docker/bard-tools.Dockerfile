@@ -3,21 +3,14 @@
 # render_score_png.py falls back to this image when the host lacks the tools.
 # Published to ghcr.io/<owner>/bard-tools by publish-bard-images.yml and pinned
 # by digest in plugins/bard/skills/bard-render/tools-image.json.
-FROM ubuntu:26.04
+FROM debian:13-slim
 
 LABEL org.opencontainers.image.source="https://github.com/VibeBB/bard-agent" \
       org.opencontainers.image.licenses="BSD-3-Clause"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Serve every suite from the master archive: it carries the same -security
-# pocket, while security.ubuntu.com can briefly publish an index ahead of its
-# pool and 404 packages the index still lists.
-RUN grep -q "^URIs: http://security\.ubuntu\.com/ubuntu" \
-        /etc/apt/sources.list.d/ubuntu.sources \
-    && sed -i "s|^URIs: http://security\.ubuntu\.com/ubuntu/|URIs: http://archive.ubuntu.com/ubuntu/|" \
-        /etc/apt/sources.list.d/ubuntu.sources \
-    && apt-get -o Acquire::Retries=5 update \
+RUN apt-get -o Acquire::Retries=5 update \
     && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
         abcm2ps \
         abcmidi \
