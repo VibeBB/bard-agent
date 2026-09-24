@@ -56,7 +56,7 @@ def test_docker_arg_pins_parsed(dep_check: Any) -> None:
 
 
 def test_docker_base_image_parsed(dep_check: Any) -> None:
-    assert dep_check.docker_base_image(REPO_ROOT) == ("ubuntu", "26.04")
+    assert dep_check.docker_base_image(REPO_ROOT) == ("debian", "13-slim")
 
 
 def test_render_markdown_groups_by_surface(dep_check: Any) -> None:
@@ -69,9 +69,9 @@ def test_render_markdown_groups_by_surface(dep_check: Any) -> None:
         ),
         dep_check.DependencyStatus(
             "docker-base",
-            "ubuntu",
-            "26.04",
-            "26.04",
+            "debian",
+            "13-slim",
+            "13-slim",
             "docker/bard-tools.Dockerfile",
             False,
         ),
