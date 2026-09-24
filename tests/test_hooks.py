@@ -150,3 +150,50 @@ def test_bard_doctor_unresolved_root_is_advisory(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["decision"] == "allow"
     assert "unresolved" in payload["additionalContext"]
+
+
+SAFETY_RAIL_SCRIPT = PLUGIN_ROOT / "hooks" / "scripts" / "safety_rail.py"
+
+
+def _run_safety_rail(command: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SAFETY_RAIL_SCRIPT)],
+        input=json.dumps({"tool_name": "terminal", "tool_input": {"command": command}}),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_safety_rail_denies_denylist() -> None:
+    for command in (
+        "rm -rf /",
+        "rm -fr ~",
+        "dd if=x of=/dev/sda",
+        "mkfs.ext4 /dev/sda1",
+        "shutdown now",
+        "git push origin main",
+        "git push --force origin feat",
+        "git reset --hard",
+        "git clean -fd",
+        "git checkout -- plugins/bard/agents/bard.md",
+        "git stash drop",
+        "git add .",
+        "git commit --amend",
+        "git commit --no-verify",
+    ):
+        assert _run_safety_rail(command).returncode == 2, command
+
+
+def test_safety_rail_allows_normal_commands() -> None:
+    for command in (
+        "rm -rf out/bard",
+        "git push --force-with-lease origin feat",
+        "git push origin feat",
+        "git add plugins/bard/agents/bard.md docs",
+        "git commit -m message",
+        "python scripts/render.py",
+        "echo hi > out.txt",
+        "find . -name '*.proposal.json'",
+    ):
+        assert _run_safety_rail(command).returncode == 0, command
