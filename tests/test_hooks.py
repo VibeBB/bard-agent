@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 PLUGIN_ROOT = Path(__file__).parents[1] / "plugins" / "bard"
 SCRIPT = PLUGIN_ROOT / "hooks" / "scripts" / "report_song_status.py"
@@ -263,7 +264,7 @@ def _write_review(out_dir: Path, status: str = "ok") -> None:
         "collisions anywhere. Bar lines are well formed and the title "
         "block is legible; only the bar-three label is a little cramped."
     )
-    record = {
+    record: dict[str, Any] = {
         "artifact_kind": "bard_score_review",
         "authority": "none",
         "tool": "vision_review",
@@ -325,16 +326,6 @@ def test_report_song_status_clean_review_not_flagged(tmp_path: Path) -> None:
 
     context = json.loads(result.stdout)["additionalContext"]
     assert "Score vision review required" not in context
-
-
-def _run_record_hook(script: Path, payload: dict) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(script)],
-        input=json.dumps(payload),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
 
 
 def test_record_image_observation_records_actor(tmp_path: Path) -> None:

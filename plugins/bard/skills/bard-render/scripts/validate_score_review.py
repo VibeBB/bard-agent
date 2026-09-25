@@ -131,7 +131,11 @@ def validate(record: Any) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=(
+            "Validate a score-review.json record against the vision_review contract."
+        )
+    )
     parser.add_argument("review", type=Path, help="path to score-review.json")
     parser.add_argument("--json", action="store_true", help="emit a JSON verdict")
     args = parser.parse_args()
