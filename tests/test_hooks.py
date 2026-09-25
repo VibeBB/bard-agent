@@ -197,3 +197,52 @@ def test_safety_rail_allows_normal_commands() -> None:
         "find . -name '*.proposal.json'",
     ):
         assert _run_safety_rail(command).returncode == 0, command
+
+
+ENSURE_PROFILES_SCRIPT = PLUGIN_ROOT / "hooks" / "scripts" / "ensure_llm_profiles.py"
+
+
+def test_ensure_llm_profiles_provisions(tmp_path: Path) -> None:
+    """The session_start hook clones active_profile into vibebb-* slots."""
+    home = tmp_path / "home"
+    profiles = home / ".openhands" / "profiles"
+    profiles.mkdir(parents=True)
+    (home / ".openhands" / "settings.json").write_text(
+        json.dumps({"active_profile": "test-model"}), encoding="utf-8"
+    )
+    template = {"schema_version": 1, "model": "test-model", "auth_type": "api_key"}
+    (profiles / "test-model.json").write_text(json.dumps(template), encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(ENSURE_PROFILES_SCRIPT)],
+        capture_output=True,
+        text=True,
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+    assert proc.returncode == 0
+    out = json.loads(proc.stdout)
+    assert out["missing"] == []
+    for name in ("vibebb-author", "vibebb-review"):
+        profile = json.loads((profiles / f"{name}.json").read_text(encoding="utf-8"))
+        assert profile["model"] == "test-model"
+    # Idempotent: a second run provisions nothing and still reports ok.
+    proc2 = subprocess.run(
+        [sys.executable, str(ENSURE_PROFILES_SCRIPT)],
+        capture_output=True,
+        text=True,
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+    assert json.loads(proc2.stdout)["findings"] == []
+
+
+def test_ensure_llm_profiles_tolerates_missing_settings(tmp_path: Path) -> None:
+    proc = subprocess.run(
+        [sys.executable, str(ENSURE_PROFILES_SCRIPT)],
+        capture_output=True,
+        text=True,
+        env={"HOME": str(tmp_path / "nohome"), "PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout)["missing"] == ["vibebb-author", "vibebb-review"]

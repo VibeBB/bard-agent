@@ -17,8 +17,8 @@ PLUGIN_DIR = REPO_ROOT / "plugins" / "bard"
 
 EXPECTED_AGENTS = {"bard", "bard-critic"}
 EXPECTED_SKILLS = {"bard-proposal-rules", "bard-render", "bard-songcraft"}
-EXPECTED_COMMANDS = {"sing"}
-EXPECTED_SESSION_START_HOOKS = {"bard-doctor"}
+EXPECTED_COMMANDS = {"doctor", "sing"}
+EXPECTED_SESSION_START_HOOKS = {"bard-doctor", "ensure-llm-profiles"}
 EXPECTED_USER_PROMPT_SUBMIT_HOOKS: set[str] = set()
 EXPECTED_PRE_TOOL_USE_HOOKS = {"protect-song-artifacts", "safety-rail"}
 EXPECTED_STOP_HOOKS = {"report-song-status"}
