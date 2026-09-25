@@ -1,6 +1,6 @@
 # Agent Work Contract
 
-> Target: OpenHands Software Agent SDK v1.49.5, Python 3.12+
+> Target: OpenHands Software Agent SDK v1.49.6, Python 3.12+
 
 This document is the working contract for implementation, validation, and
 documentation in this repository. The README is the product overview,
@@ -131,7 +131,7 @@ input and confirm that the broken proposal is rejected.
   would leave the pin/bump PRs permanently blocked. It runs `verify` (Python 3.12/3.13 matrix:
   ruff, format, pyright, and pytest), `independent-check` (required
   score PNG generation inside the pinned image), and `plugin-load` (checks
-  `Plugin.load` with `openhands-sdk==1.49.5` from the `sdk-check` group).
+  `Plugin.load` with `openhands-sdk==1.49.6` from the `sdk-check` group).
 - `.github/workflows/release.yml` is `workflow_dispatch` only. A `bump` input
   (defaulting to patch) or an explicit `version` input controls the release.
   A greater explicit version runs `scripts/bump_version.py`, updates
@@ -173,6 +173,12 @@ input and confirm that the broken proposal is rejected.
   `scripts/check_dependency_updates.py` and its tests in the same change, and
   run `uv run python scripts/check_dependency_updates.py` locally to confirm
   nothing is missing.
+  When bumping a dependency to a newer version, review the complete
+  changelog of every updated component (all releases between the pinned
+  and target versions), evaluate each new feature or behavior change for
+  use in this repository, adopt the useful ones in the same change, and
+  record the evaluation — including reasons for non-adoption — in the PR
+  or under `docs/research/`.
 - `.github/workflows/main-ci-failure-issue.yml` watches completed main
   runs of CI, Publish bard images, and Workflow lint (`workflow_run`), and
   files or closes a `ci-main-failure` tracking issue on failure/success.

@@ -18,7 +18,7 @@ development workspace, the user's conversation, and conversations with other
 agents into original lyrics and melodies, then exports lyrics, ABC notation,
 MIDI, and MML.
 
-> Target: OpenHands Software Agent SDK v1.49.5 / OpenHands Agent Canvas
+> Target: OpenHands Software Agent SDK v1.49.6 / OpenHands Agent Canvas
 
 ## What it can do
 
@@ -204,7 +204,7 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 利用者との会話、他のエージェントとの会話を題材に、オリジナルの歌詞と旋律を作り、
 歌詞・ABC譜・MIDI・MMLとして書き出します。
 
-> 対象: OpenHands Software Agent SDK v1.49.5 / OpenHands Agent Canvas
+> 対象: OpenHands Software Agent SDK v1.49.6 / OpenHands Agent Canvas
 
 ## できること
 

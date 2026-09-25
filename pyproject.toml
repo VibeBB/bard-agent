@@ -9,14 +9,14 @@ dependencies = []
 [dependency-groups]
 dev = [
     "pytest==9.1.1",
-    "ruff==0.16.8",
+    "ruff==0.16.9",
     "pyright==1.1.414",
 ]
-sdk-check = ["openhands-sdk==1.49.5", "openhands-tools==1.49.5"]
+sdk-check = ["openhands-sdk==1.49.6", "openhands-tools==1.49.6"]
 
 [tool.uv]
 default-groups = ["dev"]
-required-version = "==0.12.18"
+required-version = "==0.12.19"
 
 [tool.ruff]
 line-length = 88
