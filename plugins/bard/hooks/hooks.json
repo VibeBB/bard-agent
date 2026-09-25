@@ -7,6 +7,11 @@
           "type": "command",
           "name": "bard-doctor",
           "command": "p=$(for c in \"${BARD_PLUGIN_ROOT:-}\" \"${OPENHANDS_PROJECT_DIR:-.}/plugins/bard\" \"${HOME:-}/.agents/plugins/bard\" \"${HOME:-}/.openhands/plugins/installed/bard\"; do [ -f \"$c/hooks/scripts/bard_doctor.py\" ] && printf %s \"$c\" && break; done); [ -n \"$p\" ] || exit 0; exec python3 \"$p/hooks/scripts/bard_doctor.py\""
+        },
+        {
+          "type": "command",
+          "name": "ensure-llm-profiles",
+          "command": "p=$(for c in \"${BARD_PLUGIN_ROOT:-}\" \"${OPENHANDS_PROJECT_DIR:-.}/plugins/bard\" \"${HOME:-}/.agents/plugins/bard\" \"${HOME:-}/.openhands/plugins/installed/bard\"; do [ -f \"$c/hooks/scripts/ensure_llm_profiles.py\" ] && printf %s \"$c\" && break; done); [ -n \"$p\" ] || exit 0; exec python3 \"$p/hooks/scripts/ensure_llm_profiles.py\""
         }
       ]
     }
@@ -45,7 +50,7 @@
       ]
     },
     {
-      "matcher": "file_editor|terminal",
+      "matcher": "file_editor",
       "hooks": [
         {
           "type": "command",

@@ -90,9 +90,12 @@ Runtime policy surfaces that the plugin declares but the host executes:
   anyway — zero gating either way.)
 - `model:` resolves through `LLMProfileStore` (`~/.openhands/profiles/`):
   `vibebb-author` for bard, `vibebb-review` for bard-critic. A missing
-  profile raises `ValueError` at task spawn — create the profiles (canvas
-  LLM settings or `LLMProfileStore.save`) before invoking the agents. To
-  fall back to the conversation model, set `model: inherit` locally.
+  profile raises `ValueError` at task spawn, so the `session_start` hook
+  `hooks/scripts/ensure_llm_profiles.py` clones the conversation's
+  `active_profile` into `vibebb-author.json`/`vibebb-review.json` when
+  they are absent — edit those files afterwards to route the authoring
+  or review lane at a different model. To fall back to the conversation
+  model, set `model: inherit` locally.
 - Secrets: bard declares no MCP servers; if one is added later,
   `${VAR}` / `${VAR:-default}` in `mcp_config` expands through the
   conversation `SecretRegistry` before env, and registry values reach
