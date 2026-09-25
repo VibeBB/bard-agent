@@ -24,6 +24,26 @@ from typing import Any, cast
 EVENTS_ENV = "BARD_IMAGE_OBSERVATIONS"
 EVENTS_RELATIVE_PATH = Path("observations/bard/image-observations.jsonl")
 OBSERVED_TOOLS = {"file_editor"}
+# Payload keys that identify which agent/tool call produced the event;
+# different SDK versions expose different ones.
+_ACTOR_KEYS = {
+    "agent",
+    "agent_name",
+    "actor",
+    "subagent_type",
+    "task_agent",
+    "action_id",
+    "tool_call_id",
+    "parent_id",
+    "call_id",
+}
+
+
+def _actor(payload: dict[str, Any]) -> dict[str, Any] | None:
+    actor = {key: payload[key] for key in sorted(payload) if key in _ACTOR_KEYS}
+    return actor or None
+
+
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg"}
 
 
@@ -120,6 +140,10 @@ def main() -> int:
                     "image_sha256": digest,
                     "recorded_at": datetime.now(UTC).isoformat(),
                     "session_id": payload.get("session_id"),
+                    "actor": _actor(cast(dict[str, Any], payload)),
+                    "tool_call_id": (
+                        payload.get("tool_call_id") or payload.get("action_id")
+                    ),
                 }
                 stream.write(
                     json.dumps(record, ensure_ascii=False, separators=(",", ":"))

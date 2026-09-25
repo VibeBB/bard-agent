@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 PLUGIN_ROOT = Path(__file__).parents[1] / "plugins" / "bard"
 SCRIPT = PLUGIN_ROOT / "hooks" / "scripts" / "report_song_status.py"
@@ -246,3 +247,140 @@ def test_ensure_llm_profiles_tolerates_missing_settings(tmp_path: Path) -> None:
     )
     assert proc.returncode == 0
     assert json.loads(proc.stdout)["missing"] == ["vibebb-author", "vibebb-review"]
+
+
+IMAGE_OBS_SCRIPT = PLUGIN_ROOT / "hooks" / "scripts" / "record_image_observation.py"
+VISION_EVENT_SCRIPT = PLUGIN_ROOT / "hooks" / "scripts" / "record_vision_tool_event.py"
+
+
+def _write_score_png(out_dir: Path) -> None:
+    (out_dir / "score.png").write_bytes(b"\x89PNG fake")
+
+
+def _write_review(out_dir: Path, status: str = "ok") -> None:
+    summary = (
+        "inspected: the engraving reads cleanly; chord labels sit above "
+        "each measure and syllables align under their notes without "
+        "collisions anywhere. Bar lines are well formed and the title "
+        "block is legible; only the bar-three label is a little cramped."
+    )
+    record: dict[str, Any] = {
+        "artifact_kind": "bard_score_review",
+        "authority": "none",
+        "tool": "vision_review",
+        "stage": "review",
+        "status": status,
+        "summary": summary if status == "ok" else f"{status}: reason",
+        "artifacts": ["score.png"],
+        "checked_at": "2026-09-25T00:00:00+00:00",
+    }
+    if status == "ok":
+        record["detail"] = {
+            "image_path": "score.png",
+            "image_sha256": "a" * 64,
+            "model": "test-model",
+            "checklist": "score_engraving",
+            "findings": [],
+        }
+    (out_dir / "score-review.json").write_text(json.dumps(record), encoding="utf-8")
+
+
+def test_report_song_status_flags_unreviewed_score(tmp_path: Path) -> None:
+    song = tmp_path / "songs" / "x"
+    _write_proposal(song / "song.proposal.json")
+    _write_provenance(song)
+    _write_score_png(song)
+
+    result = _run_hook(tmp_path)
+
+    assert result.returncode == 0
+    context = json.loads(result.stdout)["additionalContext"]
+    assert "score-review.json" in context
+    assert "required" in context
+
+
+def test_report_song_status_flags_thin_review(tmp_path: Path) -> None:
+    song = tmp_path / "songs" / "x"
+    _write_proposal(song / "song.proposal.json")
+    _write_provenance(song)
+    _write_score_png(song)
+    (song / "score-review.json").write_text(
+        json.dumps({"artifact_kind": "bard_score_review", "status": "ok"}),
+        encoding="utf-8",
+    )
+
+    result = _run_hook(tmp_path)
+
+    context = json.loads(result.stdout)["additionalContext"]
+    assert "score.png" in context
+
+
+def test_report_song_status_clean_review_not_flagged(tmp_path: Path) -> None:
+    song = tmp_path / "songs" / "x"
+    _write_proposal(song / "song.proposal.json")
+    _write_provenance(song)
+    _write_score_png(song)
+    _write_review(song)
+
+    result = _run_hook(tmp_path)
+
+    context = json.loads(result.stdout)["additionalContext"]
+    assert "Score vision review required" not in context
+
+
+def test_record_image_observation_records_actor(tmp_path: Path) -> None:
+    image = tmp_path / "score.png"
+    image.write_bytes(b"\x89PNG fake")
+    events = tmp_path / "obs.jsonl"
+    env = dict(os.environ, BARD_IMAGE_OBSERVATIONS=str(events))
+    payload = {
+        "tool_name": "file_editor",
+        "tool_input": {"command": "view", "path": str(image)},
+        "tool_response": {"ok": True},
+        "working_dir": str(tmp_path),
+        "session_id": "s1",
+        "agent": "bard",
+        "action_id": "act-9",
+    }
+    result = subprocess.run(
+        [sys.executable, str(IMAGE_OBS_SCRIPT)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0
+    record = json.loads(events.read_text(encoding="utf-8").splitlines()[0])
+    assert record["actor"]["agent"] == "bard"
+    assert record["tool_call_id"] == "act-9"
+
+
+def test_record_vision_tool_event_records_actor(tmp_path: Path) -> None:
+    events = tmp_path / "obs.jsonl"
+    env = dict(os.environ, BARD_VISION_TOOL_EVENTS=str(events))
+    payload = {
+        "tool_name": "inspect_image_with_vision",
+        "tool_input": {"image_index": 0, "question": "describe"},
+        "tool_response": {
+            "answer": "a clean score",
+            "profile_name": "vibebb-review",
+            "model": "m1",
+        },
+        "working_dir": str(tmp_path),
+        "session_id": "s1",
+        "subagent_type": "bard-critic",
+        "tool_call_id": "tc-4",
+    }
+    result = subprocess.run(
+        [sys.executable, str(VISION_EVENT_SCRIPT)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0
+    record = json.loads(events.read_text(encoding="utf-8").splitlines()[0])
+    assert record["actor"]["subagent_type"] == "bard-critic"
+    assert record["tool_call_id"] == "tc-4"
