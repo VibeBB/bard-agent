@@ -77,8 +77,9 @@ tests/                        # Plugin-asset consistency checks
   parent summarizes the subject in `context.md`, and bard reads the workspace
   (git log and files) itself (ADR-0001).
 - The `hooks/` stop hook is advisory (`decision: allow`) and reports each
-  `songs/*/song.proposal.json` render status; unreadable proposal or
-  provenance JSON fails closed. The `pre_tool_use` guard rejects writes to
+  `songs/*/song.proposal.json` render status plus any `score.png` whose
+  sibling `score-review.json` is missing or fails validation; unreadable
+  proposal or provenance JSON fails closed. The `pre_tool_use` guard rejects writes to
   render projections (`song.abc`, `song.mid`, `song.mml`, `song.md`,
   `song.provenance.json`, `song.lint.json`, `score.png`); the `post_tool_use` hooks record
   vision calls and image observations to `observations/bard/*.jsonl`.

@@ -110,11 +110,14 @@ and do not go silent mid-run.
    `song.provenance.json`, and `critic.md` are all present. If any are
    missing, enumerate them under `Missing:` in the report — never claim
    they exist.
-   `score.png` and `score-review.json` are optional advisory artifacts
-   (when `abcm2ps`/`rsvg-convert` are available a vision-capable model
-   inspects the score and writes its findings to score-review.json). Their
-   absence is not a missing file, but list them under `Files:` when
-   present.
+   `score.png` and `score-review.json` are advisory artifacts whose
+   production is required whenever the pinned render image works and the
+   model is vision-capable (a vision-capable model must inspect the score
+   and write a long-form impression to score-review.json — never
+   optional). Absence is not a missing file when the render environment
+   was unavailable, but a `score.png` without a validated
+   `score-review.json` means stage 8 was skipped: send the report back
+   for the review instead of listing it under `Files:`.
    `critic.md` must contain a `DECISIONS` block with `APPLIED` or
    `DECLINED: <reason>` for each finding. You may report `APPLIED` only
    when `song.provenance.json` is newer than the critic.md findings (i.e.

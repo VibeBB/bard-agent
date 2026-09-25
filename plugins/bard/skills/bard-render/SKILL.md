@@ -102,7 +102,7 @@ one `reason` per line as `<path in proposal>: <message>`, e.g.
 Outputs are byte-for-byte deterministic for the same proposal, except the `generated_at`
 timestamp in the provenance record.
 
-## Optional: score.png for visual review
+## Score.png visual review (required when renderable)
 
 `scripts/render_score_png.py` turns `song.abc` into `score.png` through `abcm2ps`
 (`-g`, SVG output) + `rsvg-convert`. It is not a
@@ -125,8 +125,17 @@ Exit codes: `0` rendered; `3` I/O error; `4` docker not on PATH or no usable
 pinned image (skip — not an error for the song); `5` a tool
 failed. `bard` stage 8 consumes
 this: a vision-capable model inspects `score.png` via `file_editor view` and
-writes the finding to `score-review.json` (`authority: none`, shared
-`vision_review` record contract — see ADR-0010).
+writes the review to `score-review.json` (`authority: none`, shared
+`vision_review` record contract — see ADR-0010). The review is **required,
+never optional**: whenever `score.png` rendered and the model is
+vision-capable, `score-review.json` must exist with `status: "ok"`, a typed
+`detail` block, and a `summary` impression of at least 240 characters across
+two or more sentences. Validate it fail-closed before finishing:
+
+```bash
+python3 "<bard plugin root>/skills/bard-render/scripts/validate_score_review.py" \
+    <out dir>/score-review.json
+```
 
 The SVG stage emits every character as a UTF-8 `<text>` element, so no text is
 dropped at render time. Non-Latin scripts such as Japanese need a covering font
@@ -179,6 +188,12 @@ Read every reason before editing; fix the proposal JSON, not the outputs. The co
 
 The renderer judges the proposal text only. Whether the song is good, and whether the work it
 sings about succeeded, are outside its scope.
+
+## Terminal tool notes
+
+The terminal tool runs **one command per call**: a payload carrying several commands is bounced
+as "Cannot execute multiple commands at once". Chain with `&&` inside a single command when you
+need two steps, and write files with `file_editor` rather than multi-line heredocs.
 
 ## Contract source of truth
 

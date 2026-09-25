@@ -228,13 +228,17 @@ a change alters units, rhythm or key, update `lyrics.md`, `plan.md` and `story.m
 so the stage files agree with the delivered proposal. If a finding names an originality or real-person risk, it is not optional: rewrite the line or do
 not deliver the song.
 
-## Stage 8 — Score visual check (writes `score.png`, `score-review.json`; advisory, optional)
+## Stage 8 — Score visual check (writes `score.png`, `score-review.json`; advisory, required)
 
 The critic reads text only; it never sees the engraved score. When the
 pinned `bard-tools` docker image is usable (docker on `PATH` and
 `tools-image.json` carrying a digest — the image bundles `abcm2ps`,
-`rsvg-convert`, and the IPA font), render the score image and inspect it
-once:
+`rsvg-convert`, and the IPA font), render the score image and inspect it.
+The inspection and its `score-review.json` record are **required whenever
+`score.png` renders on a vision-capable model** — they are never optional
+and may never be skipped silently. The only accepted exemptions are the
+explicit `not_applicable` (no docker image / model not vision-capable) and
+`error` statuses below, each recorded with its reason:
 
 ```bash
 python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
@@ -264,13 +268,17 @@ python3 "<bard plugin root>/skills/bard-render/scripts/render_score_png.py" \
   continue.
 
 Then write `<out dir>/score-review.json`, `authority: none`, as one JSON object
-using the shared `vision_review` record contract (ADR-0010):
+using the shared `vision_review` record contract (ADR-0010). For `status:
+"ok"` the `summary` is your impression of the engraving — a substantive
+multi-sentence reading of at least 240 characters that says what the score
+shows and what is off; a one-line verdict is not a review and fails
+validation:
 
 ```json
 {"artifact_kind": "bard_score_review", "authority": "none",
  "tool": "vision_review", "stage": "review",
  "status": "ok | error | not_applicable",
- "summary": "inspected: <one-line outcome> | skipped: <reason> | error: <reason>",
+ "summary": "inspected: <multi-sentence reading, >=240 chars> | skipped: <reason> | error: <reason>",
  "artifacts": ["<out dir>/score.png"],
  "detail": {
    "image_path": "<out dir>/score.png",
@@ -286,14 +294,26 @@ using the shared `vision_review` record contract (ADR-0010):
 ```
 
 - `status` is `ok` when the score was inspected, `not_applicable` when the
-  check was skipped (tools missing or model not vision-capable), `error` on a
+  check could not run (tools missing or model not vision-capable), `error` on a
   render or inspection failure. Put the reason in `summary`.
+- `summary` for `ok` must start with `inspected:` and carry the long-form
+  impression — 240+ characters across at least two sentences. For
+  `not_applicable`/`error` it starts with `skipped:`/`error:` plus the reason.
 - `detail` appears only when `score.png` was actually produced and inspected;
   skip the key entirely for `not_applicable`/`error`. `findings` may be empty
   for a clean score. Finding categories: `lyric_collision`,
   `orphaned_syllable`, `cramped_chord_label`, `malformed_barline`,
   `font_fallback_tofu`, `other`; `bbox` is optional normalized
   `[x, y, w, h]`. Keep `image_sha256` lowercase hex (64 chars).
+- Validate the record before finishing — fail-closed:
+
+  ```bash
+  python3 "<bard plugin root>/skills/bard-render/scripts/validate_score_review.py" \
+      <out dir>/score-review.json
+  ```
+
+  Any rejection means the review step is not done: fix the record (or redo
+  the inspection) until it validates.
 - `artifact_kind`/`authority`/`checked_at` are bard's envelope fields; the
   `tool`/`stage`/`status`/`summary`/`artifacts`/`detail` block matches the
   `vision_review` contract shared with the other agents, so a common parser
@@ -325,7 +345,7 @@ Reply in the song's language with, in this order:
    section headings.
 3. `Files:` the written files (`song.md`, `song.abc`, `song.mid`, `song.mml`,
    `song.provenance.json`, `song.lint.json`, `critic.md`, and the stage files `notes.md`, `story.md`,
-   `lyrics.md`, `plan.md`; plus `score.png`/`score-review.json` when the optional
+   `lyrics.md`, `plan.md`; plus `score.png`/`score-review.json` when the
    score check ran). Point the reader at `song.md` for the chord chart and ABC.
 4. `Critic:` findings applied and declined, one line each. Only findings whose fix is in the
    delivered render count as applied.
