@@ -107,6 +107,17 @@ def test_midi_structure(render_module: Any, tmp_path: Path) -> None:
     assert fmt == 1 and ntrks == 3
 
 
+def test_midi_note_spans_matches_counts(render_module: Any, tmp_path: Path) -> None:
+    out_dir = tmp_path / "out"
+    assert _run(render_module, FIXTURES / "valid_en.json", out_dir) == 0
+    data = (out_dir / "song.mid").read_bytes()
+    counts = render_module.parse_midi_counts(data)
+    spans = render_module._midi_note_spans(data)
+    assert len(spans[0]) == counts[0][0] == 58
+    for start, end, _pitch in spans[0]:
+        assert start <= end
+
+
 @pytest.mark.parametrize("fixture", ["valid_en.json", "valid_ja.json"])
 def test_abc_lyrics_align_per_music_line(
     render_module: Any, tmp_path: Path, fixture: str

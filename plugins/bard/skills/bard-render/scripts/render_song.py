@@ -56,6 +56,7 @@ import json
 import re
 import struct
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from fractions import Fraction
@@ -1396,103 +1397,37 @@ def _read_vlq(track: bytes, i: int) -> tuple[int, int]:
             return value, i
 
 
-def parse_midi_counts(data: bytes) -> dict[int, list[int]]:
-    """Parse an SMF and return {channel: [note_on_count, note_off_count]}."""
+def _iter_midi_events(
+    data: bytes, *, label: str
+) -> Iterator[tuple[str, int, int, int, int]]:
+    """Walk an SMF and yield (kind, channel, pitch, velocity, tick).
+
+    kind is "on" (note-on, velocity > 0), "off" (note-off or zero-velocity
+    note-on) or "track_end" (yielded once per track with the final tick;
+    channel/pitch/velocity are 0)."""
     if len(data) < 14 or data[:4] != b"MThd":
-        raise ProposalError(["readback.midi: missing MThd header"])
+        raise ProposalError([f"{label}: missing MThd header"])
     hlen = struct.unpack(">I", data[4:8])[0]
     fmt, ntrks = struct.unpack(">HH", data[8:12])
     if fmt != 1 or ntrks < 2:
-        raise ProposalError([f"readback.midi: bad format {fmt} or track count {ntrks}"])
+        raise ProposalError([f"{label}: bad format {fmt} or track count {ntrks}"])
     pos = 8 + hlen
-    counts: dict[int, list[int]] = {}
     for _ in range(ntrks):
         if pos + 8 > len(data) or data[pos : pos + 4] != b"MTrk":
-            raise ProposalError(["readback.midi: missing MTrk header"])
+            raise ProposalError([f"{label}: missing MTrk header"])
         tlen = struct.unpack(">I", data[pos + 4 : pos + 8])[0]
         if pos + 8 + tlen > len(data):
-            raise ProposalError(["readback.midi: truncated track data"])
-        track = data[pos + 8 : pos + 8 + tlen]
-        pos += 8 + tlen
-        i = 0
-        running = 0
-        while i < len(track):
-            _delta, i = _read_vlq(track, i)
-            if i >= len(track):
-                raise ProposalError(["readback.midi: truncated event"])
-            status = track[i]
-            if status < 0x80:
-                status = running
-            else:
-                i += 1
-                if status < 0xF0:
-                    running = status
-            kind = status & 0xF0
-            ch = status & 0x0F
-            if status == 0xFF:
-                if i >= len(track):
-                    raise ProposalError(["readback.midi: truncated meta event"])
-                i += 1
-                meta_len, i = _read_vlq(track, i)
-                i += meta_len
-                if i > len(track):
-                    raise ProposalError(["readback.midi: truncated meta payload"])
-                continue
-            if status in (0xF0, 0xF7):
-                syx_len, i = _read_vlq(track, i)
-                i += syx_len
-                if i > len(track):
-                    raise ProposalError(["readback.midi: truncated sysex payload"])
-                continue
-            if kind in (0xC0, 0xD0):
-                i += 1
-                continue
-            if kind == 0x90:
-                if i + 1 >= len(track):
-                    raise ProposalError(["readback.midi: truncated note-on"])
-                vel = track[i + 1]
-                i += 2
-                bucket = counts.setdefault(ch, [0, 0])
-                if vel > 0:
-                    bucket[0] += 1
-                else:
-                    bucket[1] += 1
-                continue
-            if kind == 0x80:
-                i += 2
-                counts.setdefault(ch, [0, 0])[1] += 1
-                continue
-            i += 2
-    return counts
-
-
-def _midi_note_spans(data: bytes) -> dict[int, list[tuple[int, int, int]]]:
-    """Parse an SMF and return {channel: [(start_tick, end_tick, pitch)]}."""
-    if len(data) < 14 or data[:4] != b"MThd":
-        raise ProposalError(["lint.midi: missing MThd header"])
-    hlen = struct.unpack(">I", data[4:8])[0]
-    fmt, ntrks = struct.unpack(">HH", data[8:12])
-    if fmt != 1 or ntrks < 2:
-        raise ProposalError([f"lint.midi: bad format {fmt} or track count {ntrks}"])
-    pos = 8 + hlen
-    spans: dict[int, list[tuple[int, int, int]]] = {}
-    for _ in range(ntrks):
-        if pos + 8 > len(data) or data[pos : pos + 4] != b"MTrk":
-            raise ProposalError(["lint.midi: missing MTrk header"])
-        tlen = struct.unpack(">I", data[pos + 4 : pos + 8])[0]
-        if pos + 8 + tlen > len(data):
-            raise ProposalError(["lint.midi: truncated track data"])
+            raise ProposalError([f"{label}: truncated track data"])
         track = data[pos + 8 : pos + 8 + tlen]
         pos += 8 + tlen
         i = 0
         tick = 0
         running = 0
-        open_notes: dict[tuple[int, int], int] = {}
         while i < len(track):
             delta, i = _read_vlq(track, i)
             tick += delta
             if i >= len(track):
-                raise ProposalError(["lint.midi: truncated event"])
+                raise ProposalError([f"{label}: truncated event"])
             status = track[i]
             if status < 0x80:
                 status = running
@@ -1504,44 +1439,65 @@ def _midi_note_spans(data: bytes) -> dict[int, list[tuple[int, int, int]]]:
             ch = status & 0x0F
             if status == 0xFF:
                 if i >= len(track):
-                    raise ProposalError(["lint.midi: truncated meta event"])
+                    raise ProposalError([f"{label}: truncated meta event"])
                 i += 1
                 meta_len, i = _read_vlq(track, i)
                 i += meta_len
                 if i > len(track):
-                    raise ProposalError(["lint.midi: truncated meta payload"])
+                    raise ProposalError([f"{label}: truncated meta payload"])
                 continue
             if status in (0xF0, 0xF7):
                 syx_len, i = _read_vlq(track, i)
                 i += syx_len
                 if i > len(track):
-                    raise ProposalError(["lint.midi: truncated sysex payload"])
+                    raise ProposalError([f"{label}: truncated sysex payload"])
                 continue
             if kind in (0xC0, 0xD0):
                 i += 1
                 continue
             if i + 1 >= len(track):
-                raise ProposalError(["lint.midi: truncated note event"])
+                raise ProposalError([f"{label}: truncated note event"])
             if kind == 0x90:
                 pitch, vel = track[i], track[i + 1]
                 i += 2
-                if vel > 0:
-                    open_notes[(ch, pitch)] = tick
-                else:
-                    start = open_notes.pop((ch, pitch), None)
-                    if start is not None:
-                        spans.setdefault(ch, []).append((start, tick, pitch))
+                yield ("on" if vel > 0 else "off", ch, pitch, vel, tick)
                 continue
             if kind == 0x80:
                 pitch = track[i]
+                vel = track[i + 1]
                 i += 2
-                start = open_notes.pop((ch, pitch), None)
-                if start is not None:
-                    spans.setdefault(ch, []).append((start, tick, pitch))
+                yield ("off", ch, pitch, vel, tick)
                 continue
             i += 2
-        for (ch, pitch), start in open_notes.items():
-            spans.setdefault(ch, []).append((start, tick, pitch))
+        yield ("track_end", 0, 0, 0, tick)
+
+
+def parse_midi_counts(data: bytes) -> dict[int, list[int]]:
+    """Parse an SMF and return {channel: [note_on_count, note_off_count]}."""
+    counts: dict[int, list[int]] = {}
+    for kind, ch, _pitch, _vel, _tick in _iter_midi_events(data, label="readback.midi"):
+        if kind == "on":
+            counts.setdefault(ch, [0, 0])[0] += 1
+        elif kind == "off":
+            counts.setdefault(ch, [0, 0])[1] += 1
+    return counts
+
+
+def _midi_note_spans(data: bytes) -> dict[int, list[tuple[int, int, int]]]:
+    """Parse an SMF and return {channel: [(start_tick, end_tick, pitch)]}."""
+    spans: dict[int, list[tuple[int, int, int]]] = {}
+    open_notes: dict[tuple[int, int], int] = {}
+    for kind, ch, pitch, _vel, tick in _iter_midi_events(data, label="lint.midi"):
+        if kind == "on":
+            open_notes[(ch, pitch)] = tick
+        elif kind == "off":
+            start = open_notes.pop((ch, pitch), None)
+            if start is not None:
+                spans.setdefault(ch, []).append((start, tick, pitch))
+        else:
+            for (o_ch, o_pitch), start in open_notes.items():
+                spans.setdefault(o_ch, []).append((start, tick, o_pitch))
+            open_notes = {}
     return spans
 
 
