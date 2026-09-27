@@ -22,7 +22,6 @@ import shlex
 import sys
 from typing import Any, cast
 
-ARTIFACT_SUFFIXES = ()
 ARTIFACT_NAMES = (
     "song.abc",
     "song.mid",
@@ -83,7 +82,7 @@ def _path_values(tool_input: dict[str, Any]) -> list[str]:
 def _is_protected(value: str) -> bool:
     normalized = value.replace("\\", "/").lower()
     base = normalized.rsplit("/", 1)[-1]
-    return base.endswith(ARTIFACT_SUFFIXES) or base in ARTIFACT_NAMES
+    return base in ARTIFACT_NAMES
 
 
 def _is_artifact_write(payload: dict[str, Any]) -> bool:
