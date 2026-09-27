@@ -929,6 +929,25 @@ def test_reject_melody_from_under_02(
     )
 
 
+def test_reject_melody_from_leap_on_copy_path(
+    render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
+) -> None:
+    def m(d: dict[str, Any]) -> None:
+        # the chorus ends on g5, so the copied "verse 1" melody (starting
+        # on d4) leaps >12 semitones through the melody_from copy path
+        d["vocal_range"] = {"low": "c4", "high": "g5"}
+        d["sections"][1]["lines"][1]["notes"][-1] = {"pitch": "g5", "beats": 3}
+        d["sections"].append(_copy_verse2(d))
+
+    _reject(
+        render_module,
+        tmp_path,
+        valid_en,
+        lambda d: _mf(d, m),
+        "sections[2].lines[0].notes[0]: leap from previous note exceeds 12 semitones",
+    )
+
+
 def test_reject_schema_version_04(
     render_module: Any, tmp_path: Path, valid_en: dict[str, Any]
 ) -> None:
