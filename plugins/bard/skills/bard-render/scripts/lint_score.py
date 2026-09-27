@@ -32,18 +32,14 @@ _spec.loader.exec_module(render_song)
 
 
 def _report_error(source: str, reasons: list[str]) -> dict[str, Any]:
-    return {
-        "artifact_kind": "score_lint",
-        "authority": "none",
-        "schema_version": "1.0",
-        "kind": "score_lint",
-        "source": source,
-        "verdict": "fail",
-        "errors": len(reasons),
-        "warnings": 0,
-        "notes_checked": 0,
-        "voicing": {"substituted": 0, "dropped": 0, "substitutions": []},
-        "findings": [
+    return render_song.score_lint_report(
+        source,
+        verdict="fail",
+        errors=len(reasons),
+        warnings=0,
+        notes_checked=0,
+        voicing={"substituted": 0, "dropped": 0, "substitutions": []},
+        findings=[
             {
                 "type": "lint_error",
                 "severity": "error",
@@ -51,7 +47,7 @@ def _report_error(source: str, reasons: list[str]) -> dict[str, Any]:
             }
             for reason in reasons
         ],
-    }
+    )
 
 
 def run(proposal_path: Path, mid_path: Path | None) -> dict[str, Any]:
