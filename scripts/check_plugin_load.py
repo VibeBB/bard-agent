@@ -15,9 +15,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_DIR = REPO_ROOT / "plugins" / "bard"
 
-EXPECTED_AGENTS = {"bard", "bard-critic"}
-EXPECTED_SKILLS = {"bard-proposal-rules", "bard-render", "bard-songcraft"}
-EXPECTED_COMMANDS = {"doctor", "sing"}
+EXPECTED_AGENTS = {"bard", "bard-critic", "bard-cue"}
+EXPECTED_SKILLS = {
+    "bard-cuecraft",
+    "bard-proposal-rules",
+    "bard-render",
+    "bard-songcraft",
+}
+EXPECTED_COMMANDS = {"cue", "doctor", "sing"}
 EXPECTED_SESSION_START_HOOKS = {"bard-doctor", "ensure-llm-profiles"}
 EXPECTED_USER_PROMPT_SUBMIT_HOOKS: set[str] = set()
 EXPECTED_PRE_TOOL_USE_HOOKS = {"protect-song-artifacts", "safety-rail"}

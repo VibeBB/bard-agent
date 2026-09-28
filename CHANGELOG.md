@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Product sound cues (earcons): the `bard_cue_set` 0.1 contract, the
+  stdlib-only `render_cues.py` renderer (per-cue MIDI and MML plus a
+  `cues.json` firmware tone table), the `bard-cue` sub-agent, the
+  `/bard:cue` command, and the `bard-cuecraft` skill. Startup, completion,
+  warning, and other cues reuse the song MIDI/MML primitives and answer
+  ux-creator interaction-content requests (ADR-0011).
+
 ### Changed
 
 - `score.png` rendering is docker-only: `render_score_png.py` always runs the

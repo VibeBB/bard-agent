@@ -199,3 +199,30 @@ need two steps, and write files with `file_editor` rather than multi-line heredo
 
 `docs/song-proposal-contract.md` in the bard-agent repository. The script embeds the same rules
 as code; when they disagree, the document wins and the script has a bug.
+
+## Product sound cues
+
+`scripts/render_cues.py` is the only writer of product cue artifacts. It validates a
+`bard_cue_set` 0.1 (`docs/cue-set-contract.md` in the bard repository), renders every cue with
+the same MIDI/MML primitives as `render_song.py`, reads each output back, and only then writes
+`cue-<id>.mid`, `cue-<id>.mml`, `cues.json` (firmware tone table, `system: bard`), `cues.md`
+and `cues.provenance.json`. Start from `examples/smart-kettle.cues.json`.
+
+```json
+{
+  "artifact_kind": "bard_cue_set", "schema_version": "0.1",
+  "product": "1..80 chars", "device": "piezo|speaker",
+  "sources": [{"kind": "ux_request|conversation_summary|agent_message|git_log|file|user_request", "ref": "path"}],
+  "rationale": "1..2000 chars",
+  "originality": {"original_melody": true, "no_trademark_sound_imitation": true},
+  "cues": [{"id": "boot", "purpose": "startup", "ux_feedback": "optional UX feedback id",
+            "bpm": 60, "program": 80, "loop": false,
+            "notes": [{"pitch": "c6", "beats": 0.25}, {"pitch": "r", "beats": 0.125}]}]
+}
+```
+
+```bash
+python3 scripts/render_cues.py --cues cues/<slug>/cues.proposal.json --out-dir cues/<slug> [--check] [--json]
+```
+
+Exit `0` ok, `2` rejected (every reason listed, nothing written), `3` I/O error.
