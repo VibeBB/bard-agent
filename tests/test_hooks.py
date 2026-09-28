@@ -1,11 +1,14 @@
 """Tests for the bard plugin hook scripts (stop + session_start doctor)."""
 
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 PLUGIN_ROOT = Path(__file__).parents[1] / "plugins" / "bard"
 SCRIPT = PLUGIN_ROOT / "hooks" / "scripts" / "report_song_status.py"
@@ -386,3 +389,82 @@ def test_record_vision_tool_event_records_actor(tmp_path: Path) -> None:
     record = json.loads(events.read_text(encoding="utf-8").splitlines()[0])
     assert record["actor"]["subagent_type"] == "bard-critic"
     assert record["tool_call_id"] == "tc-4"
+
+
+def test_record_hooks_share_provenance_contract(tmp_path: Path) -> None:
+    """Both observation hooks attribute the same actor and emit 64-hex ids."""
+    image = tmp_path / "score.png"
+    image.write_bytes(b"\x89PNG fake")
+    obs_events = tmp_path / "obs.jsonl"
+    vis_events = tmp_path / "vis.jsonl"
+    base = {
+        "working_dir": str(tmp_path),
+        "session_id": "s1",
+        "agent_name": "bard",
+        "tool_call_id": "tc-7",
+    }
+    vision_payload = {
+        **base,
+        "tool_name": "inspect_image_with_vision",
+        "tool_input": {"image_index": 0, "question": "q"},
+        "tool_response": {
+            "answer": "a",
+            "profile_name": "vibebb-review",
+            "model": "m1",
+        },
+    }
+    observe_payload = {
+        **base,
+        "tool_name": "file_editor",
+        "tool_input": {"command": "view", "path": str(image)},
+        "tool_response": {"ok": True},
+    }
+
+    vis_env = dict(os.environ, BARD_VISION_TOOL_EVENTS=str(vis_events))
+    obs_env = dict(os.environ, BARD_IMAGE_OBSERVATIONS=str(obs_events))
+    for script, payload, env in (
+        (VISION_EVENT_SCRIPT, vision_payload, vis_env),
+        (IMAGE_OBS_SCRIPT, observe_payload, obs_env),
+    ):
+        result = subprocess.run(
+            [sys.executable, str(script)],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True,
+            env=env,
+            check=False,
+        )
+        assert result.returncode == 0
+
+    vision = json.loads(vis_events.read_text(encoding="utf-8").splitlines()[0])
+    observe = json.loads(obs_events.read_text(encoding="utf-8").splitlines()[0])
+    expected_actor = {"agent_name": "bard", "tool_call_id": "tc-7"}
+    assert vision["actor"] == observe["actor"] == expected_actor
+    assert len(vision["event_id"]) == len(observe["event_id"]) == 64
+    int(vision["event_id"], 16)
+    int(observe["event_id"], 16)
+
+
+def test_provenance_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    spec = importlib.util.spec_from_file_location(
+        "_provenance", PLUGIN_ROOT / "hooks" / "scripts" / "_provenance.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    missing = tmp_path / "missing.jsonl"
+    assert module.next_sequence(missing) == 1
+    missing.write_text("a\nb\n", encoding="utf-8")
+    assert module.next_sequence(missing) == 3
+
+    payload: dict[str, Any] = {"working_dir": str(tmp_path)}
+    rel = Path("observations/x.jsonl")
+    env = "BARD_TEST_EVENTS"
+    monkeypatch.delenv(env, raising=False)
+    assert module.events_path(payload, env, rel) == tmp_path / rel
+    monkeypatch.setenv(env, "sub/log.jsonl")
+    assert module.events_path(payload, env, rel) == tmp_path / "sub" / "log.jsonl"
+    absolute = tmp_path / "abs" / "log.jsonl"
+    monkeypatch.setenv(env, str(absolute))
+    assert module.events_path(payload, env, rel) == absolute
