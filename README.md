@@ -49,6 +49,27 @@ are written to `songs/<slug>/`:
   rendered inside the pinned `bard-tools` docker image when docker and the
   image pin are available — see [docker/README.md](docker/README.md))
 
+### Product sound cues
+
+`/bard:cue` designs original product sound cues (earcons) — startup,
+completion, warning, error, confirm, pairing, and similar — for a piezo
+buzzer or a small speaker. It answers ux-creator interaction-content requests
+and writes `cues/<slug>/`:
+
+- `cue-<id>.mid` / `cue-<id>.mml` — one MIDI file and one `bard-mml 0.1`
+  voice per cue, rendered with the same primitives as songs
+- `cues.json` — a firmware-ready tone table (`freq_hz`, `start_ms`,
+  `duration_ms`) with the file map; ux-creator imports it with
+  `import --from bard`
+- `cues.md` / `cues.provenance.json` — preview and provenance
+- `cues.proposal.json` — the canonical cue set
+  ([contract](docs/cue-set-contract.md))
+
+```text
+/bard:cue piezo smart-kettle startup completion warning
+/bard:cue piezo smart-kettle ux/smart-kettle.ux-request.json
+```
+
 The proposal contract is schema 0.3. Repeated sections can use `melody_from`
 to copy chords and melody from an earlier section, keeping proposal JSON short.
 Use `--check` when you only want validation; it writes nothing and lists the
@@ -158,14 +179,15 @@ original one.
 ```text
 plugins/bard/
 ├── .plugin/plugin.json
-├── agents/bard.md, bard-critic.md
-├── commands/sing.md
+├── agents/bard.md, bard-critic.md, bard-cue.md
+├── commands/sing.md, cue.md
 ├── hooks/                               # stop hook reporting song render status
 └── skills/
     ├── bard-songcraft/SKILL.md          # songwriting decision tables and copyright contract
+    ├── bard-cuecraft/SKILL.md           # product sound cue decision tables
     └── bard-render/                     # proposal JSON validation and rendering (stdlib only)
         ├── SKILL.md
-        └── scripts/render_song.py
+        └── scripts/render_song.py, render_cues.py
 docs/                                    # contract, ADRs, research, and the docs index
 tests/                                   # renderer and plugin-asset checks
 ```
@@ -229,6 +251,22 @@ OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです�
 - `score.png` / `score-review.json` — 任意の譜面目視チェック出力（advisory。
   digest 固定の `bard-tools` docker image 内でレンダリングされます。docker と
   image pin が利用できる場合のみ — [docker/README.md](docker/README.md) 参照）
+
+### 製品の音（効果音）
+
+`/bard:cue` は、圧電ブザーや小型スピーカー向けに、起動音・完了音・警告音・エラー音・
+操作音・ペアリング音などのオリジナルの製品音（earcon）を作ります。ux-creator の
+interaction-content からの依頼にも応え、`cues/<slug>/` に書き出します。
+
+- `cue-<id>.mid` / `cue-<id>.mml` — 音ごとの MIDI と `bard-mml 0.1`（歌と同じ描画部品を使用）
+- `cues.json` — ファームウェアでそのまま鳴らせる音程表（`freq_hz`・`start_ms`・
+  `duration_ms`）とファイル一覧。ux-creator は `import --from bard` で取り込みます
+- `cues.md` / `cues.provenance.json` — プレビューと来歴
+- `cues.proposal.json` — 製品音の正となる定義（[契約](docs/cue-set-contract.md)）
+
+```text
+/bard:cue piezo smart-kettle startup completion warning
+```
 
 提案契約はschema 0.3。反復するセクションは`melody_from`で前のセクションのコードと
 メロディを複製できるので、提案JSONが短くなります。検証だけしたいときは`--check`を
@@ -321,14 +359,15 @@ GUIを使わない場合は、プロジェクト直下に `plugins/bard` を置�
 ```text
 plugins/bard/
 ├── .plugin/plugin.json
-├── agents/bard.md, bard-critic.md
-├── commands/sing.md
+├── agents/bard.md, bard-critic.md, bard-cue.md
+├── commands/sing.md, cue.md
 ├── hooks/                               # 歌の描画状態を報告する stop hook
 └── skills/
     ├── bard-songcraft/SKILL.md          # 作詞作曲の決定表と著作権契約
+    ├── bard-cuecraft/SKILL.md           # 製品音の決定表
     └── bard-render/                     # 提案JSONの検証と描画（stdlibのみ）
         ├── SKILL.md
-        └── scripts/render_song.py
+        └── scripts/render_song.py, render_cues.py
 docs/                                    # 契約、ADR、リサーチ、ドキュメント索引
 tests/                                   # 描画scriptとplugin資材の検査
 ```

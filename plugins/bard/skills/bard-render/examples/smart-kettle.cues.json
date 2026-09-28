@@ -1,0 +1,22 @@
+{
+  "artifact_kind": "bard_cue_set",
+  "schema_version": "0.1",
+  "product": "smart-kettle",
+  "device": "piezo",
+  "sources": [
+    {"kind": "ux_request", "ref": "ux/smart-kettle.ux-request.json"},
+    {"kind": "file", "ref": "ux/smart-kettle.ux.json#feedback"}
+  ],
+  "rationale": "A rising major arpeggio says the kettle is awake; a two-tone rising fourth closes the boil (the UX contract asks for a two-tone done chime); the overheat warning is a repeated single high pitch with gaps so it reads as urgent and never resolves; the press click is one very short high tick inside the 300 ms confirm budget. All pitches sit in the piezo band c5..c8.",
+  "originality": {"original_melody": true, "no_trademark_sound_imitation": true},
+  "cues": [
+    {"id": "boot", "purpose": "startup", "bpm": 180,
+     "notes": [{"pitch": "c6", "beats": 0.25}, {"pitch": "e6", "beats": 0.25}, {"pitch": "g6", "beats": 0.5}]},
+    {"id": "done", "purpose": "completion", "ux_feedback": "beep_done", "bpm": 150,
+     "notes": [{"pitch": "g6", "beats": 0.5}, {"pitch": "c7", "beats": 1}]},
+    {"id": "overheat", "purpose": "warning", "bpm": 120, "loop": true,
+     "notes": [{"pitch": "a6", "beats": 0.25}, {"pitch": "r", "beats": 0.25}, {"pitch": "a6", "beats": 0.25}, {"pitch": "r", "beats": 0.25}, {"pitch": "a6", "beats": 0.5}]},
+    {"id": "press", "purpose": "confirm", "bpm": 180,
+     "notes": [{"pitch": "c7", "beats": 0.25}]}
+  ]
+}

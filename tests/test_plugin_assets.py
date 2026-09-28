@@ -11,7 +11,7 @@ PLUGIN_ROOT = REPO_ROOT / "plugins" / "bard"
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
-AGENT_NAMES = {"bard", "bard-critic"}
+AGENT_NAMES = {"bard", "bard-critic", "bard-cue"}
 
 
 def _frontmatter(path: Path) -> dict[str, str]:
@@ -138,3 +138,11 @@ def test_sdk_plugin_load() -> None:
     spec.loader.exec_module(module)
     reasons = module.check_plugin(PLUGIN_ROOT)
     assert reasons == [], reasons
+
+
+def test_cue_command_and_agent() -> None:
+    fm = _frontmatter(PLUGIN_ROOT / "commands" / "cue.md")
+    assert fm.get("description"), "cue.md frontmatter missing description"
+    text = (PLUGIN_ROOT / "agents" / "bard-cue.md").read_text(encoding="utf-8")
+    assert "render_cues.py" in text
+    assert "protect-song-artifacts" in text

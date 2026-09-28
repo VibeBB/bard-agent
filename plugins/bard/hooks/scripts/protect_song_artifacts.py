@@ -2,7 +2,9 @@
 
 song.abc, song.mid, song.mml, song.md, song.provenance.json, song.lint.json
 and score.png are projections of the proposal — render_song.py,
-lint_score.py and render_score_png.py are the only writers. Editing them by
+lint_score.py and render_score_png.py are the only writers. cues.json,
+cues.md, cues.provenance.json and cue-<id>.mid / cue-<id>.mml are projections
+of a product cue set and render_cues.py is their only writer. Editing them by
 hand breaks the proposal-is-truth invariant; they must be re-rendered from
 the proposal.
 
@@ -30,7 +32,11 @@ ARTIFACT_NAMES = (
     "song.provenance.json",
     "song.lint.json",
     "score.png",
+    "cues.json",
+    "cues.md",
+    "cues.provenance.json",
 )
+CUE_ARTIFACT_RE = re.compile(r"^cue-[a-z][a-z0-9_]{0,31}\.(?:mid|mml)$")
 WRITE_TOOLS = {"file_editor", "apply_patch"}
 VIEW_ACTIONS = {"view", "read", "undo_edit"}
 WRITE_ACTIONS = {"create", "str_replace", "insert", "edit", "write"}
@@ -82,7 +88,7 @@ def _path_values(tool_input: dict[str, Any]) -> list[str]:
 def _is_protected(value: str) -> bool:
     normalized = value.replace("\\", "/").lower()
     base = normalized.rsplit("/", 1)[-1]
-    return base in ARTIFACT_NAMES
+    return base in ARTIFACT_NAMES or CUE_ARTIFACT_RE.match(base) is not None
 
 
 def _is_artifact_write(payload: dict[str, Any]) -> bool:

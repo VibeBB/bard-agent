@@ -22,20 +22,25 @@ plugins/bard/
 ├── .plugin/plugin.json
 ├── agents/
 │   ├── bard.md               # Minstrel that writes songs (task sub-agent)
-│   └── bard-critic.md        # Critic (no pass/fail authority)
+│   ├── bard-critic.md        # Critic (no pass/fail authority)
+│   └── bard-cue.md           # Product sound cues (earcons) for ux-creator / firmware
 ├── commands/sing.md          # /bard:sing — directs context collection and task invocation
+├── commands/cue.md           # /bard:cue — product sound cue request and task invocation
 ├── hooks/                    # session_start doctor, pre_tool_use song-artifact guard,
 │                             # post_tool_use vision records, stop hook reporting song
 │                             # render status (stdlib only)
 ├── skills/
 │   ├── bard-songcraft/       # Songwriting theory decision tables, modes, and copyright contract
-│   ├── bard-render/          # Proposal JSON validation and ABC/MIDI/MML/lyrics/provenance rendering (stdlib only)
+│   ├── bard-cuecraft/        # Product sound cue purposes, device ranges, originality rules
+│   ├── bard-render/          # Proposal JSON validation and ABC/MIDI/MML/lyrics/provenance rendering,
+│   │                         # plus cue-set rendering (render_cues.py) (stdlib only)
 │   └── bard-proposal-rules/  # Path-triggered rule on *.proposal.json (contract + originality reminders)
 │       ├── SKILL.md
 │       ├── scripts/
 │       └── tests/
 docs/
 ├── song-proposal-contract.md # Canonical proposal JSON contract
+├── cue-set-contract.md       # Product sound cue set JSON contract
 ├── adr/
 └── research/
 docker/                       # bard-tools image (abcm2ps + rsvg-convert + IPA font), the
