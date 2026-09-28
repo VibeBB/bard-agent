@@ -180,6 +180,8 @@ def test_safety_rail_denies_denylist() -> None:
         "git checkout -- plugins/bard/agents/bard.md",
         "git stash drop",
         "git add .",
+        "git add -A",
+        "git add --all",
         "git commit --amend",
         "git commit --no-verify",
     ):
