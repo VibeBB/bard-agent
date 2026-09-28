@@ -1545,6 +1545,32 @@ def _midi_note_spans(data: bytes) -> dict[int, list[tuple[int, int, int]]]:
     return spans
 
 
+def score_lint_report(
+    source: str,
+    *,
+    verdict: str,
+    errors: int,
+    warnings: int,
+    notes_checked: int,
+    voicing: dict[str, Any],
+    findings: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Assemble the `song.lint.json` envelope shared by the pass and fail paths."""
+    return {
+        "artifact_kind": "score_lint",
+        "authority": "none",
+        "schema_version": "1.0",
+        "kind": "score_lint",
+        "source": source,
+        "verdict": verdict,
+        "errors": errors,
+        "warnings": warnings,
+        "notes_checked": notes_checked,
+        "voicing": voicing,
+        "findings": findings,
+    }
+
+
 def lint_song(song: Song, midi: bytes, *, source: str) -> dict[str, Any]:
     """Advisory score lint: residual melody/accompaniment clashes on the
     emitted MIDI plus the deterministic re-voicing adjustments applied.
@@ -1599,23 +1625,19 @@ def lint_song(song: Song, midi: bytes, *, source: str) -> dict[str, Any]:
                 }
             )
     warnings = sum(1 for f in findings if f["severity"] == "warning")
-    return {
-        "artifact_kind": "score_lint",
-        "authority": "none",
-        "schema_version": "1.0",
-        "kind": "score_lint",
-        "source": source,
-        "verdict": "pass",
-        "errors": 0,
-        "warnings": warnings,
-        "notes_checked": len(melody) + len(accomp),
-        "voicing": {
+    return score_lint_report(
+        source,
+        verdict="pass",
+        errors=0,
+        warnings=warnings,
+        notes_checked=len(melody) + len(accomp),
+        voicing={
             "substituted": len(substitutions),
             "dropped": len(adjustments) - len(substitutions),
             "substitutions": substitutions,
         },
-        "findings": findings,
-    }
+        findings=findings,
+    )
 
 
 MML_TOKEN_RE = re.compile(r"(t\d+|o\d+|l\d+\.?|<|>|&|[cdefgab][+-]?\d*\.?|r\d*\.?)")
