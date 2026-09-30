@@ -12,7 +12,7 @@ touch this plugin), **deferred** (useful, blocked; revisit trigger given).
 
 | Upstream change | Decision | Notes for bard-agent |
 | --- | --- | --- |
-| #5345 keep conversations alive when MCP startup fails | inherent | A missing tools image / Docker now degrades to "plugin MCP tools absent" instead of killing the conversation. The doctor hook already reports the cause; agents must not improvise results when `bard_*` tools are missing. |
+| #5345 keep conversations alive when MCP startup fails | n/a | The plugin declares no MCP server; skills run their scripts directly. |
 | #5309 surface LiteLLM budget denials without retry backoff | inherent | Sub-agent `max_budget_per_run` caps and proxy budget denials now end the run immediately instead of retrying. |
 | #5222 refresh-on-401 hook on managed-proxy LLMs (agent-server) | inherent | No agent-server image is built by this repo. |
 | #5270 manage optional backend processes for Canvas apps (agent-server) | n/a | The plugin ships no Canvas extension/app backend. |
@@ -25,7 +25,7 @@ touch this plugin), **deferred** (useful, blocked; revisit trigger given).
 | #5143, #5148, #5149, #5241, #5242 condenser keeps the leading system prompt / splits summarization prompt | inherent | Long sub-agent runs keep the agent definition (and its fail-closed rules) after condensation or a hard context reset. |
 | #5239 system message prepended to profile pre-flight ping | inherent | `vibebb-*` profile checks behave with system-first providers. |
 | #5240 GraySwan analyzer system-first guarantee | n/a | Security analyzer not configured by the plugin. |
-| #4322 anyOf `false` branch no longer widened to accept-all | n/a | MCP input schemas here are hand-written JSON without `anyOf`. |
+| #4322 anyOf `false` branch no longer widened to accept-all | n/a | The plugin declares no MCP server, so there are no MCP tool input schemas. |
 | #4656 docstrings for image helper functions | inherent (informs vision design) | Confirms: for a non-vision model the SDK rewrites only images in the latest user message into `inspect_image_with_vision` references; images in tool observations are not delegated. |
 | #5328 gate `prompt_cache_key` on provider support | inherent | |
 | #5298 aiosqlite 0.22.1 | inherent | |
