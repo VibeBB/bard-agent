@@ -101,6 +101,7 @@ one `reason` per line as `<path in proposal>: <message>`, e.g.
 
 Outputs are byte-for-byte deterministic for the same proposal, except the `generated_at`
 timestamp in the provenance record.
+Its `script_sha256` is the SHA-256 of the raw bytes of `render_song.py`, `song_model.py`, `song_validate.py`, `song_render.py`, and `song_readback.py`, fed sequentially in that fixed order.
 
 ## Score.png visual review (required when renderable)
 
