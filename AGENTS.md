@@ -101,6 +101,9 @@ tests/                        # Plugin-asset consistency checks
   `$OPENHANDS_PROJECT_DIR/plugins/bard`,
   `$HOME/.agents/plugins/bard`,
   `$HOME/.openhands/plugins/installed/bard`.
+- Shared hooks are canonical across the family; change all 9 copies together
+  and update `EXPECTED` in `scripts/check_shared_hooks.py`.
+  `intake_attachments.py` and `record_*` hooks are intentionally repo-specific.
 - Skills use `triggers:` (`KeywordTrigger`). A `paths:` glob list makes a
   skill a path-triggered rule instead (deterministic injection when a matching
   file is touched); the two mechanisms are exclusive — keyword skills stay
