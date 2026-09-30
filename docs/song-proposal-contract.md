@@ -173,6 +173,7 @@ declare `melody_from: "<earlier section name>"`.
 | `song.provenance.json` | `authority: none`, `artifact_kind: bard_song_provenance`, generation time (UTC ISO 8601), proposal path/sha256, sha256 of each output, a copy of `sources`, the sha256 of the generating script, `license: BSD-3-Clause`, a copy of `originality`, `bpm`/`key`/`meter`/bar count/note count |
 
 All text outputs use `encoding="utf-8"` with `\n` newlines.
+The provenance `script_sha256` is the SHA-256 of the raw bytes of `render_song.py`, `song_model.py`, `song_validate.py`, `song_render.py`, and `song_readback.py`, fed sequentially in that fixed order.
 
 ### Optional advisory artifacts (not render outputs)
 
