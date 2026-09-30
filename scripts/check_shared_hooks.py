@@ -6,31 +6,38 @@ import re
 import sys
 from pathlib import Path
 
+_EXPECTED_ENSURE_LLM_PROFILES_NORMALIZED_AST_SHA256 = (
+    "e8eb58bf540e432be683e737a913a97e84b7f2c2e20daddf27cb6fec42316c79"
+)
+_EXPECTED_PROVENANCE_NORMALIZED_AST_SHA256 = (
+    "129bc2a98d85c300026ef50dabe90940c4b3c0e7054fb02d52d1d1dee3b18672"
+)
+_EXPECTED_SAFETY_RAIL_NORMALIZED_AST_SHA256 = (
+    "1a9f3f72fec383f046db2ca8805a7190c33daa86daf42f06c3cd27e3f8be245b"
+)
 EXPECTED: dict[str, str] = {
-    "ensure_llm_profiles.py": (
-        "e8eb58bf540e432be683e737a913a97e84b7f2c2e20daddf27cb6fec42316c79"
-    ),
-    "_provenance.py": (
-        "129bc2a98d85c300026ef50dabe90940c4b3c0e7054fb02d52d1d1dee3b18672"
-    ),
-    "safety_rail.py": (
-        "1a9f3f72fec383f046db2ca8805a7190c33daa86daf42f06c3cd27e3f8be245b"
-    ),
+    "ensure_llm_profiles.py": _EXPECTED_ENSURE_LLM_PROFILES_NORMALIZED_AST_SHA256,
+    "_provenance.py": _EXPECTED_PROVENANCE_NORMALIZED_AST_SHA256,
+    "safety_rail.py": _EXPECTED_SAFETY_RAIL_NORMALIZED_AST_SHA256,
 }
 REQUIRED = frozenset({"ensure_llm_profiles.py", "safety_rail.py"})
+_DOCSTRING_NODE_TYPES = (
+    ast.Module,
+    ast.ClassDef,
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+)
 
 
 def _strip_docstrings(node: ast.AST) -> None:
-    if isinstance(
-        node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+    if (
+        isinstance(node, _DOCSTRING_NODE_TYPES)
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
     ):
-        if (
-            node.body
-            and isinstance(node.body[0], ast.Expr)
-            and isinstance(node.body[0].value, ast.Constant)
-            and isinstance(node.body[0].value.value, str)
-        ):
-            node.body = node.body[1:]
+        node.body = node.body[1:]
     for child in ast.iter_child_nodes(node):
         _strip_docstrings(child)
 
@@ -48,9 +55,8 @@ def _digest(path: Path, plugin_name: str) -> str:
 
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
-    hook_dirs = sorted(
-        path for path in (root / "plugins").glob("*/hooks/scripts") if path.is_dir()
-    )
+    hook_paths = (root / "plugins").glob("*/hooks/scripts")
+    hook_dirs = sorted(path for path in hook_paths if path.is_dir())
     if len(hook_dirs) != 1:
         print("expected one plugins/<name>/hooks/scripts directory", file=sys.stderr)
         return 1
