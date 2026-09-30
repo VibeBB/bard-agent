@@ -11,6 +11,7 @@ dev = [
     "pytest==9.1.1",
     "ruff==0.16.9",
     "pyright==1.1.414",
+    "pytest-cov==7.1.0",
 ]
 sdk-check = ["openhands-sdk==1.50.0", "openhands-tools==1.50.0"]
 
@@ -43,3 +44,10 @@ reportMissingParameterType = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-rs"
+
+[tool.coverage.run]
+source = ["plugins/bard"]
+branch = false
+
+[tool.coverage.report]
+fail_under = 79
