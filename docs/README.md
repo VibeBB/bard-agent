@@ -10,6 +10,7 @@
 | [`song-proposal-contract.md`](song-proposal-contract.md) | Canonical song proposal JSON contract |
 | [`cue-set-contract.md`](cue-set-contract.md) | Product sound cue set JSON contract |
 | [`operations.md`](operations.md) | Release process, plugin update notes, verification recipes |
+| [`research/sdk-v1.50.0-feature-evaluation.md`](research/sdk-v1.50.0-feature-evaluation.md) | OpenHands SDK v1.50.0 and uv 0.12.21 adoption review |
 | [`../docker/README.md`](../docker/README.md) | `bard-tools` score-render image |
 
 ## Accepted ADR list
