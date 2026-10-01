@@ -83,9 +83,11 @@ jobs:
               exit 1
               ;;
           esac
-          printf 'TOOLS_REF=ghcr.io/%s/bard-tools@%s\n' "$OWNER_LC" "$BUILT_DIGEST" >> "$GITHUB_ENV"
-          printf 'TOOLS_DIGEST=%s\n' "$BUILT_DIGEST" >> "$GITHUB_ENV"
-          printf 'TOOLS_TAG=%s-tools\n' "$SOURCE_SHA" >> "$GITHUB_ENV"
+          {
+            printf 'TOOLS_REF=ghcr.io/%s/bard-tools@%s\n' "$OWNER_LC" "$BUILT_DIGEST"
+            printf 'TOOLS_DIGEST=%s\n' "$BUILT_DIGEST"
+            printf 'TOOLS_TAG=%s-tools\n' "$SOURCE_SHA"
+          } >> "$GITHUB_ENV"
       - name: Measure published tools image
         env:
           TOOLS_REF: ${{ env.TOOLS_REF }}
