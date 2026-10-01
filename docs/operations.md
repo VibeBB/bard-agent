@@ -1,3 +1,11 @@
+## SBOM attestations
+
+`publish-bard-images.yml` generates and attests an SPDX-2.3 SBOM for the
+published digest, uploads it for 30 days, and records its URL as
+`sbom_attestation` in the image lock. `locked-image-check.yml` verifies the
+SBOM attestation when present; an absent URL warns and continues. It also
+renders the shipped score example through `render_score_png.py` and uploads
+the smoke output.
 # Operations
 
 Operational detail for maintainers and installers: the release process,
@@ -118,3 +126,18 @@ Runtime policy surfaces that the plugin declares but the host executes:
   seed to durable facts only.
 - `StuckDetector` is on by default for every conversation including task
   sub-agents; `max_iteration_per_run` remains the repo-side bound.
+
+## Launcher-side verification
+
+`BARD_VERIFY_ATTESTATION` accepts `auto` (the default), `require`, or `off`.
+The renderer verifies the lock entry with `gh attestation verify` immediately
+before pulling. `render_score_png.py --prewarm` verifies even when the pinned
+image is already local. In `auto`, an image override, missing attestation,
+missing `gh`, or failed `gh auth status` prints one note and skips verification; once
+verification starts, failure or timeout stops the pull. `require` treats the
+skip conditions as errors, while `off` never verifies. A locally present
+image is not re-verified during ordinary rendering.
+
+## CI runner network auditing
+
+CI and image-publishing jobs use `step-security/harden-runner` in audit-only mode. It observes network egress without blocking requests; per-run insights are available in the GitHub Actions job summary.

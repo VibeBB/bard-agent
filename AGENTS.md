@@ -167,12 +167,17 @@ input and confirm that the broken proposal is rejected.
   manual steps. After the merge lands it dispatches both workflows on
   main fire-and-forget; `main-ci-failure-issue.yml` turns a failed main
   run into a tracking issue.
+- `.github/workflows/locked-image-check.yml` validates the render-image
+  lock, verifies available provenance and SBOM attestations, renders the
+  shipped score example through `render_score_png.py`, and retains smoke
+  output.
 - `.github/workflows/check-dependency-updates.yml` runs
   `scripts/check_dependency_updates.py` weekly and on `workflow_dispatch`,
   aggregating update candidates (PyPI direct/lock drift, uv pin, Python
   minor, GitHub Actions `uses:` pins, uvx tool pins, Docker ARGs and base
   image) into the "Dependency update check report" Issue labeled
-  `dependency-updates`; it closes the issue when nothing is outdated.
+  `dependency-updates`; fetch failures are reported as unknown and keep the
+  issue open until both outdated and unknown counts reach zero.
   Deferrals with reasons and re-check deadlines live in
   `scripts/dependency_update_deferrals.json`. When adding, removing, or
   moving a dependency, adding a new version ARG to a Dockerfile, or starting
@@ -214,3 +219,5 @@ Write commit messages in English. Do not use `git add .`, amend commits,
 `--no-verify`, force push, direct pushes to main, `reset --hard`, `clean -fd`,
 `checkout -- file`, or `stash drop`. Do not commit generated `out/` files,
 secrets, or environment files. Use `git mv` when renaming files.
+
+Shared workflows are canonical across the family; change all 11 copies together and update `EXPECTED` in `scripts/check_shared_workflows.py`.

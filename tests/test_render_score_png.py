@@ -47,6 +47,18 @@ def _which_docker_only(t: str) -> str | None:
     return "/usr/bin/docker" if t == "docker" else None
 
 
+def _which_gh_and_docker(name: str) -> str | None:
+    return f"/usr/bin/{name}" if name in {"docker", "gh"} else None
+
+
+def _no_tools(_name: str) -> str | None:
+    return None
+
+
+def _unexpected_which(_name: str) -> str | None:
+    pytest.fail("unexpected tool lookup")
+
+
 def _pin_file(tmp_path: Path, digest: object = "sha256:" + "ab" * 32) -> Path:
     pin = tmp_path / "tools-image.json"
     pin.write_text(
@@ -79,6 +91,10 @@ def _fake_docker_run_ok(
         (work / "score001.svg").write_bytes(b"<svg>fake</svg>")
         (work / "score.png").write_bytes(b"\x89PNG fake")
     return subprocess.CompletedProcess(cmd, 0, "", "")
+
+
+def _unexpected_subprocess(*_args: Any, **_kwargs: Any) -> Any:
+    pytest.fail("unexpected subprocess call")
 
 
 def test_missing_abc_is_io_error(score_module: Any, tmp_path: Path) -> None:
@@ -150,7 +166,7 @@ def test_missing_docker_is_skip(
     abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
     monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
     monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
-    monkeypatch.setattr(score_module.shutil, "which", lambda _t: None)
+    monkeypatch.setattr(score_module.shutil, "which", _no_tools)
     with pytest.raises(score_module.RenderError) as err:
         score_module.render_score_png(abc, tmp_path)
     assert err.value.exit_code == score_module.EXIT_NO_TOOLS
@@ -232,6 +248,324 @@ def test_cli_json_ok(
         payload["score_png_sha256"]
         == hashlib.sha256((tmp_path / "score.png").read_bytes()).hexdigest()
     )
+
+
+def test_attestation_verification_uses_lock_signer(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "require")
+    monkeypatch.setattr(score_module.shutil, "which", _which_gh_and_docker)
+    commands: list[tuple[list[str], dict[str, Any]]] = []
+
+    def run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        commands.append((cmd, kwargs))
+        if cmd[0].endswith("/gh"):
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd[1:3] == ["image", "inspect"]:
+            return subprocess.CompletedProcess(cmd, 1, "", "not found")
+        if cmd[1:2] == ["run"]:
+            work = Path(next(a for a in cmd if a.endswith(":/work")).split(":")[0])
+            (work / "score001.svg").write_bytes(b"<svg>fake</svg>")
+            (work / "score.png").write_bytes(b"\x89PNG fake")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(score_module.subprocess, "run", run)
+    pin = _pin_file(tmp_path)
+    monkeypatch.setattr(score_module, "PIN_PATH", pin)
+    abc = tmp_path / "song.abc"
+    abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+
+    score_module.render_score_png(abc, tmp_path)
+
+    verify_index = next(
+        index
+        for index, (command, _kwargs) in enumerate(commands)
+        if command[1:3] == ["attestation", "verify"]
+    )
+    verify, verify_kwargs = commands[verify_index]
+    assert verify == [
+        "/usr/bin/gh",
+        "attestation",
+        "verify",
+        "oci://ghcr.io/vibebb/bard-tools@sha256:" + "ab" * 32,
+        "--repo",
+        "VibeBB/bard-agent",
+        "--signer-workflow",
+        "VibeBB/bard-agent/.github/workflows/publish-bard-images.yml",
+    ]
+    auth_index = next(
+        index
+        for index, (command, _kwargs) in enumerate(commands)
+        if command[1:3] == ["auth", "status"]
+    )
+    auth, auth_kwargs = commands[auth_index]
+    assert auth == ["/usr/bin/gh", "auth", "status"]
+    assert auth_kwargs["timeout"] == score_module._GH_AUTH_TIMEOUT_S
+    assert verify_kwargs["timeout"] == score_module._ATTEST_TIMEOUT_S
+    pull_index = next(
+        index
+        for index, (command, _kwargs) in enumerate(commands)
+        if command[1:2] == ["pull"]
+    )
+    assert auth_index < verify_index < pull_index
+
+
+def test_required_attestation_failure_prevents_pull(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "require")
+    monkeypatch.setattr(
+        score_module.shutil,
+        "which",
+        _which_docker_only,
+    )
+    commands: list[list[str]] = []
+
+    def run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        commands.append(cmd)
+        if cmd[1:3] == ["image", "inspect"]:
+            return subprocess.CompletedProcess(cmd, 1, "", "not found")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(score_module.subprocess, "run", run)
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    abc = tmp_path / "song.abc"
+    abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+
+    with pytest.raises(score_module.RenderError, match="gh is not on PATH"):
+        score_module.render_score_png(abc, tmp_path)
+    assert not any(command[1:2] == ["pull"] for command in commands)
+
+
+def test_invalid_attestation_mode_exits_two(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "invalid")
+    abc = tmp_path / "song.abc"
+    abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+
+    assert score_module.main(["--abc", str(abc)]) == 2
+
+
+def test_off_does_not_look_up_gh(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "off")
+    monkeypatch.setattr(
+        score_module,
+        "PIN_PATH",
+        _pin_file(tmp_path),
+    )
+    monkeypatch.setattr(
+        score_module.shutil,
+        "which",
+        _unexpected_which,
+    )
+    monkeypatch.setattr(
+        score_module.subprocess,
+        "run",
+        _unexpected_subprocess,
+    )
+    pin = score_module._docker_pin()
+    assert pin is not None
+    score_module._verify_attestation(pin, override=False)
+
+
+def test_auto_skips_when_gh_is_missing(
+    score_module: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: Any,
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "auto")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+    monkeypatch.setattr(
+        score_module.subprocess,
+        "run",
+        _unexpected_subprocess,
+    )
+    pin = score_module._docker_pin()
+    assert pin is not None
+    score_module._verify_attestation(pin, override=False)
+    assert "gh is not on PATH" in capsys.readouterr().err
+
+
+def test_auto_skips_without_lock_attestation(
+    score_module: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: Any,
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "auto")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    pin = score_module._docker_pin()
+    assert pin is not None
+    pin["attestation"] = None
+    monkeypatch.setattr(score_module.shutil, "which", _which_gh_and_docker)
+    monkeypatch.setattr(
+        score_module.subprocess,
+        "run",
+        _unexpected_subprocess,
+    )
+    score_module._verify_attestation(pin, override=False)
+    assert "lock entry has no attestation" in capsys.readouterr().err
+
+
+def test_auto_skips_when_auth_fails(
+    score_module: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: Any,
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "auto")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.setattr(score_module.shutil, "which", _which_gh_and_docker)
+
+    def failed_auth(
+        command: list[str], **_kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 1, "", "")
+
+    monkeypatch.setattr(
+        score_module.subprocess,
+        "run",
+        failed_auth,
+    )
+    pin = score_module._docker_pin()
+    assert pin is not None
+    score_module._verify_attestation(pin, override=False)
+    assert "gh auth status failed" in capsys.readouterr().err
+
+
+def test_auto_skips_image_override(
+    score_module: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: Any,
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "auto")
+    monkeypatch.setattr(score_module.shutil, "which", _which_gh_and_docker)
+    monkeypatch.setattr(
+        score_module.subprocess,
+        "run",
+        _unexpected_subprocess,
+    )
+    score_module._verify_attestation(
+        {
+            "ref": "ghcr.io/vibebb/bard-tools@sha256:" + "ab" * 32,
+            "image": None,
+            "digest": None,
+            "attestation": None,
+        },
+        override=True,
+    )
+    assert "override has no lock attestation context" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("missing_context", ["attestation", "gh"])
+def test_require_errors_for_missing_context(
+    score_module: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    missing_context: str,
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "require")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    pin = score_module._docker_pin()
+    assert pin is not None
+    if missing_context == "attestation":
+        pin["attestation"] = None
+
+    def which(name: str) -> str | None:
+        return None if missing_context == "gh" and name == "gh" else f"/usr/bin/{name}"
+
+    monkeypatch.setattr(score_module.shutil, "which", which)
+    with pytest.raises(RuntimeError, match="verification required"):
+        score_module._verify_attestation(pin, override=False)
+
+
+def test_attestation_timeout_prevents_pull(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "require")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.setattr(score_module.shutil, "which", _which_gh_and_docker)
+    commands: list[list[str]] = []
+
+    def run(command: list[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        if command[1:3] == ["attestation", "verify"]:
+            raise subprocess.TimeoutExpired(command, score_module._ATTEST_TIMEOUT_S)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(score_module.subprocess, "run", run)
+    with pytest.raises(score_module.RenderError, match="timed out"):
+        score_module.prewarm_tools_image()
+    assert not any(command[1:2] == ["pull"] for command in commands)
+
+
+def test_prewarm_verifies_attestation_when_image_is_local(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "require")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
+    monkeypatch.setattr(score_module.shutil, "which", _which_gh_and_docker)
+    commands: list[list[str]] = []
+
+    def run(command: list[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(score_module.subprocess, "run", run)
+
+    image = score_module.prewarm_tools_image()
+
+    verify = next(
+        command for command in commands if command[1:3] == ["attestation", "verify"]
+    )
+    inspect = next(
+        command for command in commands if command[1:3] == ["image", "inspect"]
+    )
+    assert commands.index(verify) < commands.index(inspect)
+    assert image == "ghcr.io/vibebb/bard-tools@sha256:" + "ab" * 32
+    assert not any(command[1:2] == ["pull"] for command in commands)
+
+
+def test_normal_render_with_local_image_does_not_verify(
+    score_module: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: Any,
+) -> None:
+    abc = tmp_path / "song.abc"
+    abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "require")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+    monkeypatch.setattr(score_module.subprocess, "run", _fake_docker_run_ok)
+
+    score_module.render_score_png(abc, tmp_path)
+
+    assert capsys.readouterr().err == ""
+
+
+def test_prewarm_cli_succeeds(
+    score_module: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: Any,
+) -> None:
+    monkeypatch.setenv("BARD_VERIFY_ATTESTATION", "off")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+    monkeypatch.setattr(score_module.subprocess, "run", _fake_docker_run_ok)
+
+    assert score_module.main(["--prewarm", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": True,
+        "image": "ghcr.io/vibebb/bard-tools@sha256:" + "ab" * 32,
+    }
 
 
 def test_cli_json_no_pin(

@@ -49,6 +49,7 @@ def _run_lock(
     tmp_path: Path,
     digest: str,
     attestation: str | None = None,
+    sbom_attestation: str | None = None,
 ) -> int:
     pin = tmp_path / "tools-image.json"
     arguments = [
@@ -69,6 +70,8 @@ def _run_lock(
     ]
     if attestation is not None:
         arguments.extend(["--attestation", attestation])
+    if sbom_attestation is not None:
+        arguments.extend(["--sbom-attestation", sbom_attestation])
     return module.main(arguments)
 
 
@@ -90,6 +93,31 @@ def test_lock_without_attestation_is_supported(
     assert _run_lock(lock_module, tmp_path, "sha256:" + "ab" * 32) == 0
     entry = json.loads((tmp_path / "tools-image.json").read_text(encoding="utf-8"))
     assert "attestation" not in entry
+
+
+def test_lock_writes_sbom_attestation(lock_module: Any, tmp_path: Path) -> None:
+    url = "https://github.com/VibeBB/bard-agent/attestations/sbom"
+    assert (
+        _run_lock(lock_module, tmp_path, "sha256:" + "ab" * 32, sbom_attestation=url)
+        == 0
+    )
+    entry = json.loads((tmp_path / "tools-image.json").read_text(encoding="utf-8"))
+    assert entry["sbom_attestation"] == url
+
+
+@pytest.mark.parametrize("url", ["http://example.test/attestation", "https://"])
+def test_lock_rejects_invalid_sbom_attestation_url(
+    lock_module: Any, tmp_path: Path, url: str
+) -> None:
+    assert (
+        _run_lock(
+            lock_module,
+            tmp_path,
+            "sha256:" + "ab" * 32,
+            sbom_attestation=url,
+        )
+        == 1
+    )
 
 
 def test_lock_rejects_bad_digest(lock_module: Any, tmp_path: Path) -> None:
