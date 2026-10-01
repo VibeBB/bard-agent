@@ -28,3 +28,4 @@
 | [0009](adr/ADR-0009-docker-only-score-render.md) | Docker-only score rendering (image is the only render path) |
 | [0010](adr/ADR-0010-score-review-vision-contract.md) | `score-review.json` adopts the shared `vision_review` record contract |
 | [0011](adr/ADR-0011-product-sound-cues.md) | Product sound cues as a separate `bard_cue_set` contract |
+| [0012](adr/ADR-0012-attest-published-tools-images.md) | Attest published tools images |

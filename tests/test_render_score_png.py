@@ -55,6 +55,7 @@ def _pin_file(tmp_path: Path, digest: object = "sha256:" + "ab" * 32) -> Path:
                 "image": "ghcr.io/vibebb/bard-tools",
                 "tag": "deadbeef-tools",
                 "digest": digest,
+                "attestation": "https://github.com/VibeBB/bard-agent/attestations/1",
             }
         ),
         encoding="utf-8",

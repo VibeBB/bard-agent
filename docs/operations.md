@@ -26,6 +26,13 @@ input (`patch`/`minor`/`major`, defaulting to `patch`) or a `version` input
 
 If any step fails, neither a tag nor a Release is created.
 
+## Tools image provenance
+
+The `publish-bard-images.yml` workflow attaches a GitHub build-provenance
+attestation to the published `bard-tools` image. Its attestation URL is stored
+in `plugins/bard/skills/bard-render/tools-image.json` alongside the image
+digest.
+
 ## Updating the plugin
 
 Agent Canvas caches a plugin repository per source string. Because the refspec

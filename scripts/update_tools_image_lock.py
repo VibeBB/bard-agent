@@ -2,9 +2,10 @@
 """Update the bard-tools image pin used by the docker render fallback.
 
 Rewrites ``plugins/bard/skills/bard-render/tools-image.json`` with the newly
-published image's tag/digest plus provenance metadata (publish timestamp,
-workflow run URL, Dockerfile path, measured tool versions). Invoked by the
-publish-bard-images workflow on the lock-update branch. Standard library only.
+published image's tag/digest plus provenance metadata (attestation URL,
+publish timestamp, workflow run URL, Dockerfile path, measured tool versions).
+Invoked by the publish-bard-images workflow on the lock-update branch.
+Standard library only.
 
 Usage::
 
@@ -13,6 +14,7 @@ Usage::
         --image ghcr.io/vibebb/bard-tools \
         --tag <sha>-tools \
         --digest sha256:... \
+        --attestation https://github.com/.../attestations/... \
         --published-at 2026-09-23T00:00:00Z \
         --workflow-run https://github.com/.../actions/runs/... \
         --dockerfile docker/bard-tools.Dockerfile \
@@ -33,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--image", required=True)
     parser.add_argument("--tag", required=True)
     parser.add_argument("--digest", required=True)
+    parser.add_argument("--attestation")
     parser.add_argument("--published-at", required=True)
     parser.add_argument("--workflow-run", required=True)
     parser.add_argument("--dockerfile", default="docker/bard-tools.Dockerfile")
@@ -62,6 +65,8 @@ def main(argv: list[str] | None = None) -> int:
         "dockerfile": args.dockerfile,
         "tools": tools,
     }
+    if args.attestation is not None:
+        entry["attestation"] = args.attestation
     args.pin.parent.mkdir(parents=True, exist_ok=True)
     args.pin.write_text(json.dumps(entry, indent=2) + "\n", encoding="utf-8")
     print(f"updated {args.pin}: {args.image}@{args.digest}")
