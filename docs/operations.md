@@ -1,3 +1,9 @@
+# Operations
+
+Operational detail for maintainers and installers: the release process,
+plugin update caveats, and verification recipes. For a product overview see
+the [README](../README.md).
+
 ## SBOM attestations
 
 `publish-bard-images.yml` generates and attests an SPDX-2.3 SBOM for the
@@ -6,11 +12,6 @@ published digest, uploads it for 30 days, and records its URL as
 SBOM attestation when present; an absent URL warns and continues. It also
 renders the shipped score example through `render_score_png.py` and uploads
 the smoke output.
-# Operations
-
-Operational detail for maintainers and installers: the release process,
-plugin update caveats, and verification recipes. For a product overview see
-the [README](../README.md).
 
 ## Release process
 
