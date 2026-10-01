@@ -188,8 +188,9 @@ input and confirm that the broken proposal is rejected.
   record the evaluation — including reasons for non-adoption — in the PR
   or under `docs/research/`.
 - `.github/workflows/main-ci-failure-issue.yml` watches completed main
-  runs of CI, Publish bard images, and Workflow lint (`workflow_run`), and
-  files or closes a `ci-main-failure` tracking issue on failure/success.
+  runs of CI, Digest lock PR sweep, Dependency update check, PR branch
+  cleanup, Publish bard images, Release, and Workflow lint (`workflow_run`),
+  and files or closes a `ci-main-failure` tracking issue on failure/success.
 - `.github/workflows/workflow-lint.yml` runs actionlint (structural YAML
   checks) and zizmor on every pull request, on pushes to main that touch
   `.github/**`, on
@@ -200,10 +201,12 @@ input and confirm that the broken proposal is rejected.
 - Every `uses:` entry is pinned to a 40-character SHA with a `# vX.Y.Z`
   comment. Checkout uses `persist-credentials: false`, and every job has a
   `timeout-minutes` setting.
-- `dependabot.yml` monitors GitHub Actions weekly. The uv ecosystem is
-  intentionally excluded (Dependabot's bundled uv cannot satisfy
-  `[tool.uv] required-version`), so Python dependency updates stay covered
-  by the weekly check-dependency-updates.yml report.
+- `dependabot.yml` groups GitHub Actions updates and monitors them weekly with
+  a seven-day cooldown; Dockerfile updates are also monitored weekly with a
+  seven-day cooldown under `/docker`. The uv ecosystem is intentionally
+  excluded (Dependabot's bundled uv cannot satisfy `[tool.uv] required-version`),
+  so Python dependency updates stay covered by the weekly
+  check-dependency-updates.yml report.
 
 ## Git
 

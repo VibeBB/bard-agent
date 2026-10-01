@@ -44,36 +44,52 @@ def _tools_json(tmp_path: Path) -> Path:
     return path
 
 
-def _run_lock(module: Any, tmp_path: Path, digest: str) -> int:
+def _run_lock(
+    module: Any,
+    tmp_path: Path,
+    digest: str,
+    attestation: str | None = None,
+) -> int:
     pin = tmp_path / "tools-image.json"
-    return module.main(
-        [
-            "--pin",
-            str(pin),
-            "--image",
-            "ghcr.io/vibebb/bard-tools",
-            "--tag",
-            "deadbeef-tools",
-            "--digest",
-            digest,
-            "--published-at",
-            "2026-09-23T00:00:00Z",
-            "--workflow-run",
-            "https://github.com/VibeBB/bard-agent/actions/runs/1",
-            "--tools-json",
-            str(_tools_json(tmp_path)),
-        ]
-    )
+    arguments = [
+        "--pin",
+        str(pin),
+        "--image",
+        "ghcr.io/vibebb/bard-tools",
+        "--tag",
+        "deadbeef-tools",
+        "--digest",
+        digest,
+        "--published-at",
+        "2026-09-23T00:00:00Z",
+        "--workflow-run",
+        "https://github.com/VibeBB/bard-agent/actions/runs/1",
+        "--tools-json",
+        str(_tools_json(tmp_path)),
+    ]
+    if attestation is not None:
+        arguments.extend(["--attestation", attestation])
+    return module.main(arguments)
 
 
 def test_lock_writes_entry(lock_module: Any, tmp_path: Path) -> None:
     digest = "sha256:" + "ab" * 32
-    assert _run_lock(lock_module, tmp_path, digest) == 0
+    attestation = "https://github.com/VibeBB/bard-agent/attestations/1"
+    assert _run_lock(lock_module, tmp_path, digest, attestation) == 0
     entry = json.loads((tmp_path / "tools-image.json").read_text(encoding="utf-8"))
     assert entry["image"] == "ghcr.io/vibebb/bard-tools"
     assert entry["digest"] == digest
+    assert entry["attestation"] == attestation
     assert entry["tools"]["abcm2ps"] == "8.14.11"
     assert entry["dockerfile"] == "docker/bard-tools.Dockerfile"
+
+
+def test_lock_without_attestation_is_supported(
+    lock_module: Any, tmp_path: Path
+) -> None:
+    assert _run_lock(lock_module, tmp_path, "sha256:" + "ab" * 32) == 0
+    entry = json.loads((tmp_path / "tools-image.json").read_text(encoding="utf-8"))
+    assert "attestation" not in entry
 
 
 def test_lock_rejects_bad_digest(lock_module: Any, tmp_path: Path) -> None:
