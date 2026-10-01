@@ -40,8 +40,8 @@ jobs:
           printf '\nworkflow: %s/%s/actions/runs/%s\n' \
             "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> "$REPORT_MARKDOWN"
           cat "$REPORT_MARKDOWN" >> "$GITHUB_STEP_SUMMARY"
-          echo "outdated=$(python3 -c 'import json; print(json.load(open("'"$REPORT_JSON"'", encoding="utf-8"))["outdated_count"])')" \
-            >> "$GITHUB_OUTPUT"
+          outdated=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["outdated_count"])' "$REPORT_JSON")
+          printf 'outdated=%s\n' "$outdated" >> "$GITHUB_OUTPUT"
       - name: Post report to issue
         env:
           GH_TOKEN: ${{ github.token }}

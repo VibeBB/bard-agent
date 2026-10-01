@@ -201,10 +201,12 @@ input and confirm that the broken proposal is rejected.
 - Every `uses:` entry is pinned to a 40-character SHA with a `# vX.Y.Z`
   comment. Checkout uses `persist-credentials: false`, and every job has a
   `timeout-minutes` setting.
-- `dependabot.yml` monitors GitHub Actions weekly. The uv ecosystem is
-  intentionally excluded (Dependabot's bundled uv cannot satisfy
-  `[tool.uv] required-version`), so Python dependency updates stay covered
-  by the weekly check-dependency-updates.yml report.
+- `dependabot.yml` groups GitHub Actions updates and monitors them weekly with
+  a seven-day cooldown; Dockerfile updates are also monitored weekly with a
+  seven-day cooldown under `/docker`. The uv ecosystem is intentionally
+  excluded (Dependabot's bundled uv cannot satisfy `[tool.uv] required-version`),
+  so Python dependency updates stay covered by the weekly
+  check-dependency-updates.yml report.
 
 ## Git
 
