@@ -25,7 +25,7 @@ public repo向けに無料で、外部配布面を増やさずにタグから導
 4. GitHub Actionsはすべて40桁SHAにpinし、zizmorを週次＋全pull request＋
    `.github/**`変更のpushで実行する（`zizmor`はrequired status checkなので
    PRのpathsフィルタは付けない）。
-   dependabotはgithub-actionsとuvを週次監視（uvは7日cooldown）する。
+   dependabotはgithub-actionsとDockerを週次監視し、どちらにも7日間のcooldownを適用する。
 
 ## 結果
 
