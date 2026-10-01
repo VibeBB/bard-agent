@@ -30,6 +30,8 @@ jobs:
     permissions:
       actions: write # dispatches ci/workflow-lint and approves action_required runs on the pin branch
       contents: write # pushes the bot lock branch
+      id-token: write # authenticates the published image provenance
+      attestations: write # stores the image build provenance attestation
       packages: write # pushes the ghcr.io bard-tools image
       pull-requests: write # opens, auto-merges, and cleans up the lock PR
     steps:
@@ -62,6 +64,13 @@ jobs:
             ghcr.io/${{ env.OWNER_LC }}/bard-tools:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Attest tools image provenance
+        id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/vibebb/bard-tools
+          subject-digest: ${{ steps.tools_publish.outputs.digest }}
+          push-to-registry: true
       - name: Resolve published digest
         env:
           BUILT_DIGEST: ${{ steps.tools_publish.outputs.digest }}
@@ -114,6 +123,7 @@ jobs:
           TOOLS_REF: ${{ env.TOOLS_REF }}
           TOOLS_DIGEST: ${{ env.TOOLS_DIGEST }}
           TOOLS_TAG: ${{ env.TOOLS_TAG }}
+          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
         run: |
           set -euo pipefail
           retry() {
@@ -180,6 +190,7 @@ jobs:
             --image "ghcr.io/${OWNER_LC}/bard-tools" \
             --tag "$TOOLS_TAG" \
             --digest "$TOOLS_DIGEST" \
+            --attestation "$ATTESTATION_URL" \
             --published-at "$published_at" \
             --workflow-run "$workflow_run" \
             --tools-json "$RUNNER_TEMP/bard-tools-tools.json"
