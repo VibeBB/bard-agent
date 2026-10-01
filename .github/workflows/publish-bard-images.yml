@@ -7,6 +7,7 @@ on:
     paths:
       - "docker/**"
       - ".github/workflows/publish-bard-images.yml"
+      - "scripts/publish_image_pin_pr.sh"
       - "scripts/measure_image_tools.py"
       - "scripts/update_tools_image_lock.py"
       - "!docker/README.md"
@@ -26,7 +27,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-26.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       actions: write # dispatches ci/workflow-lint and approves action_required runs on the pin branch
       contents: write # pushes the bot lock branch
@@ -93,12 +94,29 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Generate tools SPDX SBOM
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        env:
+          SYFT_SOURCE_IMAGE_DEFAULT_PULL_SOURCE: registry
+          TMPDIR: ${{ runner.temp }}
+          SYFT_FILE_METADATA_SELECTION: none
         with:
           image: ${{ env.TOOLS_REF }}
           format: spdx-json
           output-file: ${{ runner.temp }}/bard-tools.spdx.json
           upload-artifact: false
           upload-release-assets: false
+      - name: Guard tools SPDX SBOM size
+        env:
+          SBOM_PATH: ${{ runner.temp }}/bard-tools.spdx.json
+        run: |
+          set -euo pipefail
+          df -h /tmp "$RUNNER_TEMP"
+          size=$(stat -c%s "$SBOM_PATH")
+          echo "SBOM size: ${size} bytes"
+          if [ "$size" -gt 16777216 ]; then
+            echo "::error::SBOM exceeds 16777216 bytes: ${size} bytes"
+            exit 1
+          fi
+
       - name: Validate tools SPDX SBOM
         run: |
           python3 - "${{ runner.temp }}/bard-tools.spdx.json" <<'PY'
@@ -266,123 +284,4 @@ jobs:
             --title "Update bard-tools image pin" \
             --body "$body")
           echo "pin PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
-          approve_gated_runs() {
-            # Pull_request runs on the bot pin branch queue as
-            # approval-gated action_required runs (first-time-contributor
-            # gate); approve them up front — this job has actions: write.
-            retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?status=action_required&per_page=100" \
-              --jq ".workflow_runs[] | select(.head_branch==\"$branch\") | .id" \
-              | while read -r run_id; do
-                  retry gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/approve" || true
-                done
-          }
-          approve_gated_runs
-          # Required checks come from dispatched runs on the branch:
-          # ci.yml covers verify/plugin-load/independent-check and
-          # workflow-lint.yml covers zizmor.
-          failed=0
-          for wf in ci.yml workflow-lint.yml; do
-            if ! dispatch_workflow "$wf" "$branch"; then
-              failed=1
-            fi
-          done
-          if [ "$failed" -ne 0 ]; then
-            echo "pin PR checks failed; the PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          # Wait for every pull_request run on the pin branch to reach a
-          # conclusion: they are the check suites the ruleset's required
-          # checks read. A stillborn run never starts jobs; it sits in
-          # startup until the branch-deleting merge kills it with a spurious
-          # "workflow file issue" failure, so it is cancelled once nothing
-          # else is pending. An approved-but-still-pending run keeps the
-          # loop going instead.
-          pr_checks_ok=false
-          for _ in $(seq 1 36); do
-            # Runs can surface gated later than the initial sweep, so keep
-            # approving while waiting.
-            approve_gated_runs
-            pending=$(retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${branch}&event=pull_request&per_page=100" \
-              --jq '[.workflow_runs[] | select(.conclusion == null)] | length' || echo 1)
-            if [ "$pending" -eq 0 ]; then
-              pr_checks_ok=true
-              break
-            fi
-            sleep 10
-          done
-          if [ "$pr_checks_ok" != true ]; then
-            for run_id in $(retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${branch}&event=pull_request&per_page=100" \
-              --jq '.workflow_runs[] | select(.conclusion == null) | .id' || true); do
-              jobs=$(retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=1" \
-                --jq '.total_count // 0' || echo 0)
-              if [ "$jobs" -eq 0 ]; then
-                retry gh run cancel --repo "$GITHUB_REPOSITORY" "$run_id" || true
-              fi
-            done
-            pending_after=$(retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${branch}&event=pull_request&per_page=100" \
-              --jq '[.workflow_runs[] | select(.conclusion == null)] | length' || echo 1)
-            [ "$pending_after" -eq 0 ] && pr_checks_ok=true
-          fi
-          # Only hard failures block: skipped/neutral/cancelled conclusions
-          # are benign (a required check that ended cancelled still blocks
-          # the merge call itself, so this stays fail-closed).
-          bad=$(retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${branch}&event=pull_request&per_page=100" \
-            --jq '[.workflow_runs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral" and .conclusion != "cancelled")] | length' || echo 1)
-          if [ "$pr_checks_ok" != true ] || [ "$bad" -gt 0 ]; then
-            echo "pin PR pull_request checks did not all pass (pending=${pr_checks_ok}, non-success=${bad}); the pin PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          # --auto arms auto-merge so required checks that are still
-          # registering do not fail the merge call; when every required
-          # check is already green it merges at once.
-          if ! retry gh pr merge --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch "$pr_url"; then
-            echo "pin PR merge was blocked; the pin PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          # The merge may only be armed: wait for it to land before the
-          # observational post-merge dispatches. A still-pending PR after the
-          # wait merges on its own once checks pass, so that is not a failure.
-          merged=false
-          for _ in $(seq 1 36); do
-            merged_at=$(retry gh api "repos/$GITHUB_REPOSITORY/pulls/${pr_url##*/}" --jq '.merged_at // empty' || true)
-            [ -n "$merged_at" ] && { merged=true; break; }
-            sleep 10
-          done
-          if [ "$merged" != true ]; then
-            # Auto-merge can stay armed indefinitely even with every required
-            # check green when the arm races the last check completion and no
-            # further check event triggers a re-evaluation. A direct merge is
-            # still gated by the branch ruleset, so it can only land when the
-            # required checks actually pass; on failure the armed auto-merge
-            # is left in place for GitHub to resolve later.
-            if retry gh pr merge --repo "$GITHUB_REPOSITORY" --squash --delete-branch "$pr_url"; then
-              merged=true
-            else
-              echo "auto-merge is armed on $pr_url and a direct merge attempt was blocked; the pin PR was left open for manual review" >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-          fi
-          # Post-merge verification is fire-and-forget: the runs are dispatched
-          # and their URLs logged, but this job does not wait on them (~10-21min
-          # of the run). main-ci-failure-issue.yml files a tracking issue when
-          # a completed main run fails, so nothing is lost by not watching here.
-          dispatch_only() {
-            local workflow="$1" ref="$2" started run_id=""
-            started=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-            retry gh workflow run "$workflow" --repo "$GITHUB_REPOSITORY" --ref "$ref" || return 1
-            for _ in $(seq 1 6); do
-              sleep 10
-              run_id=$(retry gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --branch "$ref" \
-                --event workflow_dispatch --created ">=$started" --json databaseId --jq '.[0].databaseId // empty' || true)
-              [ -n "$run_id" ] && break
-            done
-            if [ -n "$run_id" ]; then
-              echo "post-merge $workflow run for $ref: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >> "$GITHUB_STEP_SUMMARY"
-            else
-              echo "post-merge $workflow dispatch for $ref was accepted but the run was not observed" >> "$GITHUB_STEP_SUMMARY"
-            fi
-          }
-          for wf in ci.yml workflow-lint.yml; do
-            dispatch_only "$wf" main || true
-          done
-          echo "::notice::post-merge main verification delegated to the main-ci-failure-issue workflow; dispatched ci.yml and workflow-lint.yml without waiting"
+          bash scripts/publish_image_pin_pr.sh "$pr_url" "$branch" "" "ci.yml workflow-lint.yml"
