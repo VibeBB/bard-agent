@@ -118,3 +118,53 @@ def test_apply_deferrals_marks_matching_outdated(
     assert statuses[0].deferred is True
     assert statuses[0].outdated is False
     assert "test" in statuses[0].note
+
+
+def test_fetch_failures_are_unknown_and_counted(
+    dep_check: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def failed_json(url: str) -> Any:
+        raise OSError(url)
+
+    def failed_tags(url: str) -> list[str]:
+        raise OSError(url)
+
+    monkeypatch.setattr(dep_check, "_default_fetch_json", failed_json)
+    statuses = [
+        *dep_check.check_pypi(REPO_ROOT, fetch_json=failed_json),
+        *dep_check.check_uv_pin(REPO_ROOT, fetch_json=failed_json),
+        *dep_check.check_github_actions(REPO_ROOT, list_remote_tags=failed_tags),
+    ]
+    if hasattr(dep_check, "check_docker_args"):
+        statuses.extend(
+            dep_check.check_docker_args(REPO_ROOT, list_remote_tags=failed_tags)
+        )
+    if hasattr(dep_check, "check_docker_base"):
+        statuses.extend(dep_check.check_docker_base(REPO_ROOT, fetch_json=failed_json))
+    unknown = [status for status in statuses if status.fetch_failed]
+
+    assert unknown
+    assert all(not status.outdated for status in unknown)
+    assert {"pypi", "uv-pin", "github-actions"} <= {
+        status.surface for status in unknown
+    }
+
+    def failed_report(_root: Path) -> list[Any]:
+        return unknown
+
+    def no_deferrals(_root: Path) -> list[Any]:
+        return []
+
+    monkeypatch.setattr(dep_check, "check_dependency_updates", failed_report)
+    monkeypatch.setattr(dep_check, "load_deferrals", no_deferrals)
+    report_path = tmp_path / "report.json"
+    assert (
+        dep_check.main(["--repo-root", str(REPO_ROOT), "--json", str(report_path)]) == 0
+    )
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["unknown_count"] == len(unknown)
+    assert report["outdated_count"] == 0
+    assert "| unknown |" in capsys.readouterr().out

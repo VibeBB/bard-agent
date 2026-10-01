@@ -41,12 +41,15 @@ jobs:
             "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> "$REPORT_MARKDOWN"
           cat "$REPORT_MARKDOWN" >> "$GITHUB_STEP_SUMMARY"
           outdated=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["outdated_count"])' "$REPORT_JSON")
+          unknown_count=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["unknown_count"])' "$REPORT_JSON")
           printf 'outdated=%s\n' "$outdated" >> "$GITHUB_OUTPUT"
+          printf 'unknown_count=%s\n' "$unknown_count" >> "$GITHUB_OUTPUT"
       - name: Post report to issue
         env:
           GH_TOKEN: ${{ github.token }}
           REPORT_MARKDOWN: ${{ runner.temp }}/report.md
           OUTDATED: ${{ steps.report.outputs.outdated }}
+          UNKNOWN_COUNT: ${{ steps.report.outputs.unknown_count }}
         run: |
           # gh issue create fails with "could not add label" when the label
           # does not exist (observed before the first report issue landed).
@@ -63,7 +66,7 @@ jobs:
               --title "Dependency update check report" \
               --label dependency-updates --body-file "$REPORT_MARKDOWN" | sed 's#.*/##')
           fi
-          if [ "$OUTDATED" = "0" ] && [ -n "$number" ]; then
+          if [ "$OUTDATED" = "0" ] && [ "$UNKNOWN_COUNT" = "0" ] && [ -n "$number" ]; then
             gh issue close "$number" --repo "$GITHUB_REPOSITORY" \
               --comment "All checked dependencies are current."
           fi

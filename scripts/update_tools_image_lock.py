@@ -15,6 +15,7 @@ Usage::
         --tag <sha>-tools \
         --digest sha256:... \
         --attestation https://github.com/.../attestations/... \
+        --sbom-attestation https://github.com/.../attestations/... \
         --published-at 2026-09-23T00:00:00Z \
         --workflow-run https://github.com/.../actions/runs/... \
         --dockerfile docker/bard-tools.Dockerfile \
@@ -27,6 +28,22 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
+
+
+def _is_https_url(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and hostname is not None
+        and not any(char.isspace() for char in parsed.netloc)
+        and "\r" not in value
+        and "\n" not in value
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -36,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tag", required=True)
     parser.add_argument("--digest", required=True)
     parser.add_argument("--attestation")
+    parser.add_argument("--sbom-attestation")
     parser.add_argument("--published-at", required=True)
     parser.add_argument("--workflow-run", required=True)
     parser.add_argument("--dockerfile", default="docker/bard-tools.Dockerfile")
@@ -45,6 +63,13 @@ def main(argv: list[str] | None = None) -> int:
     if not args.digest.startswith("sha256:") or len(args.digest) != 71:
         print(f"invalid digest: {args.digest}", file=sys.stderr)
         return 1
+    for name, url in (
+        ("attestation", args.attestation),
+        ("sbom_attestation", args.sbom_attestation),
+    ):
+        if url is not None and not _is_https_url(url):
+            print(f"{name} must be an HTTPS URL", file=sys.stderr)
+            return 1
     try:
         tools = json.loads(args.tools_json.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -67,6 +92,8 @@ def main(argv: list[str] | None = None) -> int:
     }
     if args.attestation is not None:
         entry["attestation"] = args.attestation
+    if args.sbom_attestation is not None:
+        entry["sbom_attestation"] = args.sbom_attestation
     args.pin.parent.mkdir(parents=True, exist_ok=True)
     args.pin.write_text(json.dumps(entry, indent=2) + "\n", encoding="utf-8")
     print(f"updated {args.pin}: {args.image}@{args.digest}")

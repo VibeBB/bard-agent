@@ -1,0 +1,163 @@
+name: Locked image check
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "40 0 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  attestations: read
+
+concurrency:
+  group: locked-image-check
+  cancel-in-progress: false
+
+jobs:
+  check-lock:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    outputs:
+      present: ${{ steps.lock.outputs.present }}
+      image: ${{ steps.lock.outputs.image }}
+      digest: ${{ steps.lock.outputs.digest }}
+      attestation: ${{ steps.lock.outputs.attestation }}
+      sbom_attestation: ${{ steps.lock.outputs.sbom_attestation }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: lock
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          from urllib.parse import urlsplit
+
+          path = Path("plugins/bard/skills/bard-render/tools-image.json")
+          try:
+              entry = json.loads(path.read_text(encoding="utf-8"))
+          except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+              raise SystemExit(f"invalid bard tools image lock: {exc}")
+          if not isinstance(entry, dict):
+              raise SystemExit("bard tools image lock must be a JSON object")
+          if entry.get("image") != "ghcr.io/vibebb/bard-tools":
+              raise SystemExit("bard tools image lock has an unexpected image")
+          if "digest" not in entry or "tag" not in entry:
+              raise SystemExit("bard tools image lock must contain digest and tag fields")
+          digest = entry.get("digest")
+          tag = entry.get("tag")
+          attestation = entry.get("attestation")
+          sbom_attestation = entry.get("sbom_attestation")
+          if digest is None and tag is None:
+              if attestation is not None or sbom_attestation is not None:
+                  raise SystemExit("an unpinned bard tools image cannot have attestations")
+              present = "false"
+          else:
+              if not isinstance(digest, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
+                  raise SystemExit("bard tools digest must be null or a sha256 digest")
+              if not isinstance(tag, str) or re.fullmatch(r"[0-9a-f]{40}-tools", tag) is None:
+                  raise SystemExit("bard tools tag must be null or a 40-character tools tag")
+              present = "true"
+          for name, value in (
+              ("attestation", attestation),
+              ("sbom_attestation", sbom_attestation),
+          ):
+              if value is None:
+                  continue
+              parsed = urlsplit(value) if isinstance(value, str) else None
+              if (
+                  parsed is None
+                  or parsed.scheme != "https"
+                  or not parsed.netloc
+                  or any(character.isspace() for character in value)
+              ):
+                  raise SystemExit(f"bard tools {name} must be an HTTPS URL")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"present={present}\n")
+              output.write(f"image={entry['image'] if present == 'true' else ''}\n")
+              output.write(f"digest={digest if present == 'true' else ''}\n")
+              output.write(f"attestation={attestation or ''}\n")
+              output.write(f"sbom_attestation={sbom_attestation or ''}\n")
+          if present == "false":
+              print("::warning::bard tools image lock is unpinned; render smoke is skipped.")
+          PY
+
+  check:
+    needs: check-lock
+    if: needs.check-lock.outputs.present == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Warn that bard tools image has no provenance metadata
+        if: needs.check-lock.outputs.attestation == ''
+        run: echo "::warning::bard tools image lock has no attestation metadata; skipping provenance verification."
+      - name: Verify bard tools image provenance
+        if: needs.check-lock.outputs.attestation != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ needs.check-lock.outputs.image }}
+          DIGEST: ${{ needs.check-lock.outputs.digest }}
+        run: |
+          gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+            --repo VibeBB/bard-agent \
+            --signer-workflow VibeBB/bard-agent/.github/workflows/publish-bard-images.yml
+      - name: Warn when bard tools image has no SBOM attestation
+        if: needs.check-lock.outputs.sbom_attestation == ''
+        run: echo "::warning::bard tools image lock has no SBOM attestation; continuing."
+      - name: Verify bard tools image SBOM attestation
+        if: needs.check-lock.outputs.sbom_attestation != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ needs.check-lock.outputs.image }}
+          DIGEST: ${{ needs.check-lock.outputs.digest }}
+        run: |
+          gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+            --repo VibeBB/bard-agent \
+            --signer-workflow VibeBB/bard-agent/.github/workflows/publish-bard-images.yml \
+            --predicate-type https://spdx.dev/Document/v2.3
+      - name: Render shipped song example
+        run: |
+          python3 plugins/bard/skills/bard-render/scripts/render_song.py \
+            --proposal plugins/bard/skills/bard-render/examples/minimal.en.json \
+            --out-dir "$RUNNER_TEMP/bard-score"
+      - name: Render shipped score example through the tools image
+        env:
+          BARD_VERIFY_ATTESTATION: ${{ needs.check-lock.outputs.attestation != '' && 'require' || 'auto' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/bard-score"
+          python3 plugins/bard/skills/bard-render/scripts/render_score_png.py --prewarm
+          set +e
+          python3 plugins/bard/skills/bard-render/scripts/render_score_png.py \
+            --abc "$out/song.abc" --out-dir "$out" --json > "$out/render.stdout.json"
+          status=$?
+          set -e
+          cat "$out/render.stdout.json"
+          python3 - "$out" "$status" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          out = Path(sys.argv[1])
+          status = int(sys.argv[2])
+          result = json.loads((out / "render.stdout.json").read_text(encoding="utf-8"))
+          png = out / "score.png"
+          if status != 0 or result.get("ok") is not True or not png.is_file() or png.stat().st_size == 0:
+              raise SystemExit("bard score image smoke did not produce a nonempty PNG")
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: locked-bard-tools-smoke
+          path: ${{ runner.temp }}/bard-score/
+          if-no-files-found: ignore
+          retention-days: 14

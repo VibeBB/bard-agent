@@ -14,6 +14,10 @@ a read-only root filesystem. Docker itself must be on ``PATH``. The PNG is
 advisory material for human and vision review — it is not part of the
 provenance output set and nothing about it gates the song.
 
+Launcher-side verification uses BARD_VERIFY_ATTESTATION=auto|require|off.
+It verifies lock provenance before pulling; a local image is not re-verified
+during rendering. ``--prewarm`` verifies the lock even when the image is local.
+
 The SVG stage emits every character as a UTF-8 ``<text>`` element, so text is
 never dropped at render time; the image ships fonts-ipafont so non-Latin
 lyrics render instead of appearing as fallback boxes.
@@ -22,6 +26,7 @@ Python 3.12+, standard library only.
 
 Usage::
 
+    python3 render_score_png.py --prewarm
     python3 render_score_png.py --abc songs/<slug>/song.abc [--out-dir DIR]
     python3 render_score_png.py --abc song.abc --json
 
@@ -41,6 +46,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
 
 EXIT_IO = 3
 EXIT_NO_TOOLS = 4
@@ -56,11 +62,23 @@ PIN_PATH = Path(__file__).resolve().parents[1] / "tools-image.json"
 IMAGE_ENV = "BARD_TOOLS_IMAGE"
 
 PULL_TIMEOUT = 600
+_ATTEST_TIMEOUT_S = 120
+_GH_AUTH_TIMEOUT_S = 15
+_VERIFY_ENV = "BARD_VERIFY_ATTESTATION"
+_REPOSITORY = "VibeBB/bard-agent"
+_PUBLISH_FILE = ".github/workflows/publish-bard-images.yml"
 CONTAINER_CMD = (
     'abcm2ps -g "/in/$1" -O score.svg '
     '&& svg="$(ls score*.svg | sort | head -n 1)" '
     f'&& rsvg-convert -d {RSVG_DPI} -p {RSVG_DPI} "$svg" -o score.png'
 )
+
+
+class ImagePin(TypedDict):
+    ref: str
+    image: str | None
+    digest: str | None
+    attestation: str | None
 
 
 @dataclass
@@ -77,8 +95,18 @@ def _sha256(path: Path) -> str:
 
 
 def _run(cmd: list[str], tool: str, timeout: int = 120) -> None:
+    proc = _run_timed(cmd, tool, timeout)
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+        tail = detail[-1] if detail else f"exit code {proc.returncode}"
+        raise RenderError(f"{tool}: {tail}", EXIT_TOOL_FAILED)
+
+
+def _run_timed(
+    cmd: list[str], tool: str, timeout: int
+) -> subprocess.CompletedProcess[str]:
     try:
-        proc = subprocess.run(
+        return subprocess.run(
             cmd,
             check=False,
             capture_output=True,
@@ -91,17 +119,25 @@ def _run(cmd: list[str], tool: str, timeout: int = 120) -> None:
         raise RenderError(
             f"{tool}: timed out after {timeout}s", EXIT_TOOL_FAILED
         ) from exc
-    if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip().splitlines()
-        tail = detail[-1] if detail else f"exit code {proc.returncode}"
-        raise RenderError(f"{tool}: {tail}", EXIT_TOOL_FAILED)
 
 
-def _docker_ref() -> str | None:
-    """Return the pinned ``image@digest`` ref, or None when unset."""
+def _attestation_mode() -> str:
+    mode = os.environ.get(_VERIFY_ENV, "auto")
+    if mode not in {"auto", "require", "off"}:
+        raise ValueError(f"{_VERIFY_ENV} must be auto, require, or off (got {mode!r})")
+    return mode
+
+
+def _docker_pin() -> ImagePin | None:
+    """Return the locked image metadata, or an override without lock context."""
     override = os.environ.get(IMAGE_ENV, "").strip()
     if override:
-        return override
+        return {
+            "ref": override,
+            "image": None,
+            "digest": None,
+            "attestation": None,
+        }
     if not PIN_PATH.is_file():
         return None
     try:
@@ -116,18 +152,93 @@ def _docker_ref() -> str | None:
         )
     image = data.get("image")
     digest = data.get("digest")
-    if not image or not digest:
+    if (
+        not isinstance(image, str)
+        or not image
+        or not isinstance(digest, str)
+        or not digest
+    ):
         return None
-    return f"{image}@{digest}"
+    attestation = data.get("attestation")
+    return {
+        "ref": f"{image}@{digest}",
+        "image": image,
+        "digest": digest,
+        "attestation": attestation if isinstance(attestation, str) else None,
+    }
 
 
-def _render_container(abc_path: Path, out_dir: Path, ref: str) -> None:
+def _verify_attestation(pin: ImagePin, *, override: bool) -> None:
+    mode = _attestation_mode()
+    if mode == "off":
+        return
+    gh = shutil.which("gh")
+    reason: str | None = None
+    if override:
+        reason = "tools image override has no lock attestation context"
+    elif not pin["attestation"]:
+        reason = "lock entry has no attestation"
+    elif not pin["image"] or not pin["digest"]:
+        reason = "lock entry has no digest"
+    elif gh is None:
+        reason = "gh is not on PATH"
+    else:
+        try:
+            auth = _run_timed(
+                [gh, "auth", "status"], "gh auth status", _GH_AUTH_TIMEOUT_S
+            )
+        except RenderError:
+            reason = "gh auth status failed"
+        else:
+            if auth.returncode != 0:
+                reason = "gh auth status failed"
+    if reason is not None:
+        if mode == "require":
+            raise RuntimeError(f"attestation verification required but {reason}")
+        print(
+            f"render_score_png.py: attestation verification skipped: {reason}",
+            file=sys.stderr,
+        )
+        return
+    assert gh is not None
+    assert pin["image"] is not None and pin["digest"] is not None
+    try:
+        result = _run_timed(
+            [
+                gh,
+                "attestation",
+                "verify",
+                f"oci://{pin['image']}@{pin['digest']}",
+                "--repo",
+                _REPOSITORY,
+                "--signer-workflow",
+                f"{_REPOSITORY}/{_PUBLISH_FILE}",
+            ],
+            "gh attestation verify",
+            _ATTEST_TIMEOUT_S,
+        )
+    except RenderError as exc:
+        raise RuntimeError(str(exc)) from exc
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"attestation verification failed for {pin['image']}@{pin['digest']}"
+        )
+
+
+def _render_container(
+    abc_path: Path, out_dir: Path, pin: ImagePin, *, override: bool
+) -> None:
     docker = shutil.which("docker")
     if docker is None:
         raise RenderError("docker not on PATH", EXIT_NO_TOOLS)
+    ref = pin["ref"]
     try:
         _run([docker, "image", "inspect", ref], "docker image inspect")
     except RenderError:
+        try:
+            _verify_attestation(pin, override=override)
+        except RuntimeError as exc:
+            raise RenderError(str(exc), EXIT_TOOL_FAILED) from exc
         _run([docker, "pull", ref], "docker pull", timeout=PULL_TIMEOUT)
     cmd = [
         docker,
@@ -153,17 +264,49 @@ def _render_container(abc_path: Path, out_dir: Path, ref: str) -> None:
     _run(cmd, "docker run")
 
 
+def prewarm_tools_image() -> str:
+    """Verify and pull the pinned tools image without rendering a score."""
+    try:
+        _attestation_mode()
+    except ValueError as exc:
+        raise RenderError(str(exc), 2) from exc
+    pin = _docker_pin()
+    if pin is None:
+        raise RenderError(
+            f"no pinned bard-tools image ({PIN_PATH} missing or digest unset)",
+            EXIT_NO_TOOLS,
+        )
+    docker = shutil.which("docker")
+    if docker is None:
+        raise RenderError("docker not on PATH", EXIT_NO_TOOLS)
+    override = bool(os.environ.get(IMAGE_ENV, "").strip())
+    try:
+        _verify_attestation(pin, override=override)
+    except RuntimeError as exc:
+        raise RenderError(str(exc), EXIT_TOOL_FAILED) from exc
+    try:
+        _run([docker, "image", "inspect", pin["ref"]], "docker image inspect")
+    except RenderError:
+        _run([docker, "pull", pin["ref"]], "docker pull", timeout=PULL_TIMEOUT)
+    return pin["ref"]
+
+
 def render_score_png(abc_path: Path, out_dir: Path) -> dict[str, str]:
     """Render ``abc_path`` to ``out_dir/score.png``; return artifact details."""
+    try:
+        _attestation_mode()
+    except ValueError as exc:
+        raise RenderError(str(exc), 2) from exc
     if not abc_path.is_file():
         raise RenderError(f"abc not found: {abc_path}", EXIT_IO)
-    ref = _docker_ref()
-    if ref is None:
+    pin = _docker_pin()
+    if pin is None:
         raise RenderError(
             f"no pinned bard-tools image ({PIN_PATH} missing or digest unset; "
             "score render skipped)",
             EXIT_NO_TOOLS,
         )
+    ref = pin["ref"]
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -172,7 +315,9 @@ def render_score_png(abc_path: Path, out_dir: Path) -> dict[str, str]:
     png_path = out_dir / "score.png"
     # abcm2ps -g appends a per-tune index (score001.svg, score002.svg, ...);
     # the proposal contract emits a single tune, so the first file is the score.
-    _render_container(abc_path, out_dir, ref)
+    _render_container(
+        abc_path, out_dir, pin, override=bool(os.environ.get(IMAGE_ENV, "").strip())
+    )
     svg_paths = sorted(out_dir.glob("score*.svg"))
     if not svg_paths:
         raise RenderError("abcm2ps produced no SVG output", EXIT_TOOL_FAILED)
@@ -193,7 +338,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(__doc__ or "Render song.abc to score.png").splitlines()[0]
     )
-    parser.add_argument("--abc", required=True, type=Path, help="path to song.abc")
+    parser.add_argument(
+        "--prewarm", action="store_true", help="verify and prewarm the pinned image"
+    )
+    parser.add_argument("--abc", type=Path, help="path to song.abc")
     parser.add_argument(
         "--out-dir",
         type=Path,
@@ -206,6 +354,25 @@ def main(argv: list[str] | None = None) -> int:
         help="print the result as one JSON object",
     )
     args = parser.parse_args(argv)
+
+    if args.prewarm:
+        if args.abc is not None:
+            parser.error("--abc cannot be used with --prewarm")
+        try:
+            image = prewarm_tools_image()
+        except RenderError as exc:
+            if args.json:
+                print(json.dumps({"ok": False, "reason": str(exc)}))
+            else:
+                print(f"error: {exc}", file=sys.stderr)
+            return exc.exit_code
+        if args.json:
+            print(json.dumps({"ok": True, "image": image}))
+        else:
+            print(f"prewarmed tools image: {image}")
+        return 0
+    if args.abc is None:
+        parser.error("--abc is required unless --prewarm is set")
 
     out_dir = args.out_dir if args.out_dir is not None else args.abc.resolve().parent
     try:
