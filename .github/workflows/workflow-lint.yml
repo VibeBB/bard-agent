@@ -29,23 +29,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          python-version: "3.12"
-          cache-suffix: workflow-lint
-      - name: Install actionlint
+      - name: actionlint
+        env:
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
           set -euo pipefail
           tarball="actionlint_1.7.12_linux_amd64.tar.gz"
           curl --fail --location --silent --show-error --retry 5 --retry-delay 10 \
             --output "$RUNNER_TEMP/$tarball" \
             "https://github.com/rhysd/actionlint/releases/download/v1.7.12/$tarball"
-          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/$tarball" \
-            | sha256sum --check
+          printf '%s  %s\n' "$ACTIONLINT_SHA256" "$RUNNER_TEMP/$tarball" \
+            | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" actionlint
-      - name: Actionlint
-        run: |
           "$RUNNER_TEMP/actionlint" -oneline
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+          cache-suffix: workflow-lint
       - name: Zizmor
         env:
           # GH_TOKEN enables zizmor's online audits (advisory DB lookups,
