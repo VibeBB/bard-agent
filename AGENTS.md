@@ -214,11 +214,10 @@ input and confirm that the broken proposal is rejected.
   not be path-filtered. Zizmor runs from a sha256-verified wheel with
   `GH_TOKEN` online audits, `--offline` on `bot/update-image-digests-*`
   branches, and gates on the recorded SARIF results.
-- `.github/workflows/codeql.yml` runs repo-managed CodeQL analysis
-  (`actions` and `python` languages) on pushes to main, pull requests,
-  weekly, and `workflow_dispatch`, uploading SARIF to code scanning; the
-  GitHub default setup is disabled in the repository settings so the
-  versioned file is the only CodeQL configuration.
+- CodeQL analysis runs under GitHub's default setup today. A
+  repo-managed `codeql.yml` requires disabling default setup first —
+  advanced-configuration SARIF uploads are rejected while it is enabled —
+  so its adoption is deferred to a settings change plus a follow-up PR.
 - `.github/workflows/digest-lock-sweep.yml` retries stalled digest-lock PR
   merges every 6 hours (the branch ruleset still gates them) and
   dispatches `ci.yml`/`locked-image-check.yml` on main after a merge or

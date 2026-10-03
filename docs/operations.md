@@ -248,13 +248,12 @@ uploaded as a 90-day workflow-run artifact.
 Two repository settings must be managed manually in the GitHub UI; the
 workflows assume these values:
 
-- **Code scanning > CodeQL analysis**: use repo-managed configuration.
-  `.github/workflows/codeql.yml` versions the `actions`/`python` analysis,
-  so the GitHub *default setup* should be switched off
-  (Settings → Advanced Security → CodeQL analysis → Set up → three-dot menu
-  → Switch to advanced/stop using default) to avoid running the analysis
-  twice. If the default setup stays enabled, both configurations run — the
-  repo file still reports its checks, but each pull request pays for two
-  identical analyses.
+- **Code scanning > CodeQL analysis**: keep GitHub *default setup*
+  enabled. A repo-managed `codeql.yml` cannot coexist with it — code
+  scanning rejects the advanced configuration's SARIF upload outright
+  ("cannot be processed when the default setup is enabled", observed on
+  PR #110) — so the versioned-file adoption waits on disabling default
+  setup first (Settings → Advanced Security → CodeQL analysis → stop
+  using default setup).
 - **Dependency graph**: keep enabled; `dependency-review.yml` fails with
   "not supported on this repository" when it is off.
