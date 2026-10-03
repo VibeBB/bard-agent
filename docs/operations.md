@@ -87,6 +87,28 @@ Suppressions: `.hadolint.yaml` waivers above; `.trivyignore` holds
 time-boxed finding IDs — entries must carry an `exp:` date and a
 rationale line here when added.
 
+The pinned `debian:13-slim` base digest keeps shipping the debs it was
+built with, so the Dockerfile upgrades the packages Trivy flagged at
+publish (libpcre2-8-0, libssl3t64, openssl-provider-legacy) via a
+targeted `apt-get install --only-upgrade` layer rather than waiving them.
+It also appends `UMASK 027` to `/etc/login.defs` (Lynis AUTH-9328): the
+image has no interactive users, so files created at runtime stay
+group-readable only.
+
+The weekly audit runs Lynis with the committed
+`docker/lynis-container.prf` profile, which skips tests that are
+inapplicable inside a container (kernel/systemd/mounts/storage/network/
+PAM/accounting are governed by runtime flags, not the image filesystem).
+The profile raises the Hardening Index and reduces the suggestion list
+to image-actionable items; remaining suggestions are fixed in the
+Dockerfile or silenced only with a documented reason.
+
+`render_score_png.py` applies the runtime-hardening flags the container
+profile defers to: `--network none`, `--user uid:gid`,
+`--cap-drop ALL`, `--security-opt no-new-privileges`, plus a
+`--read-only` root filesystem with a `/tmp` tmpfs for the tools' scratch
+space.
+
 ## Updating the plugin
 
 Agent Canvas caches a plugin repository per source string. Because the refspec

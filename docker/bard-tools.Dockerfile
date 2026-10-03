@@ -32,5 +32,21 @@ RUN apt-get -o Acquire::Retries=5 update \
     && test -s /tmp/smoke.png \
     && rm -f /tmp/smoke*
 
+# The pinned debian:13-slim digest keeps shipping the debs Trivy flags at
+# publish (CVE-2026-103111 libpcre2-8-0; CVE-2026-75804 and CVE-2026-84782
+# openssl/libssl3t64). Upgrade just those packages inside the build so the
+# publish gate stays green.
+RUN apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        --only-upgrade \
+        libpcre2-8-0 \
+        libssl3t64 \
+        openssl-provider-legacy \
+    && rm -rf /var/lib/apt/lists/*
+
+# Tighten the login.defs umask to 027 (Lynis AUTH-9328): the image has no
+# interactive users, so files created at runtime stay group-readable only.
+RUN printf 'UMASK 027\n' >> /etc/login.defs
+
 # Callers bind-mount the song directory here and run the tools via sh -c.
 WORKDIR /work
