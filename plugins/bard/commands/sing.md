@@ -31,7 +31,9 @@ and do not go silent mid-run.
    Decide the execution path from whether `task` exists in **the tool list
    actually available in this conversation** — not from the "enable
    sub-agents" setting (if `tools` is set explicitly in the profile, `task`
-   does not appear even with the setting on).
+   appears only when that list includes `task_tool_set`; and under an
+   explicit list `bard` is offered only when the list also covers the tools
+   `bard` declares — SDK 1.51.0).
 
    If `task` is in the tool list, the path must be `task sub-agent` and you
    call `task` in step 5. You, the parent, must NOT read `agents/bard.md`
