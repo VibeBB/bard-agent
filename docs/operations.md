@@ -103,6 +103,12 @@ The profile raises the Hardening Index and reduces the suggestion list
 to image-actionable items; remaining suggestions are fixed in the
 Dockerfile or silenced only with a documented reason.
 
+The `git clone --depth 1 --branch 3.1.7` pin of `CISOfy/lynis` in
+`container-audit.yml` is tracked by `scripts/check_dependency_updates.py`
+as a `git-clone` surface (compared against the upstream repo's highest
+semver tag), so a new Lynis release surfaces in the weekly dependency
+report.
+
 `render_score_png.py` applies the runtime-hardening flags the container
 profile defers to: `--network none`, `--user uid:gid`,
 `--cap-drop ALL`, `--security-opt no-new-privileges`, plus a
