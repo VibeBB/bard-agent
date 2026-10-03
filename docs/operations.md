@@ -234,7 +234,7 @@ CI and image-publishing jobs use `step-security/harden-runner` in audit-only mod
 
 ## Digest-lock PR verification
 
-The publisher dispatches `ci.yml` and `workflow-lint.yml` on the lock branch, then polls the authoritative required-check set for up to 30 minutes. Non-required failures do not block publishing; a concluded required-check failure or a PR closed without merge fails the job. A PR merged externally triggers the existing post-merge main workflows without waiting for their results. If required checks remain pending at the deadline, the publisher arms squash auto-merge with branch deletion and exits successfully so branch protection can complete the merge.
+The publisher waits briefly for the lock PR's own `pull_request` runs, which are the only runs that satisfy required checks; it dispatches `ci.yml` and `workflow-lint.yml` on the lock branch only when none appear. It then polls the authoritative required-check set for up to 30 minutes. Non-required failures do not block publishing; a concluded required-check failure or a PR closed without merge fails the job. A PR merged externally triggers the existing post-merge main workflows without waiting for their results. If required checks remain pending at the deadline, the publisher arms squash auto-merge with branch deletion and exits successfully so branch protection can complete the merge. Bot merges do not fire push events, so `digest-lock-sweep.yml` dispatches `ci.yml` and `locked-image-check.yml` on main after any sweep merge or recent lock merge that lacks a post-merge dispatch.
 
 SPDX generation prefers the GHCR registry source, writes temporary data under
 the runner's temporary directory, and disables file metadata. The publisher
@@ -242,3 +242,19 @@ removes file entries and relationships involving files to produce the
 package-level SPDX-2.3 SBOM. A guard reports disk space and the attested SBOM
 size after transformation and fails above 16 MiB; the full Syft SBOM is
 uploaded as a 90-day workflow-run artifact.
+
+## Repository settings
+
+Two repository settings must be managed manually in the GitHub UI; the
+workflows assume these values:
+
+- **Code scanning > CodeQL analysis**: use repo-managed configuration.
+  `.github/workflows/codeql.yml` versions the `actions`/`python` analysis,
+  so the GitHub *default setup* should be switched off
+  (Settings → Advanced Security → CodeQL analysis → Set up → three-dot menu
+  → Switch to advanced/stop using default) to avoid running the analysis
+  twice. If the default setup stays enabled, both configurations run — the
+  repo file still reports its checks, but each pull request pays for two
+  identical analyses.
+- **Dependency graph**: keep enabled; `dependency-review.yml` fails with
+  "not supported on this repository" when it is off.

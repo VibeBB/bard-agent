@@ -142,6 +142,9 @@ input and confirm that the broken proposal is rejected.
   `Plugin.load` with `openhands-sdk==1.51.0` from the `sdk-check` group).
 - `.github/workflows/release.yml` is `workflow_dispatch` only. A `bump` input
   (defaulting to patch) or an explicit `version` input controls the release.
+  A `dry_run` input rehearses the release: version arithmetic and tag checks
+  run, and downstream verify/install-smoke/build jobs still execute, but
+  nothing is committed, pushed, tagged, or released.
   A greater explicit version runs `scripts/bump_version.py`, updates
   plugin.json, pyproject.toml, both SKILL.md files, and uv.lock, and commits
   the changes to main — or, when the ruleset rejects the direct push, opens a
@@ -160,9 +163,11 @@ input and confirm that the broken proposal is rejected.
   `docker/README.md` and the pin file itself), then opens a pull request that
   updates the digest pin in `plugins/bard/skills/bard-render/tools-image.json`
   — the file the render script reads at render time. The workflow
-  self-approves any approval-gated `pull_request` runs on the pin branch,
-  waits for the pull_request check suites, dispatches `ci.yml` and
-  `workflow-lint.yml` there for the required checks, and auto-merges the
+  self-approves any approval-gated `pull_request` runs on the pin branch
+  and waits for the pull_request check suites, which are what satisfy the
+  required checks; `ci.yml` and `workflow-lint.yml` are dispatched on the
+  pin branch only as a fallback when no pull_request run appears (the
+  dispatched runs never satisfy required checks). It auto-merges the
   PR via `gh pr merge --auto` (the merge queue is not enabled) — no
   manual steps. After the merge lands it dispatches both workflows on
   main fire-and-forget; `main-ci-failure-issue.yml` turns a failed main
@@ -195,16 +200,37 @@ input and confirm that the broken proposal is rejected.
   record the evaluation — including reasons for non-adoption — in the PR
   or under `docs/research/`.
 - `.github/workflows/main-ci-failure-issue.yml` watches completed main
-  runs of CI, Digest lock PR sweep, Dependency update check, PR branch
-  cleanup, Publish bard images, Release, and Workflow lint (`workflow_run`),
-  and files or closes a `ci-main-failure` tracking issue on failure/success.
+  runs of CI, Container hardening audit, Digest lock PR sweep, Dependency
+  update check, Locked image check, PR branch cleanup, Publish bard images,
+  Release, Scorecard, and Workflow lint (`workflow_run`), and files or
+  closes a `ci-main-failure` tracking issue on failure/success; queued
+  reports are keyed per triggering run so completions are not evicted.
 - `.github/workflows/workflow-lint.yml` runs actionlint (structural YAML
   checks) and zizmor on every pull request, on pushes to main that touch
   `.github/**`, on
   `workflow_dispatch` (used by the publish workflow to gate the image-pin
   PR), and weekly, and uploads the results to code scanning as SARIF.
   `zizmor` is a required status check, so the pull-request trigger must
-  not be path-filtered.
+  not be path-filtered. Zizmor runs from a sha256-verified wheel with
+  `GH_TOKEN` online audits, `--offline` on `bot/update-image-digests-*`
+  branches, and gates on the recorded SARIF results.
+- `.github/workflows/codeql.yml` runs repo-managed CodeQL analysis
+  (`actions` and `python` languages) on pushes to main, pull requests,
+  weekly, and `workflow_dispatch`, uploading SARIF to code scanning; the
+  GitHub default setup is disabled in the repository settings so the
+  versioned file is the only CodeQL configuration.
+- `.github/workflows/digest-lock-sweep.yml` retries stalled digest-lock PR
+  merges every 6 hours (the branch ruleset still gates them) and
+  dispatches `ci.yml`/`locked-image-check.yml` on main after a merge or
+  any recent lock merge that lacks a post-merge dispatch, since bot merges
+  do not fire push events.
+- `.github/workflows/container-audit.yml` scans the pinned image weekly:
+  Trivy SARIF to code scanning plus a full JSON report, a Docker CIS
+  compliance scan that fails loudly when it produces no results, an
+  informational Lynis audit (procps/iproute2 installed so process and
+  network tests run; the 3.1.7 checkout is detached onto its pinned
+  commit), and a hardening report issue with a week-over-week vulnerability
+  delta.
 - Every `uses:` entry is pinned to a 40-character SHA with a `# vX.Y.Z`
   comment. Checkout uses `persist-credentials: false`, and every job has a
   `timeout-minutes` setting.
@@ -215,8 +241,9 @@ input and confirm that the broken proposal is rejected.
   so Python dependency updates stay covered by the weekly
   check-dependency-updates.yml report.
 
-Digest-lock PRs use `scripts/publish_image_pin_pr.sh`: the publisher
-dispatches `ci.yml` and `workflow-lint.yml` on the lock branch, then polls
+Digest-lock PRs use `scripts/publish_image_pin_pr.sh`: the publisher waits
+for the lock PR's `pull_request` runs and dispatches `ci.yml` and
+`workflow-lint.yml` on the lock branch only when none appear, then polls
 the authoritative required-check set for up to 30 minutes. Non-required
 failures do not block publishing; a concluded required-check failure or a PR
 closed without merge fails the job. A PR merged externally triggers the
