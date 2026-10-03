@@ -93,7 +93,9 @@ publish (libpcre2-8-0, libssl3t64, openssl-provider-legacy) via a
 targeted `apt-get install --only-upgrade` layer rather than waiving them.
 It also appends `UMASK 027` to `/etc/login.defs` (Lynis AUTH-9328): the
 image has no interactive users, so files created at runtime stay
-group-readable only.
+group-readable only. Because the tightened umask makes Lynis write its
+report and log 0640 root-owned, the audit step `chmod 644`s both files
+so the runner-side grep can read the index.
 
 The weekly audit runs Lynis with the committed
 `docker/lynis-container.prf` profile, which skips tests that are
