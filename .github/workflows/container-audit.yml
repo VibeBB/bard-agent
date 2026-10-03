@@ -69,7 +69,7 @@ jobs:
           output: trivy-image.json
           skip-setup-trivy: true
       - name: Upload Trivy SARIF
-        if: always()
+        if: always() && hashFiles('trivy-image.sarif') != ''
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: trivy-image.sarif
@@ -77,7 +77,18 @@ jobs:
       - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
           version: v0.75.0
+      # The trivy-action scans above keep their own daily DB cache; this
+      # weekly key lets the plain-CLI CIS scan below reuse a ~120 MB DB
+      # instead of re-downloading it every Monday.
+      - id: trivy-db-week
+        run: echo "key=trivy-db-$(date +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/trivy-cache
+          key: ${{ steps.trivy-db-week.outputs.key }}
       - name: Run Docker CIS compliance report
+        env:
+          TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
         run: |
           set -euo pipefail
           trivy image --compliance docker-cis-1.6.0 --report all \
@@ -92,13 +103,28 @@ jobs:
           set -uo pipefail
           git clone --depth 1 --branch 3.1.7 \
             https://github.com/CISOfy/lynis "$RUNNER_TEMP/lynis"
+          # 3.1.7 is a mutable tag; detach onto its reviewed commit so a
+          # moved tag fails loudly instead of running different code.
+          git -C "$RUNNER_TEMP/lynis" checkout --detach \
+            2e99f92265760b73fd6b139868eb8d4116624030 || exit 1
+          # Lynis requires its tree to be owned by the auditing user (root
+          # inside the container); the clone lands as the runner uid, so
+          # re-own it to silence the ownership warnings.
+          sudo -n chown -R 0:0 "$RUNNER_TEMP/lynis" || true
           mkdir -p "$LYNIS_OUT"
           docker run --rm --user 0 \
             -v "$RUNNER_TEMP/lynis:/lynis:ro" \
             -v "$GITHUB_WORKSPACE/docker/lynis-container.prf:/container.prf:ro" \
             -v "$LYNIS_OUT:/out" \
             --entrypoint /bin/sh "$PINNED_IMAGE" \
-            -c 'cd /lynis && ./lynis audit system --quick --no-colors \
+            -c '# The minimal image lacks procps/iproute2; without them the
+                process and network tests resolve to not-found, which silently
+                blinds the audit. An install failure still lets lynis run.
+                apt-get update -qq \
+                && apt-get install -y -qq --no-install-recommends \
+                   procps iproute2 >/dev/null 2>&1 \
+                || echo "::warning::audit-image package install failed; partial lynis coverage"; \
+                cd /lynis && ./lynis audit system --quick --no-colors \
                 --profile /container.prf \
                 --report-file /out/lynis-report.dat --logfile /out/lynis.log \
                 --auditor github-actions; \
@@ -117,7 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, os
+          import json, os, sys
           from collections import Counter
           trivy = json.load(open(os.environ["TRIVY_JSON"], encoding="utf-8"))
           vulns, secrets, licenses = Counter(), Counter(), 0
@@ -144,12 +170,21 @@ jobs:
           cis = {"passed": 0, "failed": 0}
           try:
               cis_data = json.load(open(os.environ["TRIVY_CIS"], encoding="utf-8"))
-              for result in cis_data.get("Results", []):
-                  summary = result.get("MisconfSummary") or {}
-                  cis["passed"] += int(summary.get("Successes", 0))
-                  cis["failed"] += int(summary.get("Failures", 0))
           except (OSError, ValueError):
-              pass
+              cis_data = {}
+          # trivy --compliance nests check summaries deeper than top-level
+          # Results; walk the tree so the CIS leg cannot silently no-op.
+          def _summaries(node):
+              yield node
+              for child in node.get("Results") or []:
+                  yield from _summaries(child)
+          for result in _summaries(cis_data):
+              summary = result.get("MisconfSummary") or {}
+              cis["passed"] += int(summary.get("Successes", 0))
+              cis["failed"] += int(summary.get("Failures", 0))
+          if cis["passed"] + cis["failed"] == 0:
+              # dead telemetry must fail, not masquerade as coverage
+              sys.exit("Docker CIS scan produced no results")
           lynis = {"hardening_index": "unknown", "warnings": 0}
           try:
               for line in open(os.environ["LYNIS_OUT"] + "/lynis-report.dat",
@@ -185,7 +220,7 @@ jobs:
           print(json.dumps(report, indent=2, sort_keys=True))
           PY
       - name: Upload hardening report
-        if: always()
+        if: always() && hashFiles('container-hardening.json', 'trivy-image.json') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bard-tools-hardening-audit
@@ -198,25 +233,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPORT_JSON: container-hardening.json
           REPORT_MD: ${{ runner.temp }}/hardening-report.md
+          PREV_MD: ${{ runner.temp }}/hardening-prev.md
         run: |
           set -euo pipefail
-          python3 - <<'PY' > "$REPORT_MD"
-          import json, os
-          r = json.load(open(os.environ["REPORT_JSON"], encoding="utf-8"))
-          t = r["trivy"]
-          print(f"# Container hardening report\n")
-          print(f"Image: `{r['image']}`\nDigest: `{r['digest']}`\n")
-          print("| Metric | Value |")
-          print("|---|---|")
-          print(f"| Trivy vulns C/H/M/L | {t['critical']}/{t['high']}/{t['medium']}/{t['low']} |")
-          print(f"| Fixable HIGH+CRITICAL | {t['fixable_high_or_critical']} |")
-          print(f"| Misconfig pass | {t['misconfig_pass']}/{t['misconfig_total']} |")
-          print(f"| Secrets found | {t['secrets']} |")
-          print(f"| CIS Docker pass/fail | {r['cis_docker']['passed']}/{r['cis_docker']['failed']} |")
-          print(f"| Lynis hardening index (trend only) | {r['lynis']['hardening_index']} |")
-          print(f"| Lynis warnings | {r['lynis']['warnings']} |")
-          print(f"\nRun: {os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}")
-          PY
           # gh issue create fails with "could not add label" when the label
           # does not exist (observed before the first report issue landed).
           gh label create container-hardening --repo "$GITHUB_REPOSITORY" \
@@ -225,6 +244,51 @@ jobs:
             --label container-hardening \
             --search "in:title Container hardening report" \
             --json number --jq '.[0].number // empty')
+          # Trend line: diff against the most recent report issue (open or
+          # closed) so week-over-week drift survives issue turnover.
+          : > "$PREV_MD"
+          prev=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all \
+            --label container-hardening \
+            --search "in:title Container hardening report" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$prev" ]; then
+            gh issue view "$prev" --repo "$GITHUB_REPOSITORY" \
+              --json body --jq .body > "$PREV_MD" || : > "$PREV_MD"
+          fi
+          python3 - <<'PY' > "$REPORT_MD"
+          import json, os, re
+          r = json.load(open(os.environ["REPORT_JSON"], encoding="utf-8"))
+          t = r["trivy"]
+          prev = ""
+          try:
+              prev = open(os.environ["PREV_MD"], encoding="utf-8").read()
+          except OSError:
+              pass
+          m = re.search(r"Trivy vulns C/H/M/L \| (\d+)/(\d+)/(\d+)/(\d+)", prev)
+          delta = "n/a (first report)"
+          if m:
+              pc, ph, pm, pl = (int(g) for g in m.groups())
+              d = (
+                  t["critical"] - pc,
+                  t["high"] - ph,
+                  t["medium"] - pm,
+                  t["low"] - pl,
+              )
+              delta = f"{d[0]:+d}/{d[1]:+d}/{d[2]:+d}/{d[3]:+d} (was {pc}/{ph}/{pm}/{pl})"
+          print(f"# Container hardening report\n")
+          print(f"Image: `{r['image']}`\nDigest: `{r['digest']}`\n")
+          print("| Metric | Value |")
+          print("|---|---|")
+          print(f"| Trivy vulns C/H/M/L | {t['critical']}/{t['high']}/{t['medium']}/{t['low']} |")
+          print(f"| Delta since last report C/H/M/L | {delta} |")
+          print(f"| Fixable HIGH+CRITICAL | {t['fixable_high_or_critical']} |")
+          print(f"| Misconfig pass | {t['misconfig_pass']}/{t['misconfig_total']} |")
+          print(f"| Secrets found | {t['secrets']} |")
+          print(f"| CIS Docker pass/fail | {r['cis_docker']['passed']}/{r['cis_docker']['failed']} |")
+          print(f"| Lynis hardening index (trend only) | {r['lynis']['hardening_index']} |")
+          print(f"| Lynis warnings | {r['lynis']['warnings']} |")
+          print(f"\nRun: {os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}")
+          PY
           if [ -n "$number" ]; then
             gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$REPORT_MD"
           else

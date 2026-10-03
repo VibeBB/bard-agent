@@ -66,9 +66,10 @@ jobs:
           context: .
           file: docker/bard-tools.Dockerfile
           push: true
+          # Immutable tag only: a failing image must never serve :latest;
+          # the tag is promoted after every gate passes.
           tags: |
             ghcr.io/${{ env.OWNER_LC }}/bard-tools:${{ env.SOURCE_SHA }}-tools
-            ghcr.io/${{ env.OWNER_LC }}/bard-tools:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Scan tools image (Trivy SARIF)
@@ -88,6 +89,9 @@ jobs:
           output: trivy-image.sarif
           limit-severities-for-sarif: true
       - name: Scan tools image (Trivy JSON)
+        # Runs even when the SARIF gate above found fixable CVEs, so the
+        # full report is still emitted on a gate failure.
+        if: always() && steps.tools_publish.outcome == 'success'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
@@ -100,13 +104,13 @@ jobs:
           output: trivy-image.json
           skip-setup-trivy: true
       - name: Upload Trivy SARIF
-        if: always()
+        if: always() && hashFiles('trivy-image.sarif') != ''
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: trivy-image.sarif
           category: trivy-bard-tools
       - name: Upload Trivy JSON report
-        if: always()
+        if: always() && hashFiles('trivy-image.json') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bard-tools-trivy
@@ -214,6 +218,14 @@ jobs:
             && abcm2ps -g /tmp/smoke.abc -O /tmp/smoke.svg \
             && rsvg-convert /tmp/smoke001.svg -o /tmp/smoke.png \
             && test -s /tmp/smoke.png"
+      - name: Promote :latest
+        # Every gate above passed: copy the verified manifest to :latest
+        # server-side (attestations and the SBOM keep binding the digest).
+        # A gate failure leaves the previous good :latest untouched.
+        run: |
+          docker buildx imagetools create \
+            "ghcr.io/${OWNER_LC}/bard-tools:latest" \
+            "$TOOLS_REF"
       - name: Record published image summary
         run: |
           {
