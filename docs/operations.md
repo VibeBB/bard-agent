@@ -159,6 +159,20 @@ explicitly set in the profile, `task` does not appear even when the setting is
 ON. Either leave `tools` unspecified or explicitly add `task_tool_set`. Whether
 1.46.0 behaves identically was not verified.
 
+In SDK 1.51.0 (#5151), `enable_sub_agents` and `enable_switch_llm_tool` are
+retired as stored fields and `tools` is the only tool control: `task` appears
+exactly when the profile's effective `tools` contains `task_tool_set`. The
+retired switches are still accepted as deprecated input (folded into `tools`,
+removal announced for 1.56.0), and a persisted legacy `tools: []` still
+migrates to the standard set — only `[]` written by a current-version payload
+means a bare agent. Also, when a profile pins `tools` explicitly, `task`
+offers only the sub-agents that fit the parent's tool set and refuses others
+at start (#5358): `bard` needs `terminal`, `file_editor`, `grep`, `glob`,
+`task_tracker` and `task_tool_set`, and `bard`'s nested delegation to
+`bard-critic` (`terminal`, `grep`, `glob`) inherits the same scope. A profile
+that lists `task_tool_set` but omits those tools leaves `task` present while
+`bard` is not offered — the same symptom the fallback path already covers.
+
 ## Checking installation status via the API
 
 Installation status can also be checked through the API (an

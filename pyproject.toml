@@ -13,11 +13,11 @@ dev = [
     "pyright==1.1.414",
     "pytest-cov==7.1.0",
 ]
-sdk-check = ["openhands-sdk==1.50.1", "openhands-tools==1.50.1"]
+sdk-check = ["openhands-sdk==1.51.0", "openhands-tools==1.51.0"]
 
 [tool.uv]
 default-groups = ["dev"]
-required-version = "==0.12.21"
+required-version = "==0.12.22"
 
 [tool.ruff]
 line-length = 88

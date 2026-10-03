@@ -1,6 +1,6 @@
 # Agent Work Contract
 
-> Target: OpenHands Software Agent SDK v1.50.1, Python 3.12+
+> Target: OpenHands Software Agent SDK v1.51.0, Python 3.12+
 
 This document is the working contract for implementation, validation, and
 documentation in this repository. The README is the product overview,
@@ -139,7 +139,7 @@ input and confirm that the broken proposal is rejected.
   would leave the pin/bump PRs permanently blocked. It runs `verify` (Python 3.12/3.13 matrix:
   ruff, format, pyright, and pytest), `independent-check` (required
   score PNG generation inside the pinned image), and `plugin-load` (checks
-  `Plugin.load` with `openhands-sdk==1.50.1` from the `sdk-check` group).
+  `Plugin.load` with `openhands-sdk==1.51.0` from the `sdk-check` group).
 - `.github/workflows/release.yml` is `workflow_dispatch` only. A `bump` input
   (defaulting to patch) or an explicit `version` input controls the release.
   A greater explicit version runs `scripts/bump_version.py`, updates
