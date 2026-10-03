@@ -175,7 +175,9 @@ input and confirm that the broken proposal is rejected.
   `scripts/check_dependency_updates.py` weekly and on `workflow_dispatch`,
   aggregating update candidates (PyPI direct/lock drift, uv pin, Python
   minor, GitHub Actions `uses:` pins, uvx tool pins, Docker ARGs and base
-  image) into the "Dependency update check report" Issue labeled
+  image, and `git clone --branch` pins inside workflows such as the pinned
+  Lynis checkout in `container-audit.yml`) into the "Dependency update
+  check report" Issue labeled
   `dependency-updates`; fetch failures are reported as unknown and keep the
   issue open until both outdated and unknown counts reach zero.
   Deferrals with reasons and re-check deadlines live in

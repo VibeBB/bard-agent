@@ -59,6 +59,34 @@ def test_docker_base_image_parsed(dep_check: Any) -> None:
     assert dep_check.docker_base_image(REPO_ROOT) == ("debian", "13-slim")
 
 
+def test_lynis_clone_pin_parsed(dep_check: Any) -> None:
+    statuses = dep_check.check_git_clones(
+        REPO_ROOT, list_remote_tags=lambda url: ["3.1.7"]
+    )
+    lynis = next(status for status in statuses if status.name == "CISOfy/lynis")
+    assert lynis.current == "3.1.7"
+    assert lynis.latest == "3.1.7"
+    assert lynis.outdated is False
+
+
+def test_git_clones_report_outdated_and_fetch_failed(dep_check: Any) -> None:
+    statuses = dep_check.check_git_clones(
+        REPO_ROOT, list_remote_tags=lambda url: ["3.1.7", "3.2.0"]
+    )
+    lynis = next(status for status in statuses if status.name == "CISOfy/lynis")
+    assert lynis.latest == "3.2.0"
+    assert lynis.outdated is True
+
+    def failed_tags(url: str) -> list[str]:
+        raise OSError(url)
+
+    statuses = dep_check.check_git_clones(REPO_ROOT, list_remote_tags=failed_tags)
+    lynis = next(status for status in statuses if status.name == "CISOfy/lynis")
+    assert lynis.latest == "?"
+    assert lynis.fetch_failed is True
+    assert lynis.outdated is False
+
+
 def test_render_markdown_groups_by_surface(dep_check: Any) -> None:
     statuses = [
         dep_check.DependencyStatus(
