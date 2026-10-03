@@ -9,8 +9,9 @@ container image recorded in ``tools-image.json`` next to this directory
 (overridable via ``BARD_TOOLS_IMAGE``). The image bundles the exact tool
 versions and the IPA font covering Japanese lyrics, so the render never
 depends on host packages: the script pulls the image once and runs the
-pipeline with the input and output directories bind-mounted, no network, and
-a read-only root filesystem. Docker itself must be on ``PATH``. The PNG is
+pipeline with the input and output directories bind-mounted, no network, all
+capabilities dropped, no-new-privileges, and a read-only root filesystem.
+Docker itself must be on ``PATH``. The PNG is
 advisory material for human and vision review — it is not part of the
 provenance output set and nothing about it gates the song.
 
@@ -246,6 +247,10 @@ def _render_container(
         "--rm",
         "--network",
         "none",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
         "--read-only",
         "--tmpfs",
         "/tmp",

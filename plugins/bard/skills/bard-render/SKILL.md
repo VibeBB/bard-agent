@@ -113,7 +113,8 @@ vision review, and is never part of the provenance output set.
 The pipeline always runs inside the digest-pinned `bard-tools` image recorded
 in `tools-image.json` (overridable via `BARD_TOOLS_IMAGE`), which bundles the
 exact tool versions and the IPA font. The script pulls the image and runs
-`docker run` with `--network none`, a read-only root filesystem, and the ABC
+`docker run` with `--network none`, `--cap-drop ALL`,
+`--security-opt no-new-privileges`, a read-only root filesystem, and the ABC
 directory mounted read-only; the result JSON reports the `image` ref. An empty
 `digest` in the pin file or a missing docker disables the render.
 
