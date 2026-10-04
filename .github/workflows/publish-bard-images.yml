@@ -308,4 +308,4 @@ jobs:
             --title "Update bard-tools image pin" \
             --body "$body")
           echo "pin PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
-          bash scripts/publish_image_pin_pr.sh "$pr_url" "$branch" "" "ci.yml workflow-lint.yml"
+          bash scripts/publish_image_pin_pr.sh "$pr_url" "$branch" "" "ci.yml locked-image-check.yml workflow-lint.yml"
