@@ -4,8 +4,13 @@
 Surfaces checked: direct/dev PyPI dependencies (compared against the
 resolved versions in uv.lock), uv.lock transitive drift via
 `uv lock --upgrade --dry-run`, the uv required-version pin, GitHub Actions
-`uses:` pins (40-char SHA + version comment), `uvx` tool pins in workflows,
-Docker ARG pins in docker/*.Dockerfile, the Docker base image tag,
+`uses:` pins (40-char SHA + version comment, including subpath actions
+such as github/codeql-action/upload-sarif), `uvx` tool pins in workflows,
+sha256-verified direct downloads in workflows (PyPI wheel files and
+GitHub release-download URLs, e.g. the zizmor wheel and the actionlint
+tarball in workflow-lint.yml), `version:` tool inputs on pinned actions
+(e.g. aquasecurity trivy-action/setup-trivy), Docker ARG pins in
+docker/*.Dockerfile, the Docker base image tag,
 `git clone --branch` pins inside workflows (e.g. the pinned Lynis
 checkout in container-audit.yml), and the
 Python minor versions referenced by the repo (pyproject requires-python,
@@ -41,6 +46,8 @@ DEPENDENCY_SURFACES = (
     "python-version",
     "github-actions",
     "pypi-uvx",
+    "workflow-download",
+    "action-input",
     "docker-arg",
     "docker-base",
     "git-clone",
@@ -293,7 +300,13 @@ def workflow_files(repo_root: Path) -> list[Path]:
     return sorted(directory.glob("*.yml")) + sorted(directory.glob("*.yaml"))
 
 
-_ACTION = re.compile(r"uses:\s*([\w.-]+/[\w.-]+)@([0-9a-f]{40})(?:\s*#\s*(v[\w.-]+))?")
+# Subpath actions (github/codeql-action/upload-sarif) share the owning
+# repository's release tags, so the remote lookup uses the first two
+# path segments.
+_ACTION = re.compile(
+    r"uses:\s*([\w.-]+/[\w.-]+(?:/[\w.-]+)*)@([0-9a-f]{40})(?:\s*#\s*(v[\w.-]+))?"
+)
+_ACTION_USES = re.compile(r"uses:\s*([\w.-]+/[\w.-]+(?:/[\w.-]+)*)@([0-9a-f]{40})")
 _UVX = re.compile(r"uvx\s+([\w.-]+)@([\w.]+)")
 
 
@@ -317,7 +330,8 @@ def check_github_actions(
     seen: set[str] = set()
     for workflow in workflow_files(repo_root):
         text = workflow.read_text(encoding="utf-8")
-        for repo, _sha, comment in _ACTION.findall(text):
+        for repo_path, _sha, comment in _ACTION.findall(text):
+            repo = "/".join(repo_path.split("/")[:2])
             if repo in seen:
                 continue
             seen.add(repo)
@@ -362,6 +376,113 @@ _GIT_CLONE = re.compile(
     r"git\s+clone[\s\S]{0,200}?--branch\s+(\S+)\s*(?:\\\s*\n\s*)?"
     r"\s*(https://github\.com/([\w.-]+/[\w.-]+))"
 )
+
+# sha256-verified direct downloads inside workflows: PyPI wheel files
+# (e.g. the zizmor wheel fetched then run through `uvx --from`) and
+# GitHub release-download URLs (e.g. the actionlint tarball).
+_PYPI_WHEEL = re.compile(r"([\w.-]+?)-(\d+\.\d+\.\d+[\w.]*)-py3-none-[\w.-]+\.whl")
+_GH_RELEASE_DOWNLOAD = re.compile(
+    r"https://github\.com/([\w.-]+/[\w.-]+)/releases/download/(v?\d+\.\d+\.\d+)/"
+)
+
+
+def check_workflow_downloads(
+    repo_root: Path,
+    *,
+    fetch_json: FetchJson = _default_fetch_json,
+    list_remote_tags: ListRemoteTags = _default_list_remote_tags,
+) -> list[DependencyStatus]:
+    """Direct-download pins inside workflows: PyPI wheel files and GitHub
+    release-download tarballs pinned alongside a sha256."""
+    pins: dict[tuple[str, str], set[str]] = {}
+    for workflow in workflow_files(repo_root):
+        text = workflow.read_text(encoding="utf-8")
+        for name, version in _PYPI_WHEEL.findall(text):
+            pins.setdefault(("pypi:" + normalize_name(name), version), set()).add(
+                workflow.name
+            )
+        for repo, tag in _GH_RELEASE_DOWNLOAD.findall(text):
+            pins.setdefault(("github:" + repo, tag), set()).add(workflow.name)
+    statuses: list[DependencyStatus] = []
+    for (key, current), sources in sorted(pins.items()):
+        scheme, name = key.split(":", 1)
+        if scheme == "pypi":
+            try:
+                latest = _pypi_latest(name, fetch_json)
+            except (ValueError, OSError):
+                latest = "?"
+        else:
+            latest = _github_latest_tag(name, list_remote_tags) or "?"
+        statuses.append(
+            DependencyStatus(
+                "workflow-download",
+                name,
+                current,
+                latest,
+                ", ".join(sorted(sources)),
+                latest != "?" and latest != current,
+                "" if latest != "?" else "fetch failed",
+                fetch_failed=latest == "?",
+            )
+        )
+    return statuses
+
+
+# Actions whose `version:` input pins a released tool binary separately
+# from the action's own SHA (e.g. aquasecurity/trivy-action and
+# aquasecurity/setup-trivy install trivy `version: vX.Y.Z`).
+_ACTION_INPUT_UPSTREAMS: dict[str, str] = {
+    "aquasecurity/trivy-action": "aquasecurity/trivy",
+    "aquasecurity/setup-trivy": "aquasecurity/trivy",
+}
+_STEP_BOUNDARY = re.compile(r"\n\s*-\s")
+_VERSION_INPUT = re.compile(r"version:\s*['\"]?(v?\d+\.\d+\.\d+)")
+
+
+def check_action_inputs(
+    repo_root: Path, *, list_remote_tags: ListRemoteTags = _default_list_remote_tags
+) -> list[DependencyStatus]:
+    """`version:` inputs on pinned actions that install a separate tool
+    binary (checked against the tool's own releases, not the action's)."""
+    pins: dict[tuple[str, str], set[str]] = {}
+    for workflow in workflow_files(repo_root):
+        text = workflow.read_text(encoding="utf-8")
+        matches = list(_ACTION_USES.finditer(text))
+        for index, match in enumerate(matches):
+            action = "/".join(match.group(1).split("/")[:2])
+            upstream = _ACTION_INPUT_UPSTREAMS.get(action)
+            if upstream is None:
+                continue
+            boundary = _STEP_BOUNDARY.search(text, match.end())
+            window_end = (
+                boundary.start()
+                if boundary is not None
+                else matches[index + 1].start()
+                if index + 1 < len(matches)
+                else len(text)
+            )
+            version_match = _VERSION_INPUT.search(text, match.end(), window_end)
+            if version_match is None:
+                continue
+            pins.setdefault((upstream, version_match.group(1)), set()).add(
+                workflow.name
+            )
+    statuses: list[DependencyStatus] = []
+    for (name, current), sources in sorted(pins.items()):
+        latest = _github_latest_tag(name, list_remote_tags) or "?"
+        statuses.append(
+            DependencyStatus(
+                "action-input",
+                name,
+                current,
+                latest,
+                ", ".join(sorted(sources)),
+                latest != "?" and latest != current,
+                "" if latest != "?" else "fetch failed",
+                fetch_failed=latest == "?",
+            )
+        )
+    return statuses
 
 
 def check_git_clones(
@@ -724,6 +845,10 @@ def check_dependency_updates(
         *check_pypi_lock(repo_root, direct_names, run_uv=run_uv),
         *check_uv_pin(repo_root, fetch_json=fetch_json),
         *check_github_actions(repo_root, list_remote_tags=cached_tags),
+        *check_workflow_downloads(
+            repo_root, fetch_json=fetch_json, list_remote_tags=cached_tags
+        ),
+        *check_action_inputs(repo_root, list_remote_tags=cached_tags),
         *check_docker_args(repo_root, list_remote_tags=cached_tags),
         *check_git_clones(repo_root, list_remote_tags=cached_tags),
         *check_docker_base(repo_root, fetch_json=fetch_json),
@@ -739,6 +864,8 @@ def render_markdown(statuses: list[DependencyStatus]) -> str:
         "python-version": "Python version",
         "github-actions": "GitHub Actions",
         "pypi-uvx": "PyPI (uvx tool pins in workflows)",
+        "workflow-download": "Workflow downloads (sha256-pinned)",
+        "action-input": "Action inputs (tool versions)",
         "docker-arg": "Docker ARG",
         "docker-base": "Docker base image",
         "git-clone": "Workflow git clones",

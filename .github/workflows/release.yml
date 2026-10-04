@@ -277,6 +277,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write # creates the v<version> tag and GitHub release
+      id-token: write # OIDC for release-asset provenance attestation
+      attestations: write # stores the attestation
     env:
       VERSION: ${{ needs.bump-version.outputs.version }}
       SHA: ${{ needs.bump-version.outputs.sha }}
@@ -335,3 +337,23 @@ jobs:
           }
           retry gh release create "v${VERSION}" --target "$SHA" \
             --title "bard v${VERSION}" --generate-notes dist/*.zip
+      - name: Attest release assets
+        # The installed artifact (plugin zip) and samples get build-provenance
+        # attestations so `gh attestation verify` covers what users install —
+        # mirrors the image attestations in publish-bard-images.yml and lifts
+        # the scorecard Signed-Releases signal off zero.
+        if: ${{ !inputs.dry_run }}
+        id: attest_assets
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.zip
+      - name: Upload provenance bundle to release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE: ${{ steps.attest_assets.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          bundle="dist/bard-v${VERSION}-provenance.intoto.jsonl"
+          cp "$BUNDLE" "$bundle"
+          gh release upload "v${VERSION}" "$bundle"

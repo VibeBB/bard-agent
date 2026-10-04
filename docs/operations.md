@@ -33,7 +33,12 @@ input (`patch`/`minor`/`major`, defaulting to `patch`) or a `version` input
 3. **install-smoke** — installs from the target SHA with `install_plugin` and
    checks the agent, skill, and command listings.
 4. **release** — creates plugin and score-sample ZIP files, then creates the
-   `v<version>` tag and Release with `gh release create`.
+   `v<version>` tag and Release with `gh release create`, attests the zips
+   with a build-provenance attestation (`actions/attest-build-provenance`),
+   and uploads the provenance bundle as
+   `bard-v<version>-provenance.intoto.jsonl`. Verify a downloaded asset
+   with:
+   `gh attestation verify dist/bard-plugin-v<version>.zip --repo VibeBB/bard-agent --signer-workflow VibeBB/bard-agent/.github/workflows/release.yml`
 
 If any step fails, neither a tag nor a Release is created.
 
@@ -109,7 +114,12 @@ The `git clone --depth 1 --branch 3.1.7` pin of `CISOfy/lynis` in
 `container-audit.yml` is tracked by `scripts/check_dependency_updates.py`
 as a `git-clone` surface (compared against the upstream repo's highest
 semver tag), so a new Lynis release surfaces in the weekly dependency
-report.
+report. The checker also covers subpath `uses:` actions such as
+`github/codeql-action/upload-sarif` (tracked under the owning repo's
+tags), the sha256-verified downloads in `workflow-lint.yml` (the zizmor
+wheel against PyPI and the actionlint tarball against `rhysd/actionlint`
+releases), and the trivy `version:` inputs on the aquasecurity
+`trivy-action`/`setup-trivy` pins (against `aquasecurity/trivy` releases).
 
 `render_score_png.py` applies the runtime-hardening flags the container
 profile defers to: `--network none`, `--user uid:gid`,

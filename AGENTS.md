@@ -138,7 +138,12 @@ input and confirm that the broken proposal is rejected.
   are read from the pull_request check suite, so skipping them there
   would leave the pin/bump PRs permanently blocked. It runs `verify` (Python 3.12/3.13 matrix:
   ruff, format, pyright, and pytest), `independent-check` (required
-  score PNG generation inside the pinned image), and `plugin-load` (checks
+  score PNG generation inside the pinned image, gated on a cryptographic
+  verification of the lock's provenance attestation via
+  `BARD_VERIFY_ATTESTATION=require` + `render_score_png.py --prewarm`),
+  `pin-script-guard` (runs `test_publish_image_pin_pr.py` on PRs that
+  touch the pin-PR script, its tests, or the publish workflow), and
+  `plugin-load` (checks
   `Plugin.load` with `openhands-sdk==1.51.0` from the `sdk-check` group).
 - `.github/workflows/release.yml` is `workflow_dispatch` only. A `bump` input
   (defaulting to patch) or an explicit `version` input controls the release.
@@ -156,7 +161,9 @@ input and confirm that the broken proposal is rejected.
   commit and push, checks that the tag does not exist, and releases the current
   main HEAD. The release job renders the shipped sample scores through the
   pinned `bard-tools` image (no host ABC tools are installed), which also
-  exercises the container path of `render_score_png.py`.
+  exercises the container path of `render_score_png.py`, and attests the
+  plugin/samples zips with `actions/attest-build-provenance`, uploading
+  the provenance bundle to the release.
 - `.github/workflows/publish-bard-images.yml` builds and publishes the
   `ghcr.io/<owner>/bard-tools` score-render image on `workflow_dispatch` and
   on pushes to main that touch `docker/**` or the lock scripts (excluding
@@ -179,7 +186,10 @@ input and confirm that the broken proposal is rejected.
 - `.github/workflows/check-dependency-updates.yml` runs
   `scripts/check_dependency_updates.py` weekly and on `workflow_dispatch`,
   aggregating update candidates (PyPI direct/lock drift, uv pin, Python
-  minor, GitHub Actions `uses:` pins, uvx tool pins, Docker ARGs and base
+  minor, GitHub Actions `uses:` pins including subpath actions, uvx tool
+  pins, sha256-verified direct downloads in workflows such as the zizmor
+  wheel and the actionlint tarball, `version:` tool inputs on pinned
+  actions such as the aquasecurity trivy scans, Docker ARGs and base
   image, and `git clone --branch` pins inside workflows such as the pinned
   Lynis checkout in `container-audit.yml`) into the "Dependency update
   check report" Issue labeled
@@ -223,13 +233,20 @@ input and confirm that the broken proposal is rejected.
   dispatches `ci.yml`/`locked-image-check.yml` on main after a merge or
   any recent lock merge that lacks a post-merge dispatch, since bot merges
   do not fire push events.
+- `.github/workflows/cache-sweep.yml` deletes stale actions caches
+  monthly: `trivy-db-*` keys outside the current ISO week, `cache-trivy-*`
+  daily keys older than two days, and the unbounded buildx gha
+  `buildkit-blob-*`/`index-buildkit-*` entries — keeping the repo under
+  the 10 GB LRU-eviction cliff.
 - `.github/workflows/container-audit.yml` scans the pinned image weekly:
   Trivy SARIF to code scanning plus a full JSON report, a Docker CIS
-  compliance scan that fails loudly when it produces no results, an
+  compliance scan that retries once on an empty result set and fails
+  loudly when it still produces no results, an
   informational Lynis audit (procps/iproute2 installed so process and
   network tests run; the 3.1.7 checkout is detached onto its pinned
   commit), and a hardening report issue with a week-over-week vulnerability
-  delta.
+  delta plus failed-CIS-check and top-fixable-CVE tables; duplicate open
+  report issues are closed so the canonical one keeps updating.
 - Every `uses:` entry is pinned to a 40-character SHA with a `# vX.Y.Z`
   comment. Checkout uses `persist-credentials: false`, and every job has a
   `timeout-minutes` setting.
