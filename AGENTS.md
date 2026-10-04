@@ -45,7 +45,7 @@ docs/
 └── research/
 docker/                       # bard-tools image (abcm2ps + rsvg-convert + IPA font), the
                               # render_score_png.py execution environment; see docker/README.md
-scripts/                      # Release and image-lock helper scripts (stdlib only)
+scripts/                      # Release and image-lock helper scripts (stdlib Python / bash)
 tests/                        # Plugin-asset consistency checks
 ```
 
@@ -150,6 +150,10 @@ input and confirm that the broken proposal is rejected.
   A `dry_run` input rehearses the release: version arithmetic and tag checks
   run, and downstream verify/install-smoke/build jobs still execute, but
   nothing is committed, pushed, tagged, or released.
+  The bump-version state machine lives in `scripts/release_bump.sh`
+  (the workflow step is a thin wrapper) and is covered by
+  `tests/test_release_bump.py`, which exercises it against a stubbed `gh`
+  and local git remotes.
   A greater explicit version runs `scripts/bump_version.py`, updates
   plugin.json, pyproject.toml, both SKILL.md files, and uv.lock, and commits
   the changes to main — or, when the ruleset rejects the direct push, opens a
@@ -179,6 +183,13 @@ input and confirm that the broken proposal is rejected.
   manual steps. After the merge lands it dispatches `ci.yml`, `locked-image-check.yml`, and
   `workflow-lint.yml` on main fire-and-forget; `main-ci-failure-issue.yml` turns a failed main
   run into a tracking issue.
+  A `dry_run` dispatch input rehearses the publish: the image is built
+  into the local daemon (`push: false`, `load: true`) and the Trivy gates,
+  SBOM generation, measurement, and smoke checks still run against the
+  local tag, but nothing is pushed to the registry, `:latest` is not
+  promoted, no attestation is stored, the digest-lock PR is not opened,
+  no post-merge workflow is dispatched, and no SARIF reaches code
+  scanning.
 - `.github/workflows/locked-image-check.yml` validates the render-image
   lock, verifies available provenance and SBOM attestations, renders the
   shipped score example through `render_score_png.py`, and retains smoke

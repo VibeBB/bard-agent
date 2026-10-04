@@ -22,10 +22,14 @@ Run the `release` workflow manually with `workflow_dispatch`. Select a `bump`
 input (`patch`/`minor`/`major`, defaulting to `patch`) or a `version` input
 (an explicit `X.Y.Z` override). It runs only on `main` and proceeds as follows:
 
-1. **bump-version** — `scripts/bump_version.py` checks the versions in
+1. **bump-version** — `scripts/release_bump.sh` resolves the version via
+   `scripts/bump_version.py`, which checks the versions in
    `plugins/bard/.plugin/plugin.json`, `pyproject.toml`, both `SKILL.md` files,
    and `uv.lock`, writes the new version, and checks that the `v<version>` tag
-   does not already exist before committing to `main`.
+   does not already exist before committing to `main`. When the ruleset
+   rejects the direct push, the script routes the bump through an
+   auto-merged fallback pull request. The script is covered by
+   `tests/test_release_bump.py` (stubbed `gh`, local git remotes).
    An explicit `version` equal to the current version skips the bump commit and
    releases the current `main` HEAD.
 2. **verify** — runs the normal CI (lint, type checks, and tests) through the
@@ -48,6 +52,12 @@ The `publish-bard-images.yml` workflow attaches a GitHub build-provenance
 attestation to the published `bard-tools` image. Its attestation URL is stored
 in `plugins/bard/skills/bard-render/tools-image.json` alongside the image
 digest.
+
+Dispatch the workflow with `dry_run=true` to rehearse a publish: the image is
+built into the local daemon and the Trivy gates, SBOM generation, measurement,
+and smoke checks still run, but nothing is pushed, promoted (`:latest`),
+attested, locked, or dispatched, and no SARIF reaches code scanning. The run
+summary lists every skipped step.
 
 ## Container hardening
 
