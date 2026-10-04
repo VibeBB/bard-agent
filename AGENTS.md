@@ -169,8 +169,8 @@ input and confirm that the broken proposal is rejected.
   pin branch only as a fallback when no pull_request run appears (the
   dispatched runs never satisfy required checks). It auto-merges the
   PR via `gh pr merge --auto` (the merge queue is not enabled) — no
-  manual steps. After the merge lands it dispatches both workflows on
-  main fire-and-forget; `main-ci-failure-issue.yml` turns a failed main
+  manual steps. After the merge lands it dispatches `ci.yml`, `locked-image-check.yml`, and
+  `workflow-lint.yml` on main fire-and-forget; `main-ci-failure-issue.yml` turns a failed main
   run into a tracking issue.
 - `.github/workflows/locked-image-check.yml` validates the render-image
   lock, verifies available provenance and SBOM attestations, renders the
