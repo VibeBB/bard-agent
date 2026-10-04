@@ -119,7 +119,10 @@ report. The checker also covers subpath `uses:` actions such as
 tags), the sha256-verified downloads in `workflow-lint.yml` (the zizmor
 wheel against PyPI and the actionlint tarball against `rhysd/actionlint`
 releases), and the trivy `version:` inputs on the aquasecurity
-`trivy-action`/`setup-trivy` pins (against `aquasecurity/trivy` releases).
+`trivy-action`/`setup-trivy` pins (against `aquasecurity/trivy` releases). The Python-version surface covers every
+workflow's `python-version:` inputs and quoted `"3.x"` pins, the
+`.python-version` dotfile, and any `uv python install`/`uv venv
+--python`/`python3.x` pins inside the Dockerfiles.
 
 `render_score_png.py` applies the runtime-hardening flags the container
 profile defers to: `--network none`, `--user uid:gid`,
