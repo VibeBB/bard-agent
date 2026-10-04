@@ -14,8 +14,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Same policy as ci.yml: superseded pull_request runs are cancelled; main
-  # pushes and dispatched runs are never cancelled.
+  # Superseded pull_request runs are cancelled; main pushes and dispatched
+  # runs are never cancelled so in-flight main verification always lands.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
