@@ -58,10 +58,17 @@ jobs:
           # does not exist (observed before the first report issue landed).
           gh label create dependency-updates --repo "$GITHUB_REPOSITORY" \
             --color 0366d6 --description "Dependency update report" --force
-          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+          numbers=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --label dependency-updates \
             --search "in:title Dependency update check report" \
-            --json number --jq '.[0].number // empty')
+            --json number --jq '.[].number')
+          number=$(head -n1 <<< "$numbers")
+          # A second open report issue would silently fork the report
+          # stream; close extras so the canonical one keeps updating.
+          for extra in $(tail -n +2 <<< "$numbers"); do
+            gh issue close "$extra" --repo "$GITHUB_REPOSITORY" \
+              --comment "Duplicate of the canonical report issue #${number}." || true
+          done
           if [ -n "$number" ]; then
             gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$REPORT_MARKDOWN"
           else

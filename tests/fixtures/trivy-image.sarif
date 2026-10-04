@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Trivy",
+          "rules": [
+            {
+              "id": "CVE-2026-0001",
+              "properties": { "security-severity": "9.8" },
+              "help": { "text": "Vulnerability CVE-2026-0001\nSeverity: CRITICAL" }
+            },
+            {
+              "id": "CVE-2026-0002",
+              "properties": { "security-severity": "7.5" },
+              "help": { "text": "Vulnerability CVE-2026-0002\nSeverity: HIGH" }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CVE-2026-0001",
+          "level": "error",
+          "message": {
+            "text": "Package: libssl3\nInstalled Version: 3.0.14-1~deb13u1\nVulnerability CVE-2026-0001\nSeverity: CRITICAL\nFixed Version: 3.0.17-1"
+          }
+        },
+        {
+          "ruleId": "CVE-2026-0002",
+          "level": "error",
+          "message": {
+            "text": "Package: bash\nInstalled Version: 5.2.15-1\nVulnerability CVE-2026-0002\nSeverity: HIGH\nFixed Version: 5.2.15-2"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -39,9 +39,32 @@ jobs:
       - name: Resolve and pull pinned image
         run: |
           set -euo pipefail
-          ref=$(python3 -c 'import json; d=json.load(open("plugins/bard/skills/bard-render/tools-image.json", encoding="utf-8")); digest=d["digest"]; assert digest, "tools-image.json digest is null — no published image yet"; print(d["image"]+"@"+digest)')
+          # Same structural validation as locked-image-check.yml: a malformed
+          # lock fails here instead of pulling an unexpected reference.
+          ref=$(python3 - <<'PY'
+          import json, re
+          entry = json.load(open("plugins/bard/skills/bard-render/tools-image.json", encoding="utf-8"))
+          if entry.get("image") != "ghcr.io/vibebb/bard-tools":
+              raise SystemExit("tools-image.json has an unexpected image")
+          digest = entry.get("digest")
+          if not isinstance(digest, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
+              raise SystemExit("tools-image.json digest must be a sha256 digest")
+          tag = entry.get("tag")
+          if not isinstance(tag, str) or re.fullmatch(r"[0-9a-f]{40}-tools", tag) is None:
+              raise SystemExit("tools-image.json tag must be a 40-character tools tag")
+          print(entry["image"] + "@" + digest)
+          PY
+          )
           echo "PINNED_IMAGE=$ref" >> "$GITHUB_ENV"
-          docker pull "$ref"
+          retry() {
+            local attempt
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              sleep $((attempt * 10))
+            done
+            return 1
+          }
+          retry docker pull "$ref"
       - name: Scan pinned image (Trivy SARIF)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -91,9 +114,37 @@ jobs:
           TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
         run: |
           set -euo pipefail
-          trivy image --compliance docker-cis-1.6.0 --report all \
-            --format json --output "$RUNNER_TEMP/trivy-cis.json" \
-            "${PINNED_IMAGE}"
+          # Returns 0 when the report carries at least one CIS check result
+          # (a silently-empty report is a scanner anomaly, not coverage).
+          cis_nonempty() {
+            python3 - "$1" <<'PY'
+          import json, sys
+          def _summaries(node):
+              yield node
+              for child in node.get("Results") or []:
+                  yield from _summaries(child)
+          try:
+              data = json.load(open(sys.argv[1], encoding="utf-8"))
+          except (OSError, ValueError):
+              data = {}
+          total = 0
+          for node in _summaries(data):
+              summary = node.get("MisconfSummary") or {}
+              total += int(summary.get("Successes", 0)) + int(summary.get("Failures", 0))
+          sys.exit(0 if total else 1)
+          PY
+          }
+          for attempt in 1 2; do
+            trivy image --compliance docker-cis-1.6.0 --report all \
+              --format json --output "$RUNNER_TEMP/trivy-cis.json" \
+              "${PINNED_IMAGE}"
+            cis_nonempty "$RUNNER_TEMP/trivy-cis.json" && break
+            # Retry once on an empty result set before letting the
+            # aggregation guard below fail the job — the 2026-10-03 audit
+            # observed a transient zero-result scan on a healthy digest.
+            echo "::warning::Docker CIS scan produced no results (attempt $attempt)"
+            sleep 30
+          done
       - name: Run informational Lynis audit inside the image
         id: lynis
         continue-on-error: true
@@ -149,6 +200,7 @@ jobs:
           vulns, secrets, licenses = Counter(), Counter(), 0
           mis_pass = mis_total = 0
           fixable_high = 0
+          top_fixable = []
           for result in trivy.get("Results", []):
               for v in result.get("Vulnerabilities") or []:
                   sev = v.get("Severity", "UNKNOWN").lower()
@@ -158,6 +210,12 @@ jobs:
                       vulns[f"{sev}_fixed"] += 1
                       if sev in ("critical", "high"):
                           fixable_high += 1
+                          top_fixable.append({
+                              "id": v.get("VulnerabilityID", "?"),
+                              "pkg": v.get("PkgName", "?"),
+                              "severity": v.get("Severity", "UNKNOWN"),
+                              "fixed": v.get("FixedVersion", ""),
+                          })
               mis = result.get("Misconfigurations") or []
               for m in mis:
                   mis_total += 1
@@ -167,7 +225,7 @@ jobs:
                   secrets[s.get("Severity", "UNKNOWN").lower()] += 1
               for lic in result.get("Licenses") or []:
                   licenses += 1
-          cis = {"passed": 0, "failed": 0}
+          cis = {"passed": 0, "failed": 0, "failures": []}
           try:
               cis_data = json.load(open(os.environ["TRIVY_CIS"], encoding="utf-8"))
           except (OSError, ValueError):
@@ -185,6 +243,14 @@ jobs:
           if cis["passed"] + cis["failed"] == 0:
               # dead telemetry must fail, not masquerade as coverage
               sys.exit("Docker CIS scan produced no results")
+          for result in _summaries(cis_data):
+              for m in result.get("Misconfigurations") or []:
+                  if m.get("Status") == "FAIL":
+                      cis["failures"].append({
+                          "id": m.get("ID") or m.get("AVDID") or "?",
+                          "severity": m.get("Severity", "UNKNOWN"),
+                          "title": m.get("Title", ""),
+                      })
           lynis = {"hardening_index": "unknown", "warnings": 0}
           try:
               for line in open(os.environ["LYNIS_OUT"] + "/lynis-report.dat",
@@ -196,6 +262,7 @@ jobs:
           except OSError:
               pass
           image, _, digest = os.environ["PINNED_IMAGE"].partition("@")
+          top_fixable.sort(key=lambda v: (v["severity"] != "CRITICAL", v["id"]))
           report = {
               "image": image,
               "digest": digest,
@@ -209,6 +276,7 @@ jobs:
                   "misconfig_total": mis_total,
                   "secrets": sum(secrets.values()),
                   "license_findings": licenses,
+                  "top_fixable": top_fixable[:15],
               },
               "cis_docker": cis,
               "lynis": lynis,
@@ -240,10 +308,17 @@ jobs:
           # does not exist (observed before the first report issue landed).
           gh label create container-hardening --repo "$GITHUB_REPOSITORY" \
             --color d93f0b --description "Container hardening report" --force
-          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+          numbers=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --label container-hardening \
             --search "in:title Container hardening report" \
-            --json number --jq '.[0].number // empty')
+            --json number --jq '.[].number')
+          number=$(head -n1 <<< "$numbers")
+          # A second open report issue would silently fork the report
+          # stream; close extras so the canonical one keeps updating.
+          for extra in $(tail -n +2 <<< "$numbers"); do
+            gh issue close "$extra" --repo "$GITHUB_REPOSITORY" \
+              --comment "Duplicate of the canonical report issue #${number}." || true
+          done
           # Trend line: diff against the most recent report issue (open or
           # closed) so week-over-week drift survives issue turnover.
           : > "$PREV_MD"
@@ -287,6 +362,20 @@ jobs:
           print(f"| CIS Docker pass/fail | {r['cis_docker']['passed']}/{r['cis_docker']['failed']} |")
           print(f"| Lynis hardening index (trend only) | {r['lynis']['hardening_index']} |")
           print(f"| Lynis warnings | {r['lynis']['warnings']} |")
+          failures = r["cis_docker"].get("failures") or []
+          if failures:
+              print("\n### Failed CIS Docker checks\n")
+              print("| Check | Severity | Title |")
+              print("|---|---|---|")
+              for f in failures:
+                  print(f"| {f['id']} | {f['severity']} | {f['title']} |")
+          fixable = t.get("top_fixable") or []
+          if fixable:
+              print("\n### Top fixable vulnerabilities\n")
+              print("| CVE | Package | Severity | Fixed in |")
+              print("|---|---|---|---|")
+              for v in fixable:
+                  print(f"| {v['id']} | {v['pkg']} | {v['severity']} | {v['fixed']} |")
           print(f"\nRun: {os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}")
           PY
           if [ -n "$number" ]; then

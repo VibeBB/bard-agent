@@ -116,6 +116,38 @@ jobs:
           name: bard-tools-trivy
           path: trivy-image.json
           retention-days: 90
+      - name: Summarize Trivy gate failure
+        # When the SARIF gate found fixable CRITICAL/HIGH findings, list
+        # the offending rules in the step summary so the publish failure
+        # is reviewable without downloading artifacts.
+        if: always() && steps.trivy-scan.outcome == 'failure' && hashFiles('trivy-image.sarif') != ''
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          data = json.load(open("trivy-image.sarif", encoding="utf-8"))
+          rules = {}
+          for run in data.get("runs") or []:
+              driver = run.get("tool", {}).get("driver", {}) or {}
+              for rule in driver.get("rules") or []:
+                  rules[rule.get("id", "")] = rule
+          rows = []
+          for run in data.get("runs") or []:
+              for result in run.get("results") or []:
+                  rid = result.get("ruleId", "?")
+                  rule = rules.get(rid) or {}
+                  cvss = (rule.get("properties") or {}).get("security-severity", "")
+                  level = result.get("level", "")
+                  message = (result.get("message") or {}).get("text") or ""
+                  message = " ".join(message.split()).replace("|", "\\|")[:160]
+                  rows.append((rid, cvss, level, message))
+          if rows:
+              print("### Trivy gate: fixable CRITICAL/HIGH findings\n")
+              print("| rule | severity (CVSS) | level | detail |")
+              print("|---|---|---|---|")
+              for rid, cvss, level, message in rows:
+                  print(f"| {rid} | {cvss} | {level} | {message} |")
+          PY
       - name: Attest tools image provenance
         id: attest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2

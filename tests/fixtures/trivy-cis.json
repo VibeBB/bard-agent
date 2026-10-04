@@ -1,0 +1,39 @@
+{
+  "Results": [
+    {
+      "Target": "ghcr.io/vibebb/bard-tools (debian 13.2)",
+      "Type": "docker-cis",
+      "Results": [
+        {
+          "Class": "config",
+          "Type": "dockerfile",
+          "Target": "Dockerfile",
+          "MisconfSummary": { "Successes": 4, "Failures": 2 },
+          "Misconfigurations": [
+            {
+              "ID": "DS-0002",
+              "AVDID": "AVD-DS-0002",
+              "Title": "Image user should not be 'root'.",
+              "Severity": "HIGH",
+              "Status": "FAIL"
+            },
+            {
+              "ID": "DS-0026",
+              "AVDID": "AVD-DS-0026",
+              "Title": "No HEALTHCHECK defined.",
+              "Severity": "LOW",
+              "Status": "FAIL"
+            },
+            {
+              "ID": "DS-0001",
+              "AVDID": "AVD-DS-0001",
+              "Title": "Create a user for the container.",
+              "Severity": "MEDIUM",
+              "Status": "PASS"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
