@@ -127,6 +127,16 @@ profile defers to: `--network none`, `--user uid:gid`,
 `--read-only` root filesystem with a `/tmp` tmpfs for the tools' scratch
 space.
 
+### CIS baseline
+
+The Trivy CIS compliance scan reports `DS-0002` (image runs as root) and
+`DS-0026` (no `HEALTHCHECK`) on every tools image. Both are waived with
+`exp:` entries in `.trivyignore`: these are CI build/tool containers, not
+deployed services — workflows that need a non-root UID already run the
+image with `docker run --user`, and batch tooling has no health endpoint
+to probe. The waivers renew or get re-fixed by Dockerfile changes when
+they lapse.
+
 ## Updating the plugin
 
 Agent Canvas caches a plugin repository per source string. Because the refspec
@@ -267,3 +277,21 @@ workflows assume these values:
   using default setup).
 - **Dependency graph**: keep enabled; `dependency-review.yml` fails with
   "not supported on this repository" when it is off.
+
+## Settings-level posture (recorded decisions)
+
+The following live in repository Settings rather than code; they are
+intentional for the solo-maintainer bot-merge workflow and are recorded
+here so audits do not re-flag them:
+
+- Branch protection does not require approving reviews, code owners, or
+  "apply to administrators": every merge is performed by automation
+  (digest-lock, version-bump, and Devin PRs), so required approvers would
+  only add friction to a pipeline that already gates on the required-check
+  set. OpenSSF Scorecard reports this as Branch-Protection 3 and
+  Code-Review 0; that is the recorded trade-off, not an oversight.
+- The Dependency graph must stay enabled for `dependency-review.yml` to
+  evaluate pull requests.
+- `release.yml` is dispatch-only; run it once with `dry_run=true` before
+  the first real release to rehearse bump, verify, and install-smoke
+  without creating a GitHub release.
