@@ -23,6 +23,10 @@ receive the parent's conversation history — you summarize the request and pass
    with its trigger and meaning, the UX feedback ids when known, and sounds to avoid. Tag each
    item `[会話]`, `[file:<path>]`, or `[依頼]`. Write nothing that is not in the conversation or
    the files.
+   For a `*.ux-request.json` input, validate its SLP v2 fields (`schema_version` 2,
+   `system` `"ux-creator"`, `target_agent` `"bard"`, stage, risk, purpose ≥20 chars,
+   non-empty `requested_changes`/`expected_deliverables`/`acceptance` lists, `inputs`
+   with sha256 hashes); malformed requests are reported, not worked.
 4. If `task` is in the tool list actually available in this conversation:
 
    ```text
@@ -38,5 +42,18 @@ receive the parent's conversation history — you summarize the request and pass
    missing file under `Missing:` — never claim it exists.
 6. Report the cue table from `cues.md`, the file list, and — for a ux-request — the
    `cues/<slug>/cues.json` path ux-creator imports with `ux import --from bard`.
+   For a ux-request input, finish by writing the SLP v2 response:
+
+   ```bash
+   python3 <plugin root>/scripts/bard_cli.py ux-respond --json - <<'JSON'
+   {"request": "<request path>", "status": "done",
+    "reason": "cue set rendered and read back for the request",
+    "artifacts": ["cues/<slug>/cues.json"],
+    "gate_verdicts": [{"gate": "cue-set-contract", "verdict": "pass"},
+                       {"gate": "readback", "verdict": "pass"}],
+    "decision_refs": ["<event_id>"], "impression_refs": ["<event_id>"],
+    "questions_for_user": []}
+   JSON
+   ```
 
 A cue grants no pass/fail authority over the product it sounds for.

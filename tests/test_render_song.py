@@ -31,6 +31,7 @@ EXPECTED_FILES = {
     "song.mid",
     "song.mml",
     "song.md",
+    "song.contour.svg",
     "song.provenance.json",
 }
 
@@ -67,7 +68,7 @@ def test_valid_fixture_renders(
     assert (
         prov["proposal"]["sha256"] == hashlib.sha256(proposal.read_bytes()).hexdigest()
     )
-    for name in ("song.abc", "song.mid", "song.mml", "song.md"):
+    for name in ("song.abc", "song.mid", "song.mml", "song.md", "song.contour.svg"):
         assert (
             prov["outputs"][name]
             == hashlib.sha256((out_dir / name).read_bytes()).hexdigest()
@@ -83,7 +84,7 @@ def test_render_is_deterministic(
     second = tmp_path / "b"
     assert _run(render_module, proposal, first) == 0
     assert _run(render_module, proposal, second) == 0
-    for name in ("song.abc", "song.mid", "song.mml", "song.md"):
+    for name in ("song.abc", "song.mid", "song.mml", "song.md", "song.contour.svg"):
         assert (first / name).read_bytes() == (second / name).read_bytes()
     pa = json.loads((first / "song.provenance.json").read_text(encoding="utf-8"))
     pb = json.loads((second / "song.provenance.json").read_text(encoding="utf-8"))

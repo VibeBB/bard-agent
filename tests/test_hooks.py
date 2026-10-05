@@ -270,8 +270,11 @@ def _write_review(out_dir: Path, status: str = "ok") -> None:
     summary = (
         "inspected: the engraving reads cleanly; chord labels sit above "
         "each measure and syllables align under their notes without "
-        "collisions anywhere. Bar lines are well formed and the title "
-        "block is legible; only the bar-three label is a little cramped."
+        "collisions anywhere a maker reading it cold would stumble. Bar "
+        "lines are well formed and the title block is legible, so the "
+        "reader can find the hook on the first pass. The one worry is the "
+        "bar-three label, which a reader might attach to bar four; the "
+        "next render should widen that measure slightly before shipping."
     )
     record: dict[str, Any] = {
         "artifact_kind": "bard_score_review",
@@ -292,6 +295,31 @@ def _write_review(out_dir: Path, status: str = "ok") -> None:
             "findings": [],
         }
     (out_dir / "score-review.json").write_text(json.dumps(record), encoding="utf-8")
+    if status == "ok":
+        import hashlib as _h
+
+        digest = _h.sha256((out_dir / "score.png").read_bytes()).hexdigest()
+        record["detail"]["image_sha256"] = digest
+        (out_dir / "score-review.json").write_text(json.dumps(record), encoding="utf-8")
+        records_dir = out_dir.parents[1] / "observations" / "bard"
+        records_dir.mkdir(parents=True, exist_ok=True)
+        review_line = {
+            "schema_version": 1,
+            "kind": "vision_review",
+            "plugin": "bard",
+            "sequence": 1,
+            "event_id": "b" * 64,
+            "recorded_at": "2026-09-25T00:00:01+00:00",
+            "image_path": f"{out_dir.relative_to(out_dir.parents[1])}/score.png",
+            "image_sha256": digest,
+            "model": "test-model",
+            "checklist": "score-engraving",
+            "findings": [],
+            "impression": summary.removeprefix("inspected:").strip(),
+        }
+        (records_dir / "vision-reviews.jsonl").write_text(
+            json.dumps(review_line) + "\n", encoding="utf-8"
+        )
 
 
 def test_report_song_status_flags_unreviewed_score(tmp_path: Path) -> None:
@@ -472,3 +500,30 @@ def test_provenance_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     absolute = tmp_path / "abs" / "log.jsonl"
     monkeypatch.setenv(env, str(absolute))
     assert module.events_path(payload, env, rel) == absolute
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "observations/bard/decisions.jsonl",
+        "observations/bard/impressions.jsonl",
+        "observations/bard/vision-reviews.jsonl",
+        "observations/bard/vision-tool-events.jsonl",
+        "observations/bard/image-observations.jsonl",
+        "observations/bard/records-status.json",
+        "cues/kettle/x.ux-response.json",
+        "songs/demo/song.contour.svg",
+        "songs/demo/song.contour.png",
+    ],
+)
+def test_protect_hook_covers_records_and_projections(path: str) -> None:
+    guard = PLUGIN_ROOT / "hooks" / "scripts" / "protect_song_artifacts.py"
+    spec = importlib.util.spec_from_file_location("protect_song_artifacts", guard)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    payload = {
+        "tool_name": "file_editor",
+        "tool_input": {"command": "create", "path": path, "file_text": "{}"},
+    }
+    assert module._is_artifact_write(payload) is True

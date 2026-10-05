@@ -24,11 +24,14 @@ plugins/bard/
 │   ├── bard.md               # Minstrel that writes songs (task sub-agent)
 │   ├── bard-critic.md        # Critic (no pass/fail authority)
 │   └── bard-cue.md           # Product sound cues (earcons) for ux-creator / firmware
-├── commands/sing.md          # /bard:sing — directs context collection and task invocation
-├── commands/cue.md           # /bard:cue — product sound cue request and task invocation
-├── hooks/                    # session_start doctor, pre_tool_use song-artifact guard,
-│                             # post_tool_use vision records, stop hook reporting song
-│                             # render status (stdlib only)
+├── commands/                 # sing.md, cue.md, inbox.md (/bard:inbox — SLP v2 liaison),
+│                             # doctor.md (/bard:doctor — install probe)
+├── hooks/                    # session_start doctor + require-records, pre_tool_use
+│                             # song-artifact guard + safety rail, post_tool_use vision
+│                             # records, stop hook require-records + render status
+│                             # (stdlib only); records-policy.json holds the VRP policy
+├── scripts/                  # bard_cli.py (record + ux-* CLI), bard_records.py (VRP
+│                             # writers), bard_liaison.py (SLP v2 mirror) — stdlib only
 ├── skills/
 │   ├── bard-songcraft/       # Songwriting theory decision tables, modes, and copyright contract
 │   ├── bard-cuecraft/        # Product sound cue purposes, device ranges, originality rules
@@ -38,11 +41,10 @@ plugins/bard/
 │       ├── SKILL.md
 │       ├── scripts/
 │       └── tests/
-docs/
-├── song-proposal-contract.md # Canonical proposal JSON contract
-├── cue-set-contract.md       # Product sound cue set JSON contract
-├── adr/
-└── research/
+docs/                         # Index (README.md), architecture/workflow/agents/skills/
+                              # commands/mcp/hooks/contracts/records-and-vision/
+                              # sister-cooperation/performance-and-limits/development/
+                              # improvement-notes, contracts, ADRs, research
 docker/                       # bard-tools image (abcm2ps + rsvg-convert + IPA font), the
                               # render_score_png.py execution environment; see docker/README.md
 scripts/                      # Release and image-lock helper scripts (stdlib Python / bash)
@@ -81,12 +83,17 @@ tests/                        # Plugin-asset consistency checks
 - A task sub-agent does not receive the parent's conversation history. The
   parent summarizes the subject in `context.md`, and bard reads the workspace
   (git log and files) itself (ADR-0001).
-- The `hooks/` stop hook is advisory (`decision: allow`) and reports each
-  `songs/*/song.proposal.json` render status plus any `score.png` whose
-  sibling `score-review.json` is missing or fails validation; unreadable
+- The `stop` hook runs `require-records` first (VRP: bounded refusal while the
+  session owes decision/impression/vision-review records; canonical shared
+  hook), then `report-song-status` — advisory (`decision: allow`), reporting each
+  `songs/*/song.proposal.json` render status plus any `score.png` /
+  `song.contour.png` / `cues.timeline.png` lacking a sha-bound VRP vision
+  review and cue sets lacking valid `cues.provenance.json`; unreadable
   proposal or provenance JSON fails closed. The `pre_tool_use` guard rejects writes to
   render projections (`song.abc`, `song.mid`, `song.mml`, `song.md`,
-  `song.provenance.json`, `song.lint.json`, `score.png`); the `post_tool_use` hooks record
+  `song.provenance.json`, `song.lint.json`, `score.png`, `song.contour.*`,
+  `cues.*`), liaison responses (`*.ux-response.json`) and the VRP logs under
+  `observations/bard/`; the `post_tool_use` hooks record
   vision calls and image observations to `observations/bard/*.jsonl`.
   The `session_start` `bard-doctor` hook is advisory too: it resolves the
   plugin root, probes for `docker` on `PATH` and the `tools-image.json` pin
@@ -235,10 +242,8 @@ input and confirm that the broken proposal is rejected.
   not be path-filtered. Zizmor runs from a sha256-verified wheel with
   `GH_TOKEN` online audits, `--offline` on `bot/update-image-digests-*`
   branches, and gates on the recorded SARIF results.
-- CodeQL analysis runs under GitHub's default setup today. A
-  repo-managed `codeql.yml` requires disabling default setup first —
-  advanced-configuration SARIF uploads are rejected while it is enabled —
-  so its adoption is deferred to a settings change plus a follow-up PR.
+- CodeQL analysis is repo-managed via `.github/workflows/codeql.yml`
+  (codeql-action v4, pinned).
 - `.github/workflows/digest-lock-sweep.yml` retries stalled digest-lock PR
   merges every 6 hours (the branch ruleset still gates them) and
   dispatches `ci.yml`/`locked-image-check.yml` on main after a merge or

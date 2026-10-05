@@ -13,6 +13,7 @@ Outputs (per cue set directory):
 - ``cue-<id>.mml``  bard-mml 0.1, one ``@melody`` voice
 - ``cues.json``     bard_cue_manifest: firmware-ready tone tables and file map
 - ``cues.md``       one-page preview for the Agent Canvas Markdown panel
+- ``cues.timeline.svg``  one-row-per-cue timeline for vision review
 - ``cues.provenance.json``  hashes, sources, originality, script sha256
 
 Usage:
@@ -26,9 +27,11 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import re
 import struct
 import sys
+import xml.sax.saxutils as _xml
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from fractions import Fraction
@@ -342,6 +345,7 @@ def validate_cue_set(data: object) -> CueSet:
                 cues.append(cue)
     seen_ids: dict[str, int] = {}
     seen_shapes: dict[tuple[tuple[int | None, Fraction], ...], str] = {}
+    seen_openings: dict[tuple[tuple[int | None, Fraction], ...], str] = {}
     for cue in cues:
         if cue.id in seen_ids:
             reasons.append(f"cues: duplicate id {cue.id}")
@@ -354,6 +358,17 @@ def validate_cue_set(data: object) -> CueSet:
                 "each cue must be distinguishable"
             )
         seen_shapes.setdefault(shape, cue.id)
+        sounded = [n for n in cue.notes if n.midi is not None]
+        opening = tuple((n.midi, n.beats) for n in sounded[:2])
+        if len(opening) == 2:
+            other_open = seen_openings.get(opening)
+            if other_open is not None:
+                reasons.append(
+                    f"cues: {cue.id} opens with the same two sounded notes "
+                    f"(pitch and beats) as {other_open}; "
+                    "each cue needs a distinct opening"
+                )
+            seen_openings.setdefault(opening, cue.id)
     if reasons:
         raise ProposalError(reasons)
     return CueSet(
@@ -502,11 +517,115 @@ def render_markdown(cue_set: CueSet) -> str:
     return "\n".join(lines) + "\n"
 
 
+TIMELINE_ROW_H = 46
+_TIMELINE_LABEL_W = 220
+_TIMELINE_PAD = 10
+_TIMELINE_HEADER_H = 24
+_TIMELINE_MS_PX = 0.28
+
+
+def _xml_esc(text: object) -> str:
+    return _xml.escape(str(text), {'"': "&quot;"})
+
+
+def _opening_interval(cue: Cue) -> str:
+    sounded = [n.midi for n in cue.notes if n.midi is not None]
+    if len(sounded) < 2:
+        return "single note"
+    delta = sounded[1] - sounded[0]
+    if delta == 0:
+        return "unison"
+    direction = "+" if delta > 0 else "-"
+    return f"{direction}{abs(delta)} semitones"
+
+
+def render_timeline_svg(cue_set: CueSet) -> str:
+    """Deterministic timeline SVG: one row per cue, shared millisecond scale.
+
+    Every tone from ``cue_tones`` is a rectangle (rests are gaps) whose height
+    encodes pitch within the cue's row; the row label carries id, purpose,
+    duration, loop and the opening interval. No timestamps — the same cue set
+    produces byte-identical SVG.
+    """
+    durations = [_ms_int(cue.ms(cue.total_beats)) for cue in cue_set.cues]
+    max_ms = max(durations, default=1) or 1
+    width = int(
+        _TIMELINE_LABEL_W + math.ceil(max_ms * _TIMELINE_MS_PX) + _TIMELINE_PAD * 2
+    )
+    height = _TIMELINE_HEADER_H + len(cue_set.cues) * TIMELINE_ROW_H + _TIMELINE_PAD
+    parts: list[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"'
+        f' viewBox="0 0 {width} {height}" font-family="sans-serif">',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="white"/>',
+        f'<text x="10" y="16" font-size="13">{_xml_esc(cue_set.product)} — '
+        f"{_xml_esc(cue_set.device)} cue timeline (ms)</text>",
+    ]
+    track_x = _TIMELINE_LABEL_W
+    track_w = width - _TIMELINE_LABEL_W - _TIMELINE_PAD
+    for i, cue in enumerate(cue_set.cues):
+        top = _TIMELINE_HEADER_H + i * TIMELINE_ROW_H
+        parts.append(
+            f'<rect x="{track_x}" y="{top + 4}" width="{track_w}" '
+            f'height="{TIMELINE_ROW_H - 8}" fill="#f6f6f6" '
+            f'stroke="#ddd"/>'
+        )
+        duration = durations[i]
+        loop_mark = " ↻" if cue.loop else ""
+        parts.append(
+            f'<text x="8" y="{top + 18}" font-size="10" fill="#333">'
+            f"{_xml_esc(cue.id)} · {_xml_esc(cue.purpose)}{loop_mark}</text>"
+        )
+        parts.append(
+            f'<text x="8" y="{top + 32}" font-size="9" fill="#777">'
+            f"{duration} ms · {_xml_esc(_opening_interval(cue))}</text>"
+        )
+        tones = cue_tones(cue)
+        midis = [t["midi"] for t in tones if t["midi"] is not None]
+        lo = min(midis, default=0)
+        hi = max(midis, default=0)
+        span = max(1, hi - lo)
+        inner_h = TIMELINE_ROW_H - 20
+        for tone in tones:
+            x = track_x + int(tone["start_ms"] / max_ms * track_w)
+            w = max(2, int(tone["duration_ms"] / max_ms * track_w))
+            if tone["midi"] is None:
+                continue
+            frac = (tone["midi"] - lo) / span
+            y = top + 8 + int((1 - frac) * inner_h)
+            h = max(3, inner_h // 3)
+            parts.append(
+                f'<rect x="{x}" y="{min(y, top + TIMELINE_ROW_H - 10)}" '
+                f'width="{w}" height="{h}" fill="#336" fill-opacity="0.85"/>'
+            )
+    # millisecond ruler: minor ticks every 100 ms, labels every 500 ms
+    ruler_y = _TIMELINE_HEADER_H - 4
+    for ms in range(0, max_ms + 1, 100):
+        if ms % 500 == 0:
+            continue
+        x = track_x + int(ms / max_ms * track_w)
+        parts.append(
+            f'<line x1="{x}" y1="{_TIMELINE_HEADER_H}" x2="{x}" '
+            f'y2="{_TIMELINE_HEADER_H + 5}" stroke="#ccc"/>'
+        )
+    for ms in range(0, max_ms + 1, 500):
+        x = track_x + int(ms / max_ms * track_w)
+        parts.append(
+            f'<text x="{x}" y="{ruler_y}" font-size="8" fill="#999">{ms}</text>'
+        )
+        parts.append(
+            f'<line x1="{x}" y1="{_TIMELINE_HEADER_H}" x2="{x}" '
+            f'y2="{height - _TIMELINE_PAD}" stroke="#eee"/>'
+        )
+    parts.append("</svg>")
+    return "\n".join(parts) + "\n"
+
+
 def render(cue_set: CueSet) -> dict[str, bytes]:
     files: dict[str, bytes] = {}
     for cue in cue_set.cues:
         files[f"cue-{cue.id}.mid"] = render_cue_midi(cue_set, cue)
         files[f"cue-{cue.id}.mml"] = render_cue_mml(cue_set, cue).encode("utf-8")
+    files["cues.timeline.svg"] = render_timeline_svg(cue_set).encode("utf-8")
     outputs = dict(files)
     outputs["cues.json"] = render_manifest(cue_set, files).encode("utf-8")
     outputs["cues.md"] = render_markdown(cue_set).encode("utf-8")

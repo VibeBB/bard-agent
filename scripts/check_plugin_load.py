@@ -22,12 +22,19 @@ EXPECTED_SKILLS = {
     "bard-render",
     "bard-songcraft",
 }
-EXPECTED_COMMANDS = {"cue", "doctor", "sing"}
-EXPECTED_SESSION_START_HOOKS = {"bard-doctor", "ensure-llm-profiles"}
+EXPECTED_COMMANDS = {"cue", "doctor", "inbox", "sing"}
+EXPECTED_SESSION_START_HOOKS = {
+    "bard-doctor",
+    "ensure-llm-profiles",
+    "require-records",
+}
 EXPECTED_USER_PROMPT_SUBMIT_HOOKS: set[str] = set()
 EXPECTED_PRE_TOOL_USE_HOOKS = {"protect-song-artifacts", "safety-rail"}
-EXPECTED_STOP_HOOKS = {"report-song-status"}
+EXPECTED_STOP_HOOKS = {"require-records", "report-song-status"}
 EXPECTED_POST_TOOL_USE_HOOKS = {"record-image-observation", "record-vision-tool-event"}
+# Sub-agents do not inherit plugin hooks; these agents must declare the
+# VibeBB Record Protocol hooks in their own frontmatter.
+EXPECTED_AGENT_RECORD_HOOKS = {"bard", "bard-cue"}
 
 
 def _registered_tools() -> set[str]:
@@ -104,6 +111,14 @@ def check_plugin(plugin_dir: Path) -> list[str]:
                     f"{event_name} hooks "
                     f"{sorted(collected[event_name])} != {sorted(expected)}"
                 )
+        stop_groups = getattr(plugin.hooks, "stop", None) or []
+        stop_names = [
+            h.name for group in stop_groups for h in group.hooks if h.name is not None
+        ]
+        if stop_names and stop_names[0] != "require-records":
+            reasons.append(
+                f"require-records must be the first stop hook, got {stop_names}"
+            )
 
     registered = _registered_tools()
     min_examples = {"bard": 3, "bard-critic": 2}
@@ -111,6 +126,19 @@ def check_plugin(plugin_dir: Path) -> list[str]:
         for tool in agent.tools:
             if tool not in registered:
                 reasons.append(f"agent {agent.name!r} tool {tool!r} not registered")
+        if agent.name in EXPECTED_AGENT_RECORD_HOOKS:
+            agent_hooks = getattr(agent, "hooks", None)
+            declared: set[str] = set()
+            if agent_hooks is not None:
+                for event_name in ("session_start", "stop"):
+                    for group in getattr(agent_hooks, event_name, None) or []:
+                        declared.update(
+                            h.name for h in group.hooks if h.name is not None
+                        )
+            if "require-records" not in declared:
+                reasons.append(
+                    f"agent {agent.name!r} does not declare a require-records hook"
+                )
         want = min_examples.get(agent.name, 0)
         if len(agent.when_to_use_examples) < want:
             reasons.append(

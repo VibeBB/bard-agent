@@ -1,5 +1,6 @@
 """Tests for the score-review.json validator (fail-closed contract)."""
 
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -35,7 +36,10 @@ LONG_SUMMARY = (
     "placed above each measure and the melisma extender drawn after the "
     "final syllable. Lyric syllables sit under their notes without "
     "collisions, the bar lines are well formed, and the title block is "
-    "legible; the only nit is a cramped chord label over bar three."
+    "legible enough that a maker reading the score cold would find the "
+    "hook on the first pass. The one worry is a cramped chord label over "
+    "bar three, which a reader might misread as belonging to bar four; "
+    "the next render should widen that measure slightly before shipping."
 )
 
 
@@ -73,14 +77,14 @@ def test_short_summary_rejected(validator: Any) -> None:
     record = _ok_record()
     record["summary"] = "inspected: looks fine."
     problems = validator.validate(record)
-    assert any("240" in problem for problem in problems)
+    assert any("400" in problem for problem in problems)
 
 
 def test_single_sentence_summary_rejected(validator: Any) -> None:
     record = _ok_record()
     record["summary"] = "inspected: " + "the score is clean " * 30
     problems = validator.validate(record)
-    assert any("two sentences" in problem for problem in problems)
+    assert any("3 sentences" in problem for problem in problems)
 
 
 def test_missing_prefix_rejected(validator: Any) -> None:
@@ -146,3 +150,33 @@ def test_cli_validates_file(validator: Any, tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 1
+
+
+def test_record_flag_appends_vrp_review(validator: Any, tmp_path: Path) -> None:
+    """--record writes a VRP vision_review bound to the score.png sha256."""
+    song = tmp_path / "songs" / "demo"
+    song.mkdir(parents=True)
+    png = song / "score.png"
+    png.write_bytes(b"PNG")
+    (song / "song.abc").write_text("X:1\n", encoding="utf-8")
+    record = _ok_record()
+    record["artifacts"] = ["songs/demo/score.png", "songs/demo/song.abc"]
+    record["detail"]["image_path"] = "songs/demo/score.png"
+    record["detail"]["image_sha256"] = hashlib.sha256(b"PNG").hexdigest()
+    review = song / "score-review.json"
+    review.write_text(json.dumps(record), encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), str(review), "--record"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    log = tmp_path / "observations" / "bard" / "vision-reviews.jsonl"
+    assert log.is_file()
+    entry = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
+    assert entry["kind"] == "vision_review"
+    assert entry["plugin"] == "bard"
+    assert entry["image_sha256"] == hashlib.sha256(b"PNG").hexdigest()
+    assert entry["checklist"] == "score-engraving"

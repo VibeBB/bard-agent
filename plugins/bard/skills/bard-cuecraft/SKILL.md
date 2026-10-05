@@ -47,7 +47,7 @@ Every cue is 50..3000 ms long **(checked)** and must start and end on a sounded 
 
 - No two cues in a set may sound identical at real time **(checked)**.
 - Give each cue a different opening two notes and a different rhythm shape; contour alone is not
-  enough on a piezo.
+  enough on a piezo **(checked — render_cues.py rejects identical opening pitch+beats)**.
 - Completion and success must never share a contour with warning or error.
 - Keep one tempo family per product (e.g. 150–180 bpm) so the set sounds like one product.
 

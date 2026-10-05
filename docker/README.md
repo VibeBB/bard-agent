@@ -24,7 +24,7 @@ tool versions in the published image, and opens a pull request that updates
 that touch `docker/**`, the publish workflow, or the two lock scripts.
 Because `GITHUB_TOKEN`-created PRs do not trigger `pull_request` workflows, the
 workflow dispatches `ci.yml` and `workflow-lint.yml` on the lock branch and
-polls required checks for up to 30 minutes. Non-required failures do not block
+polls required checks for up to 15 minutes. Non-required failures do not block
 publishing; required-check failures and closed, unmerged PRs fail the job. If a
 PR is merged externally, the existing main workflows are dispatched. If required
 checks remain pending at the deadline, squash auto-merge with branch deletion is

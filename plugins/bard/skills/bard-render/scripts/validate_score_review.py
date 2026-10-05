@@ -16,15 +16,33 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
 from pathlib import Path
 from typing import Any
 
-SUMMARY_MIN_LENGTH = 240
-_SENTENCE_MARKS = "。.!?"
-_SUMMARY_PREFIX = {"ok": "inspected:", "not_applicable": "skipped:", "error": "error:"}
+_SCRIPTS = Path(__file__).resolve()
+_HOOKS_SCRIPTS = _SCRIPTS.parents[3] / "hooks" / "scripts"
+_PLUGIN_SCRIPTS = _SCRIPTS.parents[3] / "scripts"
+
+
+def _import_script(name: str, directory: Path) -> Any:
+    spec = importlib.util.spec_from_file_location(name, directory / f"{name}.py")
+    if spec is None or spec.loader is None:  # pragma: no cover
+        raise ImportError(f"cannot load {name} from {directory}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault(name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+_records = _import_script("_records", _HOOKS_SCRIPTS)
+
+# The summary is a VRP long-form impression: >= 400 chars, >= 3 sentences.
+SUMMARY_PREFIXES = {"ok": "inspected:", "not_applicable": "skipped:", "error": "error:"}
+_SUMMARY_PREFIX = SUMMARY_PREFIXES
 _IMAGE_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _STATUSES = frozenset(_SUMMARY_PREFIX)
 _FINDING_CATEGORIES = {
@@ -39,15 +57,9 @@ _SEVERITIES = {"error", "warning", "info"}
 
 
 def _summary_is_prose(summary: str) -> str | None:
-    """Return a problem string when the summary is not a substantive reading."""
-    if len(summary) < SUMMARY_MIN_LENGTH:
-        return (
-            f"summary must be a substantive multi-sentence reading "
-            f"(>= {SUMMARY_MIN_LENGTH} characters; got {len(summary)})"
-        )
-    if sum(summary.count(mark) for mark in _SENTENCE_MARKS) < 2:
-        return "summary must contain at least two sentences"
-    return None
+    """Return a problem string when the summary fails the impression rule."""
+    errors = _records.impression_errors(summary)
+    return "; ".join(errors) if errors else None
 
 
 def _validate_detail(detail: Any, problems: list[str]) -> None:
@@ -119,7 +131,9 @@ def validate(record: Any) -> list[str]:
         if prefix is not None and not summary.startswith(prefix):
             problems.append(f"summary for status {status} must start with '{prefix}'")
         if status == "ok":
-            prose = _summary_is_prose(summary)
+            # Validate the text after the `inspected:` prefix — the prefix is
+            # an envelope marker, not part of the impression.
+            prose = _summary_is_prose(summary.removeprefix(prefix or "").strip())
             if prose is not None:
                 problems.append(prose)
     detail = record.get("detail")
@@ -130,6 +144,67 @@ def validate(record: Any) -> list[str]:
     return problems
 
 
+def _source_event_for(root: Path, image_sha: str) -> str | None:
+    """event_id of a vision tool event or image observation bound to image_sha."""
+    directory = root / "observations" / "bard"
+    for name in ("vision-tool-events.jsonl", "image-observations.jsonl"):
+        records, _malformed = _records.load_jsonl(directory / name)
+        for record in records:
+            if record.get("image_sha256") == image_sha:
+                event_id = record.get("event_id")
+                if isinstance(event_id, str):
+                    return event_id
+    return None
+
+
+def record_review(
+    record: dict[str, Any], review_path: Path, root: Path
+) -> dict[str, Any]:
+    """Mirror a validated ok-review into vision-reviews.jsonl via bard_records."""
+    bard_records = _import_script("bard_records", _PLUGIN_SCRIPTS)
+    detail = record["detail"]
+    image_sha = str(detail["image_sha256"])
+    image_ref = str(detail["image_path"])
+    image = Path(image_ref)
+    if not image.is_absolute():
+        # detail.image_path is workspace-relative; fall back to the review's
+        # directory only when the workspace-relative path does not exist.
+        candidate = (root.resolve() / image).resolve()
+        image = (
+            candidate if candidate.is_file() else (review_path.parent / image).resolve()
+        )
+    try:
+        relative_image = image.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        relative_image = image_ref
+    payload: dict[str, Any] = {
+        "model": detail["model"],
+        "checklist": "score-engraving",
+        "findings": [
+            {
+                "category": f.get("category", "other"),
+                "severity": f.get("severity", "info"),
+                "note": f.get("note", ""),
+            }
+            for f in detail.get("findings") or []
+        ],
+        "impression": str(record["summary"]).removeprefix("inspected:").strip(),
+    }
+    source = _source_event_for(root, image_sha)
+    if source is not None:
+        payload["source_event_id"] = source
+    else:
+        payload["image_path"] = relative_image
+    payload["findings"].append(
+        {
+            "category": "artifacts",
+            "severity": "info",
+            "note": "covers song.abc engraving and score.png render",
+        }
+    )
+    return bard_records.record_vision_review(payload, root)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -138,6 +213,18 @@ def main() -> int:
     )
     parser.add_argument("review", type=Path, help="path to score-review.json")
     parser.add_argument("--json", action="store_true", help="emit a JSON verdict")
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help="when the review validates with status ok, append the matching "
+        "VRP vision review to observations/bard/vision-reviews.jsonl",
+    )
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=None,
+        help="workspace root for --record (default: OPENHANDS_PROJECT_DIR or cwd)",
+    )
     args = parser.parse_args()
     try:
         raw = args.review.read_text(encoding="utf-8")
@@ -152,10 +239,22 @@ def main() -> int:
             problems = [f"score-review.json is not valid JSON: {exc}"]
         else:
             problems = validate(record)
+    recorded: dict[str, Any] | None = None
+    if (
+        not problems
+        and args.record
+        and isinstance(record, dict)
+        and record.get("status") == "ok"
+    ):
+        root = args.root or Path.cwd()
+        try:
+            recorded = record_review(record, args.review, root)
+        except (ValueError, OSError) as exc:
+            problems = [f"record vision-review failed: {exc}"]
     if args.json:
         print(
             json.dumps(
-                {"ok": not problems, "problems": problems},
+                {"ok": not problems, "problems": problems, "recorded": recorded},
                 ensure_ascii=False,
                 indent=2,
             )

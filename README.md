@@ -2,10 +2,18 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/VibeBB/bard-agent)
 
-Part of the [VibeBB](https://github.com/VibeBB) agent family:
+Part of the [VibeBB](https://vibebb.org/) agent family
+([github.com/VibeBB](https://github.com/VibeBB)):
 [bard-agent](https://github.com/VibeBB/bard-agent) ·
+[dashboard-agent](https://github.com/VibeBB/dashboard-agent) ·
+[document-agent](https://github.com/VibeBB/document-agent) ·
 [electrical-circuit-agent](https://github.com/VibeBB/electrical-circuit-agent) ·
+[firmware-agent](https://github.com/VibeBB/firmware-agent) ·
+[fpga-agent](https://github.com/VibeBB/fpga-agent) ·
 [mechanical-agent](https://github.com/VibeBB/mechanical-agent) ·
+[production-engineering-agent](https://github.com/VibeBB/production-engineering-agent) ·
+[simulation-agent](https://github.com/VibeBB/simulation-agent) ·
+[UX-creator-agent](https://github.com/VibeBB/UX-creator-agent) ·
 [wire-agent](https://github.com/VibeBB/wire-agent)
 
 **English** | [日本語](#日本語)
@@ -13,97 +21,44 @@ Part of the [VibeBB](https://github.com/VibeBB) agent family:
 <a id="english"></a>
 ## English
 
-`bard-agent` adds the **bard** minstrel to OpenHands (Agent Canvas). It turns a
-development workspace, the user's conversation, and conversations with other
-agents into original lyrics and melodies, then exports lyrics, ABC notation,
-MIDI, and MML.
+`bard-agent` is the bard of the VibeBB family — an AI helper you can use when
+you design a hardware product with AI. It does two things: it **writes original
+songs about the work** in your project (an epic about a release, a lament for a
+deleted feature), and it **designs product sound cues** — the startup chime,
+the completion tone, the warning beep a piezo buzzer or small speaker plays.
 
 > Target: OpenHands Software Agent SDK v1.52.0 / OpenHands Agent Canvas
 
-## What it can do
+## What you give and what you get back
 
-| Mode | What it sings |
+You give bard a subject (a mode like `chronicle` or `praise`, or a cue request
+such as “startup completion warning”) and it writes files into your workspace:
+
+| Folder | What is inside, in plain words |
 | --- | --- |
-| `chronicle` | Turn what happened into a chronological epic |
-| `praise` | Praise a success, release, or merge |
-| `lament` | Write a lament for a lost feature or failure |
-| `satire` | Satirize bugs or technical debt (never real people or organizations) |
-| `inspire` | Sing a short song that encourages the next step |
-| `lore` | Tell the design history preserved in a README or ADR as lore |
+| `songs/<slug>/` | `song.md` (a readable page with lyrics, chords and score), `song.abc` (music notation), `song.mid` (MIDI to play), `song.mml` (text notation), `song.proposal.json` (the song's single source of truth), `song.contour.svg` (melody picture), plus the working notes and the critic's report (`notes.md`, `story.md`, `lyrics.md`, `plan.md`, `critic.md`, `score.png`/`score-review.json` when the picture check ran) |
+| `cues/<slug>/` | `cue-<id>.mid`/`cue-<id>.mml` per sound, `cues.json` (a tone table firmware can play directly), `cues.md` (preview), `cues.timeline.svg` (picture of all cues on one timeline), `cues.proposal.json` and `cues.provenance.json` (the source of truth and its audit trail) |
+| `observations/bard/` | bard's own diary: `decisions.jsonl`, `impressions.jsonl`, `vision-reviews.jsonl` — see “Records” below |
 
-Lyrics follow the language of the conversation (Japanese or English). Outputs
-are written to `songs/<slug>/`:
+Songs follow the conversation's language (Japanese or English). Cue sets are
+for a device you name (`piezo` or `speaker`).
 
-- `song.md` — one-page Agent Canvas preview (lyrics, compact chord lines, and
-  the complete ABC score)
-- `song.abc` — ABC 2.1
-- `song.mid` — Standard MIDI File format 1 (melody and accompaniment)
-- `song.mml` — `bard-mml 0.1`
-- `song.proposal.json` / `song.provenance.json` — the canonical song proposal
-  and its provenance
-- `notes.md` / `story.md` / `lyrics.md` / `plan.md` — intermediate songwriting
-  files for each stage
-- `context.md` / `critic.md` — the parent's conversation summary and the
-  critic's observations and disposition
-- `score.png` / `score-review.json` — optional visual check output (advisory;
-  rendered inside the pinned `bard-tools` docker image when docker and the
-  image pin are available — see [docker/README.md](docker/README.md))
+## How it works with sister plugins
 
-### Product sound cues
+VibeBB is a family of agents that share one workspace. **ux-creator** asks bard
+for product sounds by dropping a `*.ux-request.json` liaison file in the
+workspace; `/bard:inbox` lists those requests and bard answers each with a
+`*.ux-response.json`. **firmware** can take `cues.json` — a plain tone table of
+`freq_hz` / `start_ms` / `duration_ms` — and play it on the device. A song can
+be about any sister's work: wire's harness decisions, mechanical's enclosure
+iterations, production's plan — bard reads the workspace the sisters left
+behind and sings it.
 
-`/bard:cue` designs original product sound cues (earcons) — startup,
-completion, warning, error, confirm, pairing, and similar — for a piezo
-buzzer or a small speaker. It answers ux-creator interaction-content requests
-and writes `cues/<slug>/`:
+## How to start
 
-- `cue-<id>.mid` / `cue-<id>.mml` — one MIDI file and one `bard-mml 0.1`
-  voice per cue, rendered with the same primitives as songs
-- `cues.json` — a firmware-ready tone table (`freq_hz`, `start_ms`,
-  `duration_ms`) with the file map; ux-creator imports it with
-  `import --from bard`
-- `cues.md` / `cues.provenance.json` — preview and provenance
-- `cues.proposal.json` — the canonical cue set
-  ([contract](docs/cue-set-contract.md))
+### Install in Agent Canvas (OpenHands web GUI)
 
-```text
-/bard:cue piezo smart-kettle startup completion warning
-/bard:cue piezo smart-kettle ux/smart-kettle.ux-request.json
-```
-
-The proposal contract is schema 0.3. Repeated sections can use `melody_from`
-to copy chords and melody from an earlier section, keeping proposal JSON short.
-Use `--check` when you only want validation; it writes nothing and lists the
-reasons.
-
-## How it works
-
-```text
-User ── /bard:sing ──▶ parent agent
-                         ├─ summarize the conversation in context.md
-                         └─ task(subagent_type="bard") ──▶ bard
-                                                            ├─ read context.md and the workspace (git log, README, ADRs)
-                                                            ├─ write song.proposal.json
-                                                            ├─ validate and render with render_song.py (fail-closed)
-                                                            └─ task(subagent_type="bard-critic") ──▶ observations (no verdict authority)
-```
-
-- A `task` sub-agent does not receive the parent's conversation history, so the
-  parent summarizes it in `context.md` while bard reads the workspace itself.
-- The proposal JSON is the sole source of truth. ABC, MIDI, and MML are derived
-  deterministically by a Python-standard-library-only script and read back for
-  equality checks ([contract](docs/song-proposal-contract.md)).
-- Quoting or adapting existing songs, imitating real artists, and mocking real
-  people are prohibited. Rendering requires every `originality` declaration to
-  be `true`.
-
-Design decisions are recorded in [docs/adr/](docs/adr/) — see the index in
-[docs/README.md](docs/README.md).
-
-## Installation via Agent Canvas WebGUI
-
-From Agent Canvas (the OpenHands web GUI), install the plugin from a GitHub
-release tag. The following procedure was verified with OpenHands agent-server
-1.46-series releases.
+Verified with OpenHands agent-server 1.46-series releases:
 
 1. Open **Customize** in the left sidebar and select the **Plugins** tab.
 2. Click **Add plugin**, enter the following three values, and click
@@ -115,284 +70,171 @@ release tag. The following procedure was verified with OpenHands agent-server
    | Ref | `v1.0.0` / the latest tag from [Releases](https://github.com/VibeBB/bard-agent/releases) |
    | Path | `plugins/bard` |
 
-3. Installation is complete when **bard** appears as enabled. The plugin is
-   installed at `~/.openhands/plugins/installed/bard/`, with `agents/`,
-   `commands/`, `hooks/`, and `skills/` in place. Starting a new conversation loads the
-   `bard-songcraft` and `bard-render` skills and the `/bard:sing` command
-   automatically (the conversation shows “skills ready” immediately after it
-   starts).
-4. To use sub-agents, optionally enable `enable_sub_agents` in Agent Canvas
-   settings. The plugin also works with it disabled (see the fallback below).
+3. When **bard** appears as enabled, installation is done — commands and skills
+   load automatically in new conversations.
+4. Optionally enable `enable_sub_agents` in settings so bard runs as a
+   sub-agent; it also works without it (the parent follows the same recipe).
 
-For update caveats (Agent Canvas caches plugin sources per source string),
-sub-agent activation notes, and API-based install verification, see
-[docs/operations.md](docs/operations.md).
+No GUI? Place `plugins/bard` in your project directory
+(`$OPENHANDS_PROJECT_DIR/plugins/bard`), point `BARD_PLUGIN_ROOT` at it, or use
+the SDK `PluginSource`. Details: [docs/operations.md](docs/operations.md).
 
-For a non-GUI installation, place `plugins/bard` in the project directory
-(`$OPENHANDS_PROJECT_DIR/plugins/bard`), point `BARD_PLUGIN_ROOT` at the plugin
-directory, or use the SDK:
+### Commands
 
-```python
-PluginSource("github:VibeBB/bard-agent", ref="v1.0.0", repo_path="plugins/bard")
-```
+Plugin commands may not appear in the composer's `/` autocomplete palette; type
+them as plain text — they dispatch the same way.
 
-## Usage (Agent Canvas WebGUI)
+| Command | What it does | Example |
+| --- | --- | --- |
+| `/bard:sing` | Write a song about the work | `/bard:sing praise today's release` |
+| `/bard:cue` | Design product sound cues | `/bard:cue piezo smart-kettle startup completion warning` |
+| `/bard:inbox` | List and answer sister requests | `/bard:inbox` |
+| `/bard:doctor` | Check the plugin install | `/bard:doctor` |
 
-1. Open a **new chat** and select the workspace (repository) to sing about.
-2. Enter `/bard:sing`, followed by a mode and subject:
+A `/bard:sing` run usually takes 10–15 minutes depending on the model and the
+workspace. When it finishes you get the title, key, tempo, full lyrics and the
+file list; open `song.md` in the preview panel or play `song.mid`.
 
-   Plugin commands may not appear in the composer's `/` autocomplete palette; type
-   `/bard:sing …` as plain text and send it — it dispatches the same way.
+## What it leaves as records
 
-   ```text
-   /bard:sing chronicle Read this workspace's git history and README and sing its development as an epic.
-   /bard:sing praise today's release
-   /bard:sing satire flaky tests
-   ```
+bard keeps a diary under `observations/bard/` so the work stays explainable:
 
-   The default mode is `chronicle`; without a subject, the subject is “what
-   happened in this conversation”. Lyrics use the language of the argument or
-   conversation (`ja`/`en`).
-3. The parent agent summarizes the conversation in
-   `songs/<slug>/context.md`. bard reads the workspace (`git log`, README,
-   and ADRs), writes the song, and validates and renders it with
-   `render_song.py`. Completion usually takes 10–15 minutes in practice,
-   depending on the LLM and workspace size.
-4. When complete, the conversation displays the title, mode, key, time
-   signature, tempo, full lyrics, and a list of output files. Outputs are in
-   `songs/<slug>/`; open them from **Show panel** in the upper right or read
-   `song.md` in Markdown preview. Play `song.mid` with any MIDI player and
-   render or play `song.abc` with an ABC tool such as abcjs.
+- `decisions.jsonl` — why each musical choice was made (options considered,
+  principles, risks, when to revisit);
+- `impressions.jsonl` — a written impression after every stage;
+- `vision-reviews.jsonl` — what bard saw when it looked at a rendered picture
+  (score, melody contour, cue timeline), bound to the picture's exact bytes.
 
-When `enable_sub_agents` is disabled (the default), `/bard:sing` briefly says
-so, then the parent agent follows `agents/bard.md` itself; the critic reads
-`agents/bard-critic.md` and performs a separate self-critique (recorded in
-`critic.md`). When enabled, bard and bard-critic run as `task` sub-agents. Both
-paths produce and validate the same outputs.
+Records exist so you can trace “why does it sound like this?” later. They are
+advisory evidence only — they never approve or reject anything.
 
-In this project, songs are observations, not verdicts about the pass/fail status
-or quality of the work. If asked to use an existing song, bard writes an
-original one.
+## Limits and safety
 
-## Layout
-
-```text
-plugins/bard/
-├── .plugin/plugin.json
-├── agents/bard.md, bard-critic.md, bard-cue.md
-├── commands/sing.md, cue.md
-├── hooks/                               # stop hook reporting song render status
-└── skills/
-    ├── bard-songcraft/SKILL.md          # songwriting decision tables and copyright contract
-    ├── bard-cuecraft/SKILL.md           # product sound cue decision tables
-    └── bard-render/                     # proposal JSON validation and rendering (stdlib only)
-        ├── SKILL.md
-        └── scripts/render_song.py, render_cues.py
-docs/                                    # contract, ADRs, research, and the docs index
-tests/                                   # renderer and plugin-asset checks
-```
-
-## Development
-
-```bash
-uv sync
-uv run ruff check . && uv run ruff format --check .
-uv run pyright
-uv run pytest -q
-```
-
-Try the renderer directly:
-
-```bash
-uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
-    --proposal tests/fixtures/valid_en.json --out-dir songs/example
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contributor setup and
-[AGENTS.md](AGENTS.md) for the working contract. The release process is
-documented in [docs/operations.md](docs/operations.md).
+- bard is a creative observer: it never judges whether work passed or failed,
+  and its outputs never feed back into the work they describe.
+- It writes only original music — no quoting or imitating existing songs or
+  artists, no mocking real people; rendering is refused unless every
+  `originality` declaration is true.
+- Pictures (`score.png`, `song.contour.png`, `cues.timeline.png`) need Docker
+  and the pinned `bard-tools` image; without them rendering is skipped, never
+  faked on the host.
+- Songs and cues are generated by an LLM; the same request can produce
+  different results between runs. Rendered files are deterministic per
+  proposal.
 
 ## License
 
-BSD-3-Clause ([LICENSE](LICENSE)). Provenance for generated songs is recorded
-in `song.provenance.json` with `license: BSD-3-Clause`.
+BSD-3-Clause ([LICENSE](LICENSE)), © VibeBB. Generated songs record
+`license: BSD-3-Clause` in `song.provenance.json`.
+
+Technical material — architecture, the plugin boundary, CLIs, hooks, contracts,
+development and CI — lives in [docs/README.md](docs/README.md).
 
 <a id="日本語"></a>
 ## 日本語
 
 [English](#english) | **日本語**
 
-OpenHands（Agent Canvas）に吟遊詩人 **bard** を追加するpluginです。開発中のワークスペース、
-利用者との会話、他のエージェントとの会話を題材に、オリジナルの歌詞と旋律を作り、
-歌詞・ABC譜・MIDI・MMLとして書き出します。
+`bard-agent` は VibeBB ファミリーの吟遊詩人です。AI でハードウェア製品を設計する
+「VibeBB」の仕事の中で使う、非エンジニア向けの AI ヘルパーです。できることは二つ。
+**プロジェクトの仕事を題材にオリジナルの歌を作る**こと（リリースの叙事詩、消えた
+機能への哀歌）、そして**製品の効果音を設計する**こと（圧電ブザーや小型スピーカーが
+鳴らす起動音・完了音・警告音）です。
 
 > 対象: OpenHands Software Agent SDK v1.52.0 / OpenHands Agent Canvas
 
-## できること
+## 渡すもの・返ってくるもの
 
-| モード | 歌う内容 |
+歌のモード（`chronicle` や `praise` など）や「startup completion warning」のような
+音の依頼を渡すと、ワークスペースにファイルを書き出します。
+
+| フォルダ | 中身（やさしい言葉で） |
 | --- | --- |
-| `chronicle` | 起きたことを時系列で叙事詩に |
-| `praise` | 成功・リリース・mergeの称賛 |
-| `lament` | 失われた機能や失敗の哀歌 |
-| `satire` | バグや技術的負債への風刺（実在の人物・団体は対象にしない） |
-| `inspire` | 次の一歩を鼓舞する短い歌 |
-| `lore` | READMEやADRに残る設計の由来を伝承として |
+| `songs/<slug>/` | `song.md`（歌詞・コード・譜面が読める1ページ）、`song.abc`（楽譜記法）、`song.mid`（再生できる MIDI）、`song.mml`（テキスト記法）、`song.proposal.json`（歌の唯一の正）、`song.contour.svg`（旋律の絵）。ほかに作業メモと批評レポート（`notes.md`・`story.md`・`lyrics.md`・`plan.md`・`critic.md`、画像チェックが動いたときは `score.png`/`score-review.json`） |
+| `cues/<slug>/` | 音ごとの `cue-<id>.mid`/`cue-<id>.mml`、`cues.json`（ファームウェアがそのまま鳴らせる音程表）、`cues.md`（プレビュー）、`cues.timeline.svg`（全キューのタイムライン絵）、`cues.proposal.json` と `cues.provenance.json`（正と来歴） |
+| `observations/bard/` | bard の日記: `decisions.jsonl`、`impressions.jsonl`、`vision-reviews.jsonl`（後述） |
 
-歌詞の言語は会話に合わせて日本語または英語。出力は`songs/<slug>/`に
+歌詞の言語は会話に合わせて日本語または英語です。キューは `piezo` または `speaker` の
+どちらかのデバイス向けに作ります。
 
-- `song.md` — Agent Canvasのpreviewで読む一枚（歌詞・コンパクトなコード行・ABC譜全文）
-- `song.abc` — ABC 2.1
-- `song.mid` — Standard MIDI File format 1（旋律 + 伴奏）
-- `song.mml` — `bard-mml 0.1`
-- `song.proposal.json` / `song.provenance.json` — 歌の正となる提案と来歴
-- `notes.md` / `story.md` / `lyrics.md` / `plan.md` — 作詞過程の中間ファイル（stage別）
-- `context.md` / `critic.md` — 親が書いた会話の要約と、critic の所見・採否
-- `score.png` / `score-review.json` — 任意の譜面目視チェック出力（advisory。
-  digest 固定の `bard-tools` docker image 内でレンダリングされます。docker と
-  image pin が利用できる場合のみ — [docker/README.md](docker/README.md) 参照）
+## 姉妹 plugin との連携
 
-### 製品の音（効果音）
+VibeBB は一つのワークスペースを共有するエージェントのファミリーです。**ux-creator** が
+ワークスペースに `*.ux-request.json` という依頼ファイルを置くと bard が製品音を請け負い、
+`/bard:inbox` がその一覧と回答（`*.ux-response.json`）を作ります。**firmware** は
+`cues.json`（`freq_hz`・`start_ms`・`duration_ms` の素朴な音程表）をそのまま
+デバイスで鳴らせます。歌の題材は姉妹のどの仕事でも構いません —— wire の配線決定、
+mechanical の筐体改訂、production の計画まで、bard はワークスペースに残された
+記録を読んで歌にします。
 
-`/bard:cue` は、圧電ブザーや小型スピーカー向けに、起動音・完了音・警告音・エラー音・
-操作音・ペアリング音などのオリジナルの製品音（earcon）を作ります。ux-creator の
-interaction-content からの依頼にも応え、`cues/<slug>/` に書き出します。
+## はじめかた
 
-- `cue-<id>.mid` / `cue-<id>.mml` — 音ごとの MIDI と `bard-mml 0.1`（歌と同じ描画部品を使用）
-- `cues.json` — ファームウェアでそのまま鳴らせる音程表（`freq_hz`・`start_ms`・
-  `duration_ms`）とファイル一覧。ux-creator は `import --from bard` で取り込みます
-- `cues.md` / `cues.provenance.json` — プレビューと来歴
-- `cues.proposal.json` — 製品音の正となる定義（[契約](docs/cue-set-contract.md)）
+### Agent Canvas（OpenHands Web GUI）へのインストール
 
-```text
-/bard:cue piezo smart-kettle startup completion warning
-```
+実機（OpenHands agent-server 1.46 系）で確認した手順です。
 
-提案契約はschema 0.3。反復するセクションは`melody_from`で前のセクションのコードと
-メロディを複製できるので、提案JSONが短くなります。検証だけしたいときは`--check`を
-使います（何も書かずに理由を列挙）。
-
-## 仕組み
-
-```text
-利用者 ── /bard:sing ──▶ 親エージェント
-                          ├─ context.md に会話を要約
-                          └─ task(subagent_type="bard") ──▶ bard
-                                                             ├─ context.md と workspace（git log、README、ADR）を読む
-                                                             ├─ song.proposal.json を書く
-                                                             ├─ render_song.py で検証・描画（fail-closed）
-                                                             └─ task(subagent_type="bard-critic") ──▶ 所見（合否権限なし）
-```
-
-- `task` sub-agentは親の会話履歴を受け取らないため、親が`context.md`へ要約し、bardが
-  ワークスペースを自ら読む二本立てにしています。
-- 歌の唯一の正は提案JSONで、ABC・MIDI・MMLはPython標準ライブラリだけのscriptが決定論的に
-  導出し、読み戻して一致を確認します（[契約](docs/song-proposal-contract.md)）。
-- 既存楽曲の引用・翻案、実在アーティストの模倣、実在人物への嘲笑は禁止し、`originality`
-  宣言がすべて`true`でなければ描画しません。
-
-設計の決定は [docs/adr/](docs/adr/) に記録しています — 索引は
-[docs/README.md](docs/README.md) を参照してください。
-
-## インストール（Agent Canvas WebGUI）
-
-Agent Canvas（OpenHands のWeb GUI）からGitHubのリリースタグを指定して導入します。
-以下は実機（OpenHands agent-server 1.46 系）で確認した手順です。
-
-1. 左サイドバーの **カスタマイズ**（Customize）を開き、**Plugins** タブを選びます。
-2. **プラグインを追加** を押し、次の3項目を入力して **インストール** を押します。
+1. 左サイドバーの **Customize** を開き、**Plugins** タブを選びます。
+2. **Add plugin** を押し、次の3項目を入力して **Install** を押します。
 
    | 項目 | 値 |
    | --- | --- |
-   | ソース（source） | `github:VibeBB/bard-agent` |
-   | リファレンス（ref） | `v1.0.0`（[Releases](https://github.com/VibeBB/bard-agent/releases) の最新タグ） |
-   | パス（path） | `plugins/bard` |
+   | Source | `github:VibeBB/bard-agent` |
+   | Ref | `v1.0.0`（[Releases](https://github.com/VibeBB/bard-agent/releases) の最新タグ） |
+   | Path | `plugins/bard` |
 
-3. 一覧に **bard** が「有効」で表示されれば導入完了です。導入先は
-   `~/.openhands/plugins/installed/bard/` で、`agents/`・`commands/`・`hooks/`・`skills/` がそのまま置かれます。
-   会話を新規作成すると `bard-songcraft`・`bard-render` Skill と `/bard:sing` command が自動で
-   読み込まれます（会話開始直後に「スキル準備完了」と表示されます）。
-4. （任意）sub-agent を使う場合は Agent Canvas の設定で `enable_sub_agents` を有効にします。
-   無効のままでも動きます（後述の fallback）。
+3. 一覧に **bard** が「有効」で表示されれば完了です。新しい会話ではコマンドと
+   スキルが自動で読み込まれます。
+4. （任意）`enable_sub_agents` を有効にすると bard が sub-agent として動きます。
+   無効でも動きます（親エージェントが同じ手順を実行します）。
 
-更新時の注意（Agent Canvas は source 文字列ごとに plugin を cache します）、sub-agent
-有効化の挙動、API での導入確認は [docs/operations.md](docs/operations.md) を参照してください。
+GUI を使わない場合は `plugins/bard` をプロジェクト直下
+（`$OPENHANDS_PROJECT_DIR/plugins/bard`）に置くか、`BARD_PLUGIN_ROOT` を指すか、
+SDK の `PluginSource` を使います。詳しくは [docs/operations.md](docs/operations.md)。
 
-GUIを使わない場合は、プロジェクト直下に `plugins/bard` を置く（`$OPENHANDS_PROJECT_DIR/plugins/bard`）か、
-環境変数 `BARD_PLUGIN_ROOT` で plugin ディレクトリを指すか、SDKで
-`PluginSource("github:VibeBB/bard-agent", ref="v1.0.0", repo_path="plugins/bard")` を使います。
+### コマンド
 
-## 使い方（Agent Canvas WebGUI）
+プラグインのコマンドが作曲欄の `/` オートコンプリートパレットに表示されないことが
+あります。プレーンテキストで入力して送信すれば同じように動きます。
 
-1. **新規チャット** を開き、歌わせたいワークスペース（リポジトリ）を選びます。
-2. 入力欄に `/bard:sing` に続けてモードと題材を書いて送ります。
+| コマンド | すること | 例 |
+| --- | --- | --- |
+| `/bard:sing` | 仕事についての歌を作る | `/bard:sing praise 今日のリリース` |
+| `/bard:cue` | 製品の効果音を設計する | `/bard:cue piezo smart-kettle startup completion warning` |
+| `/bard:inbox` | 姉妹からの依頼を一覧・回答 | `/bard:inbox` |
+| `/bard:doctor` | 導入状態を診断 | `/bard:doctor` |
 
-   プラグインのコマンドが作曲欄の `/` オートコンプリートパレットに表示されないことがあります。
-   `/bard:sing …` をプレーンテキストで入力して送信すれば、同じようにdispatchされます。
+`/bard:sing` はモデルとワークスペースの大きさによって 10〜15 分ほどかかります。
+終わると題名・調・テンポ・歌詞全文とファイル一覧が返り、`song.md` をプレビュー
+パネルで読むか `song.mid` を再生できます。
 
-   ```text
-   /bard:sing chronicle このワークスペースの開発の歩みを、gitの履歴とREADMEを読んで叙事詩として歌ってください。
-   /bard:sing praise 今日のリリース
-   /bard:sing satire flakyなテスト
-   ```
+## 残す記録
 
-   モードを省くと `chronicle`、題材を省くと「この会話で起きたこと」になります。歌詞の言語は
-   引数か会話の言語（`ja`/`en`）に合わせます。
-3. 親エージェントが会話を `songs/<slug>/context.md` に要約し、bard が workspace（`git log`、README、
-   ADR）を読んで作詞作曲、`render_song.py` で検証・描画します。実機では完了までおおむね 10〜15 分
-   （LLMとworkspaceの規模に依存）でした。
-4. 完了すると会話に題名・モード・調・拍子・テンポ・歌詞全文と、書き出したファイルの一覧が表示されます。
-   成果物はワークスペース内の `songs/<slug>/` にあり、右上の **パネルを表示** からファイルを
-   開くか、`song.md` を Markdown preview で読みます。`song.mid` は任意のMIDIプレイヤー、`song.abc` は
-   abcjs 等の ABC 描画ツールで再生・表示できます。
+bard は `observations/bard/` に日記を残し、あとから「なぜこの音になったか」を
+追えるようにします。
 
-`enable_sub_agents` が無効（既定）の環境では、`/bard:sing` がその旨を一言伝えたうえで親エージェント
-自身が `agents/bard.md` の手順を実行し、critic も `agents/bard-critic.md` を読んで別パスとして
-自己批評します（所見は `critic.md`）。有効な環境では bard と bard-critic が `task` sub-agent として
-動きます。どちらの経路でも成果物と検証は同じです。
+- `decisions.jsonl` — 音楽的な選択の理由（検討した案、原理、リスク、見直し条件）
+- `impressions.jsonl` — 各ステージ終了時の感想文
+- `vision-reviews.jsonl` — 描いた画像（譜面・旋律の絵・キューのタイムライン）を
+  見て書いた批評。画像のバイト列に紐付けます
 
-歌は観測物で、作業の合否や品質の判定ではありません。既存楽曲の使用を頼まれても bard は
-オリジナルを書きます。
+記録は追跡のための証拠であり、合否を決めるゲートではありません。
 
-## 構成
+## 限界と安全
 
-```text
-plugins/bard/
-├── .plugin/plugin.json
-├── agents/bard.md, bard-critic.md, bard-cue.md
-├── commands/sing.md, cue.md
-├── hooks/                               # 歌の描画状態を報告する stop hook
-└── skills/
-    ├── bard-songcraft/SKILL.md          # 作詞作曲の決定表と著作権契約
-    ├── bard-cuecraft/SKILL.md           # 製品音の決定表
-    └── bard-render/                     # 提案JSONの検証と描画（stdlibのみ）
-        ├── SKILL.md
-        └── scripts/render_song.py, render_cues.py
-docs/                                    # 契約、ADR、リサーチ、ドキュメント索引
-tests/                                   # 描画scriptとplugin資材の検査
-```
-
-## 開発
-
-```bash
-uv sync
-uv run ruff check . && uv run ruff format --check .
-uv run pyright
-uv run pytest -q
-```
-
-描画scriptを直接試す:
-
-```bash
-uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
-    --proposal tests/fixtures/valid_en.json --out-dir songs/example
-```
-
-貢献者向けのセットアップは [CONTRIBUTING.md](CONTRIBUTING.md)、作業契約は
-[AGENTS.md](AGENTS.md) を参照してください。リリース手順は
-[docs/operations.md](docs/operations.md) に記載しています。
+- bard は創造的な観測者です。仕事の合否は決めず、成果物が判定に逆流することも
+  ありません。
+- 完全なオリジナルのみ書きます。既存楽曲の引用・翻案、実在アーティストの模倣、
+  実在人物への嘲笑は禁止し、`originality` 宣言がすべて `true` でなければ描画しません。
+- 画像（`score.png`、`song.contour.png`、`cues.timeline.png`）には Docker と
+  digest 固定の `bard-tools` image が必要です。なければ描画をスキップし、
+  ホストでごまかしません。
+- 歌とキューは LLM が生成するので、同じ依頼でも実行ごとに違う結果になります。
+  提案が同じなら描画結果は一致します。
 
 ## ライセンス
 
-BSD-3-Clause（[LICENSE](LICENSE)）。生成された歌の来歴は`song.provenance.json`に
-`license: BSD-3-Clause`として記録されます。
+BSD-3-Clause（[LICENSE](LICENSE)）、© VibeBB。生成された歌は
+`song.provenance.json` に `license: BSD-3-Clause` と記録されます。
+
+アーキテクチャ・CLI・hook・契約・開発・CI などの技術資料は
+[docs/README.md](docs/README.md) にまとめています。

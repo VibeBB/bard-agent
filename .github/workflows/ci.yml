@@ -239,7 +239,15 @@ jobs:
               --out-dir "out/ci/${lang}"
             uv run python plugins/bard/skills/bard-render/scripts/render_score_png.py \
               --abc "out/ci/${lang}/song.abc" --out-dir "out/ci/${lang}" --json
+            uv run python plugins/bard/skills/bard-render/scripts/render_score_png.py \
+              --svg "out/ci/${lang}/song.contour.svg" --out-dir "out/ci/${lang}" --json
           done
+          mkdir -p out/ci/cues
+          uv run python plugins/bard/skills/bard-render/scripts/render_cues.py \
+            --cues "plugins/bard/skills/bard-render/examples/smart-kettle.cues.json" \
+            --out-dir out/ci/cues
+          uv run python plugins/bard/skills/bard-render/scripts/render_score_png.py \
+            --svg "out/ci/cues/cues.timeline.svg" --out-dir out/ci/cues --json
       - name: Render shipped examples
         run: |
           for lang in en ja; do

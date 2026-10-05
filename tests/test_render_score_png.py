@@ -661,3 +661,92 @@ def test_abcm2ps_score_png_real_render_cjk(tmp_path: Path) -> None:
     assert payload["ok"] is True
     assert png.is_file() and png.stat().st_size > 0
     assert png.read_bytes()[:4] == b"\x89PNG"
+
+
+# ---------------------------------------------------------------------------
+# --svg mode (rsvg-convert only, same hardening)
+
+
+def _fake_docker_run_svg(
+    cmd: list[str], **kwargs: Any
+) -> subprocess.CompletedProcess[str]:
+    assert cmd[0].endswith("docker")
+    sub = cmd[1:]
+    if sub[:3] == ["image", "inspect"]:
+        return subprocess.CompletedProcess(cmd, 0, "[]", "")
+    if sub[:2] == ["pull"]:
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    if sub[0] == "run":
+        work = Path(next(a for a in cmd if a.endswith(":/work")).split(":")[0])
+        (work / "song.contour.png").write_bytes(b"\x89PNG fake")
+    return subprocess.CompletedProcess(cmd, 0, "", "")
+
+
+def test_svg_render_returns_png_sha(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    svg = tmp_path / "song.contour.svg"
+    svg.write_text("<svg/>", encoding="utf-8")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+    monkeypatch.setattr(score_module.subprocess, "run", _fake_docker_run_svg)
+    result = score_module.render_svg_png(svg, tmp_path)
+    png = tmp_path / "song.contour.png"
+    assert result["png"] == str(png)
+    assert result["png_sha256"] == hashlib.sha256(png.read_bytes()).hexdigest()
+
+
+def test_svg_missing_is_io_error(score_module: Any, tmp_path: Path) -> None:
+    with pytest.raises(score_module.RenderError) as err:
+        score_module.render_svg_png(tmp_path / "nope.svg", tmp_path)
+    assert err.value.exit_code == score_module.EXIT_IO
+
+
+def test_svg_no_pin_is_skip(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    svg = tmp_path / "song.contour.svg"
+    svg.write_text("<svg/>", encoding="utf-8")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path, digest=None))
+    monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+    monkeypatch.setattr(score_module.subprocess, "run", _unexpected_subprocess)
+    with pytest.raises(score_module.RenderError) as err:
+        score_module.render_svg_png(svg, tmp_path)
+    assert err.value.exit_code == score_module.EXIT_NO_TOOLS
+
+
+def test_svg_cli_path(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    svg = tmp_path / "song.contour.svg"
+    svg.write_text("<svg/>", encoding="utf-8")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+    monkeypatch.setattr(score_module.subprocess, "run", _fake_docker_run_svg)
+    assert score_module.main(["--svg", str(svg), "--out-dir", str(tmp_path)]) == 0
+    assert (tmp_path / "song.contour.png").is_file()
+
+
+@requires_docker
+@pytest.mark.usefixtures("_require_docker")
+def test_abcm2ps_svg_rasterize_real_render(tmp_path: Path) -> None:
+    svg = tmp_path / "song.contour.svg"
+    svg.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">'
+        '<rect width="40" height="40" fill="#ffffff"/></svg>',
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), "--svg", str(svg), "--json"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    png = tmp_path / "song.contour.png"
+    assert payload["ok"] is True
+    assert png.is_file() and png.read_bytes()[:4] == b"\x89PNG"

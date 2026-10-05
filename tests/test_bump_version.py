@@ -14,14 +14,15 @@ FILES = [
     "pyproject.toml",
     "plugins/bard/skills/bard-render/SKILL.md",
     "plugins/bard/skills/bard-songcraft/SKILL.md",
+    "plugins/bard/skills/bard-cuecraft/SKILL.md",
     "uv.lock",
 ]
 
 
 def _make_repo(tmp_path: Path, version: str = "0.1.0") -> Path:
     (tmp_path / "plugins/bard/.plugin").mkdir(parents=True)
-    (tmp_path / "plugins/bard/skills/bard-render").mkdir(parents=True)
-    (tmp_path / "plugins/bard/skills/bard-songcraft").mkdir(parents=True)
+    for skill in ("bard-render", "bard-songcraft", "bard-cuecraft"):
+        (tmp_path / f"plugins/bard/skills/{skill}").mkdir(parents=True)
     (tmp_path / "plugins/bard/.plugin/plugin.json").write_text(
         f'{{\n  "name": "bard",\n  "version": "{version}"\n}}\n',
         encoding="utf-8",
@@ -31,7 +32,7 @@ def _make_repo(tmp_path: Path, version: str = "0.1.0") -> Path:
         '[tool.ruff]\ntarget-version = "py312"\n',
         encoding="utf-8",
     )
-    for skill in ("bard-render", "bard-songcraft"):
+    for skill in ("bard-render", "bard-songcraft", "bard-cuecraft"):
         (tmp_path / f"plugins/bard/skills/{skill}/SKILL.md").write_text(
             f"---\nname: {skill}\nversion: {version}\nlicense: BSD-3-Clause\n---\n",
             encoding="utf-8",
@@ -82,7 +83,7 @@ def test_bump(tmp_path: Path, bump: str, expected: str) -> None:
     proc = _run("--bump", bump, "--root", str(root))
     assert proc.returncode == 0
     assert proc.stdout.strip() == expected
-    assert _versions(root) == [expected] * 5
+    assert _versions(root) == [expected] * 6
 
 
 def test_set_version(tmp_path: Path) -> None:
@@ -90,7 +91,7 @@ def test_set_version(tmp_path: Path) -> None:
     proc = _run("--set", "2.5.0", "--root", str(root))
     assert proc.returncode == 0
     assert proc.stdout.strip() == "2.5.0"
-    assert _versions(root) == ["2.5.0"] * 5
+    assert _versions(root) == ["2.5.0"] * 6
 
 
 def test_set_rejects_lower(tmp_path: Path) -> None:
@@ -98,7 +99,7 @@ def test_set_rejects_lower(tmp_path: Path) -> None:
     proc = _run("--set", "0.1.0", "--root", str(root))
     assert proc.returncode == 1
     assert "must be greater than" in proc.stderr
-    assert _versions(root) == ["0.1.0"] * 5
+    assert _versions(root) == ["0.1.0"] * 6
 
 
 def test_inconsistent_rejected(tmp_path: Path) -> None:
@@ -117,7 +118,7 @@ def test_dry_run_leaves_files(tmp_path: Path) -> None:
     proc = _run("--bump", "minor", "--dry-run", "--root", str(root))
     assert proc.returncode == 0
     assert proc.stdout.strip() == "0.2.0"
-    assert _versions(root) == ["0.1.0"] * 5
+    assert _versions(root) == ["0.1.0"] * 6
 
 
 def test_uv_lock_other_versions_untouched(tmp_path: Path) -> None:
