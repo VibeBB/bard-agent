@@ -15,10 +15,12 @@ Python standard library only.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
 import sys
+from collections import Counter
 from pathlib import Path
 
 ROOT_ENV = "BARD_PLUGIN_ROOT"
@@ -86,7 +88,31 @@ def _findings(root: Path | None) -> list[str]:
             "score.png unavailable: needs docker on PATH and a pinned "
             "bard-tools digest in tools-image.json"
         )
+    lines.append(_liaison_line())
     return lines
+
+
+def _liaison_line() -> str:
+    """Advisory summary of open bard liaison requests (SLP v2)."""
+    try:
+        script = Path(__file__).resolve().parents[2] / "scripts" / "bard_liaison.py"
+        if not script.is_file():
+            return "liaison inbox: bard_liaison.py not found"
+        spec = importlib.util.spec_from_file_location("bard_liaison", script)
+        if spec is None or spec.loader is None:
+            return "liaison inbox: bard_liaison.py not loadable"
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = Path(os.environ.get(PROJECT_ENV) or ".").resolve()
+        report = module.inbox(root)
+        counts = Counter(r["state"] for r in report["requests"])
+        summary = ", ".join(
+            f"{state}={counts.get(state, 0)}"
+            for state in ("new", "blocked", "stale", "answered")
+        )
+        return f"liaison inbox: {summary}, malformed={len(report['malformed'])}"
+    except Exception as exc:  # noqa: BLE001 - advisory only
+        return f"liaison inbox: probe failed ({exc})"
 
 
 def main() -> int:
