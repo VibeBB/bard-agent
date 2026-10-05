@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "plugin": "bard",
+  "records_dir": "observations/bard",
+  "artifact_globs": [
+    "songs/*/*",
+    "cues/*/*"
+  ],
+  "ignore_globs": [
+    "songs/*/score*.svg"
+  ],
+  "max_stop_denials": 2,
+  "record_hint": "Use the bard CLI: python3 <bard plugin root>/scripts/bard_cli.py record decision|impression|vision-review --json <file> (record status shows what is still owed). Impressions need at least 400 characters and 3 sentences: what you noticed, what works, what worries you, how a maker or user would read it, and what to do next."
+}

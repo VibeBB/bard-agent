@@ -31,12 +31,26 @@ ARTIFACT_NAMES = (
     "song.md",
     "song.provenance.json",
     "song.lint.json",
+    "song.contour.svg",
+    "song.contour.png",
     "score.png",
     "cues.json",
     "cues.md",
     "cues.provenance.json",
+    "cues.timeline.svg",
+    "cues.timeline.png",
+    # VibeBB Record Protocol logs are append-only through the validated
+    # writers; records-status.json is the Stop hook's verdict file.
+    "decisions.jsonl",
+    "impressions.jsonl",
+    "vision-reviews.jsonl",
+    "vision-tool-events.jsonl",
+    "image-observations.jsonl",
+    "records-status.json",
 )
 CUE_ARTIFACT_RE = re.compile(r"^cue-[a-z][a-z0-9_]{0,31}\.(?:mid|mml)$")
+# SLP v2 liaison responses are written only by `bard_cli.py ux-respond`.
+UX_RESPONSE_RE = re.compile(r"^[^/]*\.ux-response\.json$")
 WRITE_TOOLS = {"file_editor", "apply_patch"}
 VIEW_ACTIONS = {"view", "read", "undo_edit"}
 WRITE_ACTIONS = {"create", "str_replace", "insert", "edit", "write"}
@@ -88,7 +102,11 @@ def _path_values(tool_input: dict[str, Any]) -> list[str]:
 def _is_protected(value: str) -> bool:
     normalized = value.replace("\\", "/").lower()
     base = normalized.rsplit("/", 1)[-1]
-    return base in ARTIFACT_NAMES or CUE_ARTIFACT_RE.match(base) is not None
+    return (
+        base in ARTIFACT_NAMES
+        or CUE_ARTIFACT_RE.match(base) is not None
+        or UX_RESPONSE_RE.match(base) is not None
+    )
 
 
 def _is_artifact_write(payload: dict[str, Any]) -> bool:
