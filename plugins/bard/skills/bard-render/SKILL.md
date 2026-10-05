@@ -228,3 +228,13 @@ python3 scripts/render_cues.py --cues cues/<slug>/cues.proposal.json --out-dir c
 ```
 
 Exit `0` ok, `2` rejected (every reason listed, nothing written), `3` I/O error.
+
+## Records you must leave
+
+Rendering is bard's evidence stage: after `render_song.py`/`render_cues.py` write their
+projections, rasterize `song.contour.svg`/`cues.timeline.svg` with
+`render_score_png.py --svg` (pinned image only; exit 4 means docker/pin missing — skip
+advisory), **view the PNGs**, and record a `vision-review` bound to each image's sha256
+(checklists `melody-contour`, `cue-timeline`, `score-engraving`) plus a stage impression —
+via `python3 <plugin root>/scripts/bard_cli.py record <kind> --json <file|->`. Records are
+advisory evidence, never a gate.

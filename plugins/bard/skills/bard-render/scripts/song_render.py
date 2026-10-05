@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import struct
 import sys
+import xml.sax.saxutils as _xml
 from datetime import UTC, datetime
 from fractions import Fraction
 from pathlib import Path
@@ -54,6 +56,7 @@ __all__ = [
     "render_mml",
     "render_markdown",
     "render_provenance",
+    "render_contour_svg",
 ]
 
 PROVENANCE_KIND = "bard_song_provenance"
@@ -548,6 +551,168 @@ def render_markdown(song: Song, abc: str) -> str:
         sha = f" (sha256: {src['sha256']})" if src.get("sha256") else ""
         lines.append(f"- `{src.get('kind', '')}`: {src.get('ref', '')}{sha}")
     return "\n".join(lines) + "\n"
+
+
+CONTOUR_PX_PER_BEAT = 36
+CONTOUR_BARS_PER_ROW = 8
+CONTOUR_PX_PER_SEMITONE = 14
+_CONTOUR_PAD_LEFT = 90
+_CONTOUR_ROW_TOP = 26
+_CONTOUR_LYRIC_H = 14
+_CONTOUR_ROW_GAP = 30
+_CONTOUR_HEADER_H = 40
+
+
+def _esc(text: object) -> str:
+    return _xml.escape(str(text), {'"': "&quot;"})
+
+
+def render_contour_svg(song: Song) -> str:
+    """Deterministic piano-roll SVG of the melody for vision review.
+
+    x = beats (fixed px per beat, wrapped into rows of CONTOUR_BARS_PER_ROW
+    bars), y = MIDI pitch. Every sounded note is a rectangle with its lyric
+    unit under it; bar lines, section boundaries, chord symbols and the
+    vocal range bounds are drawn in. No timestamps — the same proposal
+    produces byte-identical SVG.
+    """
+    beats_per_bar = song.beats_per_bar
+    events: list[tuple[Fraction, Note, Section, str]] = []
+    pos = Fraction(0)
+    for sec in song.sections:
+        sec_start = pos
+        for line in sec.lines:
+            for unit, note in zip(line.units, line.notes, strict=True):
+                events.append((pos, note, sec, unit))
+                pos += note.beats
+        pos = sec_start + beats_per_bar * len(sec.chords)
+    total_beats = pos
+    row_beats = beats_per_bar * CONTOUR_BARS_PER_ROW
+    n_rows = max(1, math.ceil(total_beats / row_beats))
+    sounded = [note.midi for _s, note, _sec, _u in events if note.midi is not None]
+    low = min([song.vocal_low, *sounded], default=song.vocal_low)
+    high = max([song.vocal_high, *sounded], default=song.vocal_high)
+    pitch_h = (high - low + 1) * CONTOUR_PX_PER_SEMITONE
+    row_inner = pitch_h + _CONTOUR_ROW_TOP + _CONTOUR_LYRIC_H
+    row_h = row_inner + _CONTOUR_ROW_GAP
+    width = int(row_beats * CONTOUR_PX_PER_BEAT) + _CONTOUR_PAD_LEFT + 10
+    height = _CONTOUR_HEADER_H + n_rows * row_h + 8
+
+    def row_of(beat: Fraction) -> int:
+        return int(beat // row_beats)
+
+    def x_of(beat: Fraction) -> float:
+        offset = beat - row_of(beat) * row_beats
+        return _CONTOUR_PAD_LEFT + float(offset) * CONTOUR_PX_PER_BEAT
+
+    def y_of(midi: int, row: int) -> float:
+        top = _CONTOUR_HEADER_H + row * row_h + _CONTOUR_ROW_TOP
+        return top + (high - midi) * CONTOUR_PX_PER_SEMITONE
+
+    parts: list[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"'
+        f' viewBox="0 0 {width} {height}" font-family="sans-serif">',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="white"/>',
+        f'<text x="10" y="24" font-size="16">{_esc(song.title)} — '
+        f"{_esc(song.mode)} · {_esc(song.tonic)} {_esc(song.key_mode)} · "
+        f"{_esc(song.meter)} · {song.bpm} bpm</text>",
+    ]
+    for row in range(n_rows):
+        row_top = _CONTOUR_HEADER_H + row * row_h + _CONTOUR_ROW_TOP
+        lyric_y = row_top + pitch_h + _CONTOUR_LYRIC_H - 2
+        # vocal range bounds (dashed)
+        for bound, name in (
+            (song.vocal_low, "vocal low"),
+            (song.vocal_high, "vocal high"),
+        ):
+            y = y_of(bound, row) + CONTOUR_PX_PER_SEMITONE / 2
+            parts.append(
+                f'<line x1="{_CONTOUR_PAD_LEFT}" y1="{y:.1f}" '
+                f'x2="{width - 10}" y2="{y:.1f}" stroke="#c00" '
+                f'stroke-dasharray="4 3" stroke-width="1"/>'
+            )
+            if row == 0:
+                parts.append(
+                    f'<text x="4" y="{y + 3:.1f}" font-size="9" fill="#c00">'
+                    f"{_esc(name)}</text>"
+                )
+        # bar lines
+        first_bar = row * CONTOUR_BARS_PER_ROW
+        total_bars = int(math.ceil(total_beats / beats_per_bar))
+        for bar in range(
+            first_bar, min(first_bar + CONTOUR_BARS_PER_ROW + 1, total_bars + 1)
+        ):
+            x = (
+                _CONTOUR_PAD_LEFT
+                + (bar - first_bar) * float(beats_per_bar) * CONTOUR_PX_PER_BEAT
+            )
+            if x > width - 10:
+                continue
+            parts.append(
+                f'<line x1="{x:.1f}" y1="{row_top}" x2="{x:.1f}" '
+                f'y2="{row_top + pitch_h}" stroke="#bbb" stroke-width="1"/>'
+            )
+            parts.append(
+                f'<text x="{x + 2:.1f}" y="{row_top - 4}" font-size="8" '
+                f'fill="#999">{bar + 1}</text>'
+            )
+        # chord symbols at each chord change inside this row
+        for start, _dur, chord, _sec in _chord_events(song):
+            if row_of(start) != row:
+                continue
+            x = x_of(start)
+            parts.append(
+                f'<text x="{x + 1:.1f}" y="{row_top - 14}" font-size="10" '
+                f'fill="#06c">{_esc(chord.symbol)}</text>'
+            )
+        parts.append(
+            f'<line x1="{_CONTOUR_PAD_LEFT}" y1="{lyric_y + 3}" '
+            f'x2="{width - 10}" y2="{lyric_y + 3}" stroke="#eee"/>'
+        )
+    # section boundaries
+    pos = Fraction(0)
+    for sec in song.sections:
+        row = row_of(pos)
+        x = x_of(pos)
+        row_top = _CONTOUR_HEADER_H + row * row_h + _CONTOUR_ROW_TOP
+        parts.append(
+            f'<line x1="{x:.1f}" y1="{row_top - 18}" x2="{x:.1f}" '
+            f'y2="{row_top + pitch_h}" stroke="#333" stroke-width="1.5"/>'
+        )
+        parts.append(
+            f'<text x="{x + 3:.1f}" y="{row_top - 20}" font-size="10" '
+            f'fill="#333" font-weight="bold">{_esc(sec.name)}</text>'
+        )
+        pos += beats_per_bar * len(sec.chords)
+    # melody notes
+    for start, note, _sec, unit in events:
+        if note.midi is None:
+            continue
+        row = row_of(start)
+        x = x_of(start)
+        y = y_of(note.midi, row)
+        w = max(2.0, float(note.beats) * CONTOUR_PX_PER_BEAT - 1)
+        parts.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" '
+            f'height="{CONTOUR_PX_PER_SEMITONE - 1}" fill="#336" '
+            f'fill-opacity="0.85"/>'
+        )
+        lyric_y = (
+            _CONTOUR_HEADER_H
+            + row * row_h
+            + _CONTOUR_ROW_TOP
+            + pitch_h
+            + _CONTOUR_LYRIC_H
+            - 2
+        )
+        label = "" if unit in ("-", "~") else unit
+        if label:
+            parts.append(
+                f'<text x="{x + 1:.1f}" y="{lyric_y}" font-size="9" '
+                f'fill="#444">{_esc(label)}</text>'
+            )
+    parts.append("</svg>")
+    return "\n".join(parts) + "\n"
 
 
 def render_provenance(

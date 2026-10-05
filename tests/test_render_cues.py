@@ -54,7 +54,7 @@ def test_example_renders(cues_module: Any, tmp_path: Path) -> None:
     assert _run(cues_module, EXAMPLE, out) == 0
     names = {p.name for p in out.iterdir()}
     cue_ids = ["boot", "done", "overheat", "press"]
-    expected = {"cues.json", "cues.md", "cues.provenance.json"}
+    expected = {"cues.json", "cues.md", "cues.provenance.json", "cues.timeline.svg"}
     expected |= {f"cue-{i}.{ext}" for i in cue_ids for ext in ("mid", "mml")}
     assert names == expected
 
@@ -187,6 +187,8 @@ def test_speaker_allows_low_range(cues_module: Any, example: dict[str, Any]) -> 
         ("cues/kettle/cues.provenance.json", True),
         ("cues/kettle/cues.proposal.json", False),
         ("cues/kettle/brief.md", False),
+        ("cues/kettle/cues.timeline.svg", True),
+        ("cues/kettle/cues.timeline.png", True),
     ],
 )
 def test_protect_hook_covers_cue_artifacts(path: str, denied: bool) -> None:
@@ -199,3 +201,32 @@ def test_protect_hook_covers_cue_artifacts(path: str, denied: bool) -> None:
         "tool_input": {"command": "create", "path": path, "file_text": "{}"},
     }
     assert module._is_artifact_write(payload) is denied
+
+
+def test_cues_sharing_opening_notes_rejected(
+    cues_module: Any, example: dict[str, Any]
+) -> None:
+    cue_set = json.loads(json.dumps(example))
+    dupe = json.loads(json.dumps(cue_set["cues"][0]))
+    dupe["id"] = "boot2"
+    dupe["purpose"] = "completion"
+    dupe["notes"] = [
+        dict(cue_set["cues"][0]["notes"][0]),
+        dict(cue_set["cues"][0]["notes"][1]),
+        dict(cue_set["cues"][1]["notes"][-1]),
+    ]
+    cue_set["cues"].append(dupe)
+    reasons = _reasons(cues_module, cue_set)
+    assert any("opening" in reason for reason in reasons), reasons
+
+
+def test_timeline_svg_written(cues_module: Any, tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    assert _run(cues_module, EXAMPLE, out) == 0
+    svg = (out / "cues.timeline.svg").read_text(encoding="utf-8")
+    assert svg.startswith("<svg") or "<svg" in svg
+    prov = json.loads((out / "cues.provenance.json").read_text(encoding="utf-8"))
+    assert (
+        prov["outputs"]["cues.timeline.svg"]
+        == hashlib.sha256((out / "cues.timeline.svg").read_bytes()).hexdigest()
+    )

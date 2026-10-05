@@ -1,5 +1,6 @@
-"""Validate a bard_song_proposal JSON and render it to ABC, MIDI, MML, Markdown
-and a provenance record. Implements docs/song-proposal-contract.md (schema 0.2).
+"""Validate a bard_song_proposal JSON and render it to ABC, MIDI, MML, Markdown,
+a melody-contour SVG and a provenance record. Implements
+docs/song-proposal-contract.md (schema 0.3; 0.2 still accepted).
 
 Python 3.12+, standard library only.
 
@@ -104,6 +105,7 @@ from song_render import (  # noqa: E402
     _vlq,
     _w_line,
     render_abc,
+    render_contour_svg,
     render_markdown,
     render_midi,
     render_mml,
@@ -181,6 +183,7 @@ __all__ = [
     "_vlq",
     "_w_line",
     "render_abc",
+    "render_contour_svg",
     "render_markdown",
     "render_midi",
     "render_mml",
@@ -209,6 +212,7 @@ def render(song: Song) -> dict[str, bytes]:
         "song.mid": midi,
         "song.mml": mml.encode("utf-8"),
         "song.md": md.encode("utf-8"),
+        "song.contour.svg": render_contour_svg(song).encode("utf-8"),
     }
 
 

@@ -30,6 +30,11 @@ Usage::
     python3 render_score_png.py --prewarm
     python3 render_score_png.py --abc songs/<slug>/song.abc [--out-dir DIR]
     python3 render_score_png.py --abc song.abc --json
+    python3 render_score_png.py --svg songs/<slug>/song.contour.svg [--out-dir DIR]
+
+``--svg`` rasterizes any ``*.svg`` (e.g. ``song.contour.svg`` or
+``cues.timeline.svg``) to ``<same stem>.png`` next to it inside the same
+pinned image — rsvg-convert only, same docker hardening and exit codes.
 
 Exit codes: ``0`` rendered; ``3`` input/output I/O error; ``4`` docker not on
 PATH or no usable pinned image (score render skipped — not an error for the
@@ -73,6 +78,7 @@ CONTAINER_CMD = (
     '&& svg="$(ls score*.svg | sort | head -n 1)" '
     f'&& rsvg-convert -d {RSVG_DPI} -p {RSVG_DPI} "$svg" -o score.png'
 )
+CONTAINER_CMD_SVG = f'rsvg-convert -d {RSVG_DPI} -p {RSVG_DPI} "/in/$1" -o "/work/$2"'
 
 
 class ImagePin(TypedDict):
@@ -269,6 +275,49 @@ def _render_container(
     _run(cmd, "docker run")
 
 
+def _render_svg_container(
+    svg_path: Path, out_dir: Path, out_name: str, pin: ImagePin, *, override: bool
+) -> None:
+    docker = shutil.which("docker")
+    if docker is None:
+        raise RenderError("docker not on PATH", EXIT_NO_TOOLS)
+    ref = pin["ref"]
+    try:
+        _run([docker, "image", "inspect", ref], "docker image inspect")
+    except RenderError:
+        try:
+            _verify_attestation(pin, override=override)
+        except RuntimeError as exc:
+            raise RenderError(str(exc), EXIT_TOOL_FAILED) from exc
+        _run([docker, "pull", ref], "docker pull", timeout=PULL_TIMEOUT)
+    cmd = [
+        docker,
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "--read-only",
+        "--tmpfs",
+        "/tmp",
+        "-e",
+        "HOME=/tmp",
+        "-v",
+        f"{svg_path.resolve().parent}:/in:ro",
+        "-v",
+        f"{out_dir.resolve()}:/work",
+        "-w",
+        "/work",
+    ]
+    if hasattr(os, "getuid") and hasattr(os, "getgid"):
+        cmd += ["--user", f"{os.getuid()}:{os.getgid()}"]
+    cmd += [ref, "sh", "-c", CONTAINER_CMD_SVG, "sh", svg_path.name, out_name]
+    _run(cmd, "docker run")
+
+
 def prewarm_tools_image() -> str:
     """Verify and pull the pinned tools image without rendering a score."""
     try:
@@ -339,6 +388,45 @@ def render_score_png(abc_path: Path, out_dir: Path) -> dict[str, str]:
     }
 
 
+def render_svg_png(svg_path: Path, out_dir: Path) -> dict[str, str]:
+    """Rasterize ``svg_path`` to ``out_dir/<stem>.png`` in the pinned image."""
+    try:
+        _attestation_mode()
+    except ValueError as exc:
+        raise RenderError(str(exc), 2) from exc
+    if not svg_path.is_file():
+        raise RenderError(f"svg not found: {svg_path}", EXIT_IO)
+    pin = _docker_pin()
+    if pin is None:
+        raise RenderError(
+            f"no pinned bard-tools image ({PIN_PATH} missing or digest unset; "
+            "svg rasterize skipped)",
+            EXIT_NO_TOOLS,
+        )
+    ref = pin["ref"]
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise RenderError(f"cannot create {out_dir}: {exc}", EXIT_IO) from exc
+    png_name = svg_path.name[: -len(".svg")] + ".png"
+    _render_svg_container(
+        svg_path,
+        out_dir,
+        png_name,
+        pin,
+        override=bool(os.environ.get(IMAGE_ENV, "").strip()),
+    )
+    png_path = out_dir / png_name
+    if not png_path.is_file() or png_path.stat().st_size == 0:
+        raise RenderError(f"rsvg-convert produced no {png_name}", EXIT_TOOL_FAILED)
+    return {
+        "svg": str(svg_path),
+        "png": str(png_path),
+        "png_sha256": _sha256(png_path),
+        "image": ref,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(__doc__ or "Render song.abc to score.png").splitlines()[0]
@@ -347,6 +435,11 @@ def main(argv: list[str] | None = None) -> int:
         "--prewarm", action="store_true", help="verify and prewarm the pinned image"
     )
     parser.add_argument("--abc", type=Path, help="path to song.abc")
+    parser.add_argument(
+        "--svg",
+        type=Path,
+        help="rasterize an SVG (e.g. song.contour.svg) to <stem>.png",
+    )
     parser.add_argument(
         "--out-dir",
         type=Path,
@@ -361,8 +454,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.prewarm:
-        if args.abc is not None:
-            parser.error("--abc cannot be used with --prewarm")
+        if args.abc is not None or args.svg is not None:
+            parser.error("--abc/--svg cannot be used with --prewarm")
         try:
             image = prewarm_tools_image()
         except RenderError as exc:
@@ -376,8 +469,30 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"prewarmed tools image: {image}")
         return 0
+    if args.svg is not None:
+        if args.abc is not None:
+            parser.error("--svg cannot be combined with --abc")
+        if args.svg.suffix != ".svg":
+            parser.error("--svg expects a .svg file")
+        out_dir = (
+            args.out_dir if args.out_dir is not None else args.svg.resolve().parent
+        )
+        try:
+            result = render_svg_png(args.svg, out_dir)
+        except RenderError as exc:
+            if args.json:
+                print(json.dumps({"ok": False, "reason": str(exc)}))
+            else:
+                print(f"error: {exc}", file=sys.stderr)
+            return exc.exit_code
+        if args.json:
+            print(json.dumps({"ok": True, **result}, ensure_ascii=False))
+        else:
+            print(f"{result['png']}")
+            print(f"sha256: {result['png_sha256']}")
+        return 0
     if args.abc is None:
-        parser.error("--abc is required unless --prewarm is set")
+        parser.error("--abc or --svg is required unless --prewarm is set")
 
     out_dir = args.out_dir if args.out_dir is not None else args.abc.resolve().parent
     try:
