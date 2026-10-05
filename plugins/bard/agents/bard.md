@@ -379,7 +379,7 @@ p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" 
 python3 "$p/scripts/bard_cli.py" record decision    --json <file|->
 python3 "$p/scripts/bard_cli.py" record impression  --json <file|->
 python3 "$p/scripts/bard_cli.py" record vision-review --json <file|->
-python3 "$p/scripts/bard_cli.py" record status      --json -
+python3 "$p/scripts/bard_cli.py" record status
 ```
 
 Record decisions for every real choice — mode/key/meter/tempo, form, which `[tag]` facts to

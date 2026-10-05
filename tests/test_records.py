@@ -343,3 +343,70 @@ def test_shared_hook_digests() -> None:
             check._digest(PLUGIN_ROOT / "hooks" / "scripts" / name, "bard")
             == check.EXPECTED[name]
         )
+
+
+# ---------------------------------------------------------------------------
+# prompt/CLI drift guard: every documented bard_cli.py invocation must parse
+
+
+def _documented_invocations() -> list[tuple[str, list[str]]]:
+    """bard_cli.py argument lists quoted in plugin Markdown files."""
+    found: list[tuple[str, list[str]]] = []
+    import re
+    import shlex
+
+    for md in sorted(PLUGIN_ROOT.rglob("*.md")):
+        for lineno, line in enumerate(md.read_text(encoding="utf-8").splitlines(), 1):
+            match = re.search(r"bard_cli\.py\s+(.+)$", line)
+            if match is None:
+                continue
+            tail = match.group(1)
+            tail = re.split(r"<<|&&|\|\||;|#|`", tail)[0]
+            try:
+                tokens = shlex.split(tail)
+            except ValueError:
+                tokens = tail.split()
+            # drop leading placeholders (e.g. "$p/scripts/" fragments)
+            if tokens and tokens[0].startswith("$"):
+                tokens = tokens[1:]
+            if not tokens:
+                continue
+            # alternation a|b|c -> first alternative; placeholders -> "-"
+            args: list[str] = []
+            skip_next = False
+            for token in tokens:
+                if skip_next:
+                    skip_next = False
+                    continue
+                if token in ("<file|->", "<file>", "<stem>", "<json>"):
+                    args.append("-")
+                elif token.startswith("<"):
+                    # a bare placeholder in command position is a subcommand
+                    args.append("decision" if args and args[-1] == "record" else "-")
+                elif "|" in token and not token.startswith("-"):
+                    args.append(token.split("|")[0])
+                else:
+                    args.append(token)
+            found.append((f"{md.name}:{lineno}", args))
+    return found
+
+
+def test_documented_cli_invocations_parse() -> None:
+    """Every `bard_cli.py ...` line in plugins/**/*.md must be valid syntax.
+
+    Parsing is checked with `--help` (argparse exits 0 only when the
+    preceding arguments are well formed), so nothing is executed.
+    """
+    invocations = _documented_invocations()
+    assert invocations, "no bard_cli.py invocations found in plugin docs"
+    bad: list[str] = []
+    for where, args in invocations:
+        proc = subprocess.run(
+            [sys.executable, str(CLI_PATH), *args, "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            bad.append(f"{where}: {args} -> exit {proc.returncode}")
+    assert not bad, "\n".join(bad)

@@ -557,8 +557,8 @@ CONTOUR_PX_PER_BEAT = 36
 CONTOUR_BARS_PER_ROW = 8
 CONTOUR_PX_PER_SEMITONE = 14
 _CONTOUR_PAD_LEFT = 90
-_CONTOUR_ROW_TOP = 26
-_CONTOUR_LYRIC_H = 14
+_CONTOUR_ROW_TOP = 40
+_CONTOUR_LYRIC_H = 24
 _CONTOUR_ROW_GAP = 30
 _CONTOUR_HEADER_H = 40
 
@@ -676,17 +676,25 @@ def render_contour_svg(song: Song) -> str:
         x = x_of(pos)
         row_top = _CONTOUR_HEADER_H + row * row_h + _CONTOUR_ROW_TOP
         parts.append(
-            f'<line x1="{x:.1f}" y1="{row_top - 18}" x2="{x:.1f}" '
+            f'<line x1="{x:.1f}" y1="{row_top - 26}" x2="{x:.1f}" '
             f'y2="{row_top + pitch_h}" stroke="#333" stroke-width="1.5"/>'
         )
         parts.append(
-            f'<text x="{x + 3:.1f}" y="{row_top - 20}" font-size="10" '
+            f'<text x="{x + 3:.1f}" y="{row_top - 28}" font-size="10" '
             f'fill="#333" font-weight="bold">{_esc(sec.name)}</text>'
         )
         pos += beats_per_bar * len(sec.chords)
-    # melody notes
-    for start, note, _sec, unit in events:
-        if note.midi is None:
+    # melody notes; lyric units alternate between two baselines by sounded
+    # index so adjacent units do not collide, and a unit that would still
+    # overrun the gap to the next unit on the same baseline is truncated
+    # with an ellipsis (deterministic width estimate, no font metrics).
+    sounded_events = [(s, n, sec, u) for s, n, sec, u in events if n.midi is not None]
+
+    def _unit_width(text: str) -> float:
+        return sum(9.0 if ord(ch) > 0x2000 else 5.0 for ch in text)
+
+    for index, (start, note, _sec, unit) in enumerate(sounded_events):
+        if note.midi is None:  # narrowed by the sounded_events filter
             continue
         row = row_of(start)
         x = x_of(start)
@@ -697,7 +705,7 @@ def render_contour_svg(song: Song) -> str:
             f'height="{CONTOUR_PX_PER_SEMITONE - 1}" fill="#336" '
             f'fill-opacity="0.85"/>'
         )
-        lyric_y = (
+        lyric_top = (
             _CONTOUR_HEADER_H
             + row * row_h
             + _CONTOUR_ROW_TOP
@@ -705,8 +713,23 @@ def render_contour_svg(song: Song) -> str:
             + _CONTOUR_LYRIC_H
             - 2
         )
+        lyric_y = lyric_top + (9 if index % 2 else 0)
         label = "" if unit in ("-", "~") else unit
-        if label:
+        if not label:
+            continue
+        # available width = gap to the next unit on the same baseline
+        gap_end = float(width - 10)
+        for later_start, _ln, _ls, _lu in sounded_events[index + 2 :: 2]:
+            if row_of(later_start) != row:
+                continue
+            gap_end = x_of(later_start)
+            break
+        available = gap_end - x - 2
+        while label and len(label) > 1 and _unit_width(label + "…") > available:
+            label = label[:-1]
+        if label != unit and _unit_width(label + "…") <= available:
+            label += "…"
+        if label and _unit_width(label) <= available:
             parts.append(
                 f'<text x="{x + 1:.1f}" y="{lyric_y}" font-size="9" '
                 f'fill="#444">{_esc(label)}</text>'

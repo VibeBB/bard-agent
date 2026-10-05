@@ -597,8 +597,16 @@ def render_timeline_svg(cue_set: CueSet) -> str:
                 f'<rect x="{x}" y="{min(y, top + TIMELINE_ROW_H - 10)}" '
                 f'width="{w}" height="{h}" fill="#336" fill-opacity="0.85"/>'
             )
-    # millisecond ruler
+    # millisecond ruler: minor ticks every 100 ms, labels every 500 ms
     ruler_y = _TIMELINE_HEADER_H - 4
+    for ms in range(0, max_ms + 1, 100):
+        if ms % 500 == 0:
+            continue
+        x = track_x + int(ms / max_ms * track_w)
+        parts.append(
+            f'<line x1="{x}" y1="{_TIMELINE_HEADER_H}" x2="{x}" '
+            f'y2="{_TIMELINE_HEADER_H + 5}" stroke="#ccc"/>'
+        )
     for ms in range(0, max_ms + 1, 500):
         x = track_x + int(ms / max_ms * track_w)
         parts.append(

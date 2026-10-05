@@ -107,7 +107,10 @@ Records live under `observations/bard/` and are written only through the CLI:
 p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" \
   "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do
   [ -f "$c/scripts/bard_cli.py" ] && printf %s "$c" && break; done)
-python3 "$p/scripts/bard_cli.py" record decision|impression|vision-review|status --json <file|->
+python3 "$p/scripts/bard_cli.py" record decision      --json <file|->
+python3 "$p/scripts/bard_cli.py" record impression    --json <file|->
+python3 "$p/scripts/bard_cli.py" record vision-review --json <file|->
+python3 "$p/scripts/bard_cli.py" record status
 ```
 
 Record a decision for each real choice — the contour per cue purpose, the pitch band versus
