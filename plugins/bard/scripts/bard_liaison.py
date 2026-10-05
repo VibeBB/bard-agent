@@ -509,7 +509,13 @@ def _load_request_file(
 ) -> tuple[Path, dict[str, Any], list[str]]:
     """Resolve the request path from a respond input; returns path + request."""
     if not _is_str(value):
-        raise ValueError("request must name the *.ux-request.json path")
+        raise ValueError("request must be a request id or the *.ux-request.json path")
+    if not value.endswith(REQUEST_SUFFIX) and SLUG_RE.match(value):
+        matches = sorted(root.rglob(f"{value}{REQUEST_SUFFIX}"))
+        if len(matches) != 1:
+            found = "no" if not matches else f"{len(matches)} ambiguous"
+            raise ValueError(f"{found} request file(s) for id {value}")
+        value = matches[0].relative_to(root).as_posix()
     path, errors = _workspace_path(value, root, "request")
     if errors:
         raise ValueError("; ".join(errors))

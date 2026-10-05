@@ -350,3 +350,17 @@ def test_respond_unknown_key(liaison: Any, tmp_path: Path) -> None:
     payload["bogus"] = 1
     with pytest.raises(ValueError, match="unknown keys"):
         liaison.respond(payload, root=tmp_path)
+
+
+def test_respond_accepts_bare_request_id(liaison: Any, tmp_path: Path) -> None:
+    _write_request(tmp_path, "cue-pack", _request(tmp_path))
+    payload = {**_respond_payload(tmp_path), "request": "cue-pack"}
+    out = liaison.respond(payload, root=tmp_path)
+    assert out["verdict"] == "pass"
+    assert (tmp_path / "cue-pack.ux-response.json").is_file()
+
+
+def test_respond_bare_id_without_request_file(liaison: Any, tmp_path: Path) -> None:
+    payload = {**_respond_payload(tmp_path), "request": "missing-pack"}
+    with pytest.raises(ValueError, match="no request file"):
+        liaison.respond(payload, root=tmp_path)
