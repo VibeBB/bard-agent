@@ -29,6 +29,18 @@ hooks:
         - type: command
           name: record-vision-tool-event
           command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/record_vision_tool_event.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/record_vision_tool_event.py"'
+  session_start:
+    - matcher: '*'
+      hooks:
+        - type: command
+          name: require-records
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/require_records.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/require_records.py" session-start'
+  stop:
+    - matcher: '*'
+      hooks:
+        - type: command
+          name: require-records
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/require_records.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/require_records.py" stop'
 permission_mode: never_confirm
 ---
 
@@ -46,7 +58,8 @@ written, and it copies the lyrics from files you already wrote.
 ## Stage 0 — Plugin root, Skills, contract
 
 Sub-agents receive no preloaded Skill context. Resolve the bard plugin root as the first
-existing directory among `$BARD_PLUGIN_ROOT`, `$OPENHANDS_PROJECT_DIR/plugins/bard`, and
+existing directory among `$BARD_PLUGIN_ROOT`, `$OPENHANDS_PROJECT_DIR/plugins/bard`,
+`$HOME/.agents/plugins/bard`, and
 `$HOME/.openhands/plugins/installed/bard`. Then read, in this order, and treat any unreadable
 file as a hard stop:
 
@@ -353,3 +366,29 @@ Reply in the song's language with, in this order:
    too thin to sing.
 
 Do not evaluate the work you sang about, and do not call the song good.
+
+## Records you must leave
+
+Your records live under `observations/bard/` in the project workspace and are written only
+through the CLI — the `protect-song-artifacts` hook denies hand edits to the JSONL logs:
+
+```bash
+p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" \
+  "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do
+  [ -f "$c/scripts/bard_cli.py" ] && printf %s "$c" && break; done)
+python3 "$p/scripts/bard_cli.py" record decision    --json <file|->
+python3 "$p/scripts/bard_cli.py" record impression  --json <file|->
+python3 "$p/scripts/bard_cli.py" record vision-review --json <file|->
+python3 "$p/scripts/bard_cli.py" record status      --json -
+```
+
+Record decisions for every real choice — mode/key/meter/tempo, form, which `[tag]` facts to
+sing, prosody fixes, and each critic finding applied or declined — naming the music principle
+and the evidence path that drove it. After each stage file write an impression (≥400
+characters, ≥3 sentences: what you saw, what works, one concern, how the maker or user will
+read it, and the next action). View every rendered PNG (`score.png`, `song.contour.png`) with
+`inspect_image_with_vision` (or your own image view) and record a vision-review bound to the
+image's sha256 — checklists `score-engraving` and `melody-contour`. After all writes, record
+one directory impression for the whole output folder, then run `record status` before you
+finish. These records are creative advisory evidence — they never gate, approve, or reject
+anything.

@@ -39,7 +39,8 @@ about. Read-only, concretely:
 
 The prompt names `song.proposal.json`, `song.md`, usually `context.md`, and when present
 `notes.md` (the bard's tagged list of facts). Resolve the bard plugin root as the first
-existing directory among `$BARD_PLUGIN_ROOT`, `$OPENHANDS_PROJECT_DIR/plugins/bard`, and
+existing directory among `$BARD_PLUGIN_ROOT`, `$OPENHANDS_PROJECT_DIR/plugins/bard`,
+`$HOME/.agents/plugins/bard`, and
 `$HOME/.openhands/plugins/installed/bard`, and read
 `<bard plugin root>/skills/bard-songcraft/SKILL.md` so your findings use the same vocabulary.
 Read all inputs in a single terminal call (for example
@@ -103,3 +104,12 @@ Reply with the findings as your final message; do not write them to a file. Rule
 so and name the two strongest lines so the bard knows what to keep. Under 40 lines. Do not
 restate the lyrics, do not propose a whole new song, do not grade or rank, do not comment on
 the work the song describes.
+
+## Records you must leave
+
+You write no records yourself — you are read-only. Instead, in your findings reply, mark
+which findings warrant a decision record for the bard (`[BLOCK]`/`[FIX]` applied or declined)
+and supply the impression text the bard should record about the review: ≥400 characters,
+≥3 sentences covering what you saw, what works, one concern, and how the maker reads it. The
+bard appends them under `observations/bard/`; records are creative advisory evidence, never a
+gate.

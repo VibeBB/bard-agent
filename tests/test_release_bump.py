@@ -84,6 +84,7 @@ def _write_version_files(work: Path, version: str) -> None:
         "plugins/bard/.plugin",
         "plugins/bard/skills/bard-render",
         "plugins/bard/skills/bard-songcraft",
+        "plugins/bard/skills/bard-cuecraft",
         "scripts",
     ):
         (work / rel).mkdir(parents=True, exist_ok=True)
@@ -95,7 +96,7 @@ def _write_version_files(work: Path, version: str) -> None:
         f'[project]\nname = "bard-agent"\nversion = "{version}"\n',
         encoding="utf-8",
     )
-    for skill in ("bard-render", "bard-songcraft"):
+    for skill in ("bard-render", "bard-songcraft", "bard-cuecraft"):
         (work / f"plugins/bard/skills/{skill}/SKILL.md").write_text(
             f"---\nversion: {version}\n---\n", encoding="utf-8"
         )

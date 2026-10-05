@@ -19,13 +19,16 @@ VERSION_FILES = [
     "pyproject.toml",
     "plugins/bard/skills/bard-render/SKILL.md",
     "plugins/bard/skills/bard-songcraft/SKILL.md",
+    "plugins/bard/skills/bard-cuecraft/SKILL.md",
 ]
 
+_SKILL_VERSION = re.compile(r"(?m)^version: (.+)$")
 _PATTERNS = {
     "plugins/bard/.plugin/plugin.json": re.compile(r'"version":\s*"([^"]+)"'),
     "pyproject.toml": re.compile(r'(?m)^version = "([^"]+)"'),
-    "plugins/bard/skills/bard-render/SKILL.md": re.compile(r"(?m)^version: (.+)$"),
-    "plugins/bard/skills/bard-songcraft/SKILL.md": re.compile(r"(?m)^version: (.+)$"),
+    "plugins/bard/skills/bard-render/SKILL.md": _SKILL_VERSION,
+    "plugins/bard/skills/bard-songcraft/SKILL.md": _SKILL_VERSION,
+    "plugins/bard/skills/bard-cuecraft/SKILL.md": _SKILL_VERSION,
 }
 
 UV_LOCK = "uv.lock"

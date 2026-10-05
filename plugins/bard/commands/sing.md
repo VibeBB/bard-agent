@@ -104,6 +104,7 @@ and do not go silent mid-run.
    writing its observations and disposition to `<out dir>/critic.md`. The
    plugin root is the first existing directory of `$BARD_PLUGIN_ROOT`,
    `$OPENHANDS_PROJECT_DIR/plugins/bard`,
+   `$HOME/.agents/plugins/bard`,
    `$HOME/.openhands/plugins/installed/bard`.
 6. When you receive bard's report, display it in this order:
    First run `ls -l --time-style=full-iso songs/<slug>/` and confirm

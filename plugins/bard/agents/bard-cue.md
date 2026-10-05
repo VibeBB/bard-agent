@@ -22,6 +22,18 @@ hooks:
         - type: command
           name: safety-rail
           command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/safety_rail.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/safety_rail.py"'
+  session_start:
+    - matcher: '*'
+      hooks:
+        - type: command
+          name: require-records
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/require_records.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/require_records.py" session-start'
+  stop:
+    - matcher: '*'
+      hooks:
+        - type: command
+          name: require-records
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/require_records.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/require_records.py" stop'
 permission_mode: never_confirm
 ---
 
@@ -86,3 +98,21 @@ ux-request — the exact path of `cues/<slug>/cues.json` so ux-creator can impor
 
 A cue is an observation of what the product should sound like; it grants no pass/fail
 authority over the product, its UX contract, or its firmware.
+
+## Records you must leave
+
+Records live under `observations/bard/` and are written only through the CLI:
+
+```bash
+p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" \
+  "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do
+  [ -f "$c/scripts/bard_cli.py" ] && printf %s "$c" && break; done)
+python3 "$p/scripts/bard_cli.py" record decision|impression|vision-review|status --json <file|->
+```
+
+Record a decision for each real choice — the contour per cue purpose, the pitch band versus
+the device, the distinctiveness ruling (no two cues share an opening), and loop choices —
+with the acoustic principle and evidence paths. After each stage file write an impression
+(≥400 characters, ≥3 sentences). View `cues.timeline.png` when it renders and record a
+vision-review bound to its sha256 (checklist `cue-timeline`). Finish with one directory
+impression and `record status`. Records are creative advisory evidence, never a gate.
