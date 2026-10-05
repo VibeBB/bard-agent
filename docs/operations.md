@@ -261,6 +261,19 @@ verification starts, failure or timeout stops the pull. `require` treats the
 skip conditions as errors, while `off` never verifies. A locally present
 image is not re-verified during ordinary rendering.
 
+## Local verification
+
+pytest selects subsets directly for a faster local check — `-k <expr>`, a
+test path, or `-n 0` to disable the default `-n auto` workers:
+
+```bash
+uv run pytest -q tests/test_render_score_png.py
+uv run pytest -q -k abc
+uv run pytest -q -n 0
+```
+
+Run the full `uv run pytest -q` before submitting.
+
 ## CI runner network auditing
 
 CI and image-publishing jobs use `step-security/harden-runner` in audit-only mode. It observes network egress without blocking requests; per-run insights are available in the GitHub Actions job summary.

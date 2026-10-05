@@ -97,6 +97,10 @@ esac
     summary = tmp_path / "summary.md"
     calls = tmp_path / "calls.log"
     env = os.environ.copy()
+    # A BASH_ENV-exported gh() shell function would shadow the PATH stub
+    # gh executable, so sanitize the child env before spawning.
+    env.pop("BASH_ENV", None)
+    env = {key: value for key, value in env.items() if not key.startswith("BASH_FUNC_gh")}
     env.update(
         {
             "PATH": f"{bin_dir}:{env['PATH']}",
