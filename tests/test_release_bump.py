@@ -138,7 +138,9 @@ def release_repo(tmp_path: Path) -> tuple[Path, Path, dict[str, str], Path]:
     # A BASH_ENV-exported gh() shell function would shadow the PATH stub
     # gh executable, so sanitize the child env before spawning.
     env.pop("BASH_ENV", None)
-    env = {key: value for key, value in env.items() if not key.startswith("BASH_FUNC_gh")}
+    env = {
+        key: value for key, value in env.items() if not key.startswith("BASH_FUNC_gh")
+    }
     env.update(
         {
             "PATH": f"{bin_dir}:{env['PATH']}",
