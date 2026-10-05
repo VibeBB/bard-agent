@@ -12,6 +12,7 @@ dev = [
     "ruff==0.16.10",
     "pyright==1.1.414",
     "pytest-cov==7.1.0",
+    "pytest-xdist>=3",
 ]
 sdk-check = ["openhands-sdk==1.52.0", "openhands-tools==1.52.0"]
 
@@ -43,7 +44,7 @@ reportMissingParameterType = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-rs"
+addopts = "-rs -n auto --dist loadgroup"
 
 [tool.coverage.run]
 source = ["plugins/bard"]
