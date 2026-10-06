@@ -31,7 +31,8 @@ Findings and fixes from the VRP/vision/liaison refactor (see ADR-0013).
 - Vision review of sister-produced images is prompt-driven only — nothing
   auto-watches `*.ux.json` attachments or inbox assets.
 - No audio-level (listening) review of MIDI — only visual proxies
-  (score/contour/timeline PNGs).
+  (score/contour/timeline PNGs). The planned listener is an audio-capable AI
+  agent, not a human panel (family roadmap on www.vibebb.org).
 - `bard-critic` cannot see images itself (no vision tool); its review is
   text-only and bard records its impressions.
 - Liaison is pull-only: no MCP push/notify; requests surface at session start

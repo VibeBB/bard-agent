@@ -65,8 +65,9 @@ Rejection conditions beyond the field rules:
 ISO 24501:2010 gives the measuring method for signal and interfering sound
 levels (Annexes A and B); `listening` records the result or an explicit
 assumption. The estimate is a design screen; a measurement on the built
-product supersedes it. Actual listening evaluation with people is future
-work (see the family roadmap on www.vibebb.org).
+product supersedes it. A listening evaluation by an audio-capable AI agent
+(advisory, never a verdict) is future work (see the family roadmap on
+www.vibebb.org).
 
 ## Rendering
 
