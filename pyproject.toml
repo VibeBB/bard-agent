@@ -65,10 +65,10 @@ branch = true
 # main minus one point for interpreter variance. Raise them, never lower.
 c0 = 80
 c1 = 69
-decision = 51
+decision = 52
 c2 = 48
 mcdc = 26
-boundary = 23
+boundary = 24
 
 [tool.coverage.report]
-fail_under = 76
+fail_under = 77

@@ -99,3 +99,16 @@ find what they missed.
 - **Mutation testing**: a mutant (a flipped comparison, a removed condition)
   that survives the suite marks an assertion that is missing even though the
   line is covered. Mutation runs are advisory evidence, not a CI gate.
+
+## Reference suite
+
+`tests/test_song_boundaries.py` applies these techniques to the song
+proposal validator (`plugins/bard/skills/bard-render/scripts/song_validate.py`),
+following the family pattern set by wire-agent:
+
+- 3-value boundaries for the 60..180 BPM tempo range, General MIDI programs
+  0..127 for melody and accompaniment, the 7..19 semitone vocal-range span,
+  the 12-semitone melodic-leap limit, and the 1..12 section count;
+- type equivalence classes: a JSON boolean is not an integer tempo;
+- negative cases: an empty source list is rejected, and the valid fixture
+  yields no reasons at all.
