@@ -72,7 +72,10 @@ parent picks a fresh slug.
 2. **design** — for each cue pick contour, pitch band, rhythm and tempo from the cuecraft
    tables. Check that completion/success cues end higher or on a stable degree, that
    warning/error cues are repetitive and unresolved, and that no two cues share the same
-   opening two notes. Write the decisions (and the rejected alternatives) to
+   opening two notes. Keep every pitch at or below 2500 Hz (d#7) for listeners with
+   age-related hearing loss, loop every `warning` with at least one rest, and, when the
+   buzzer part is known, copy its datasheet SPL curve into `transducer` and the use
+   situation into `listening` so the validator checks audibility. Write the decisions (and the rejected alternatives) to
    `cues/<slug>/design.md`.
 3. **cue set** — write `cues/<slug>/cues.proposal.json` (`bard_cue_set` 0.1, contract in
    `<plugin root>/skills/bard-render/SKILL.md` and `docs/cue-set-contract.md` in the bard

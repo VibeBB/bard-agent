@@ -174,6 +174,8 @@ def test_negative(
 
 def test_speaker_allows_low_range(cues_module: Any, example: dict[str, Any]) -> None:
     example["device"] = "speaker"
+    example.pop("transducer")
+    example.pop("listening")
     example["cues"][0]["notes"][0]["pitch"] = "c4"
     cues_module.validate_cue_set(example)
 

@@ -9,6 +9,12 @@
   ],
   "rationale": "A rising major arpeggio says the kettle is awake; a two-tone rising fourth closes the boil (the UX contract asks for a two-tone done chime); the overheat warning is a repeated single high pitch with gaps so it reads as urgent and never resolves; the press click is one very short high tick inside the 300 ms confirm budget. All pitches sit in the piezo band c5..c8.",
   "originality": {"original_melody": true, "no_trademark_sound_imitation": true},
+  "transducer": {
+    "part": "illustrative 12 mm piezo curve; replace with the chosen part's datasheet",
+    "distance_cm": 10,
+    "response": [{"hz": 1000, "spl_db": 62}, {"hz": 1500, "spl_db": 70}, {"hz": 2000, "spl_db": 76}, {"hz": 2500, "spl_db": 80}, {"hz": 4000, "spl_db": 85}]
+  },
+  "listening": {"distance_m": 1.0, "ambient_db": 35, "min_margin_db": 5, "rationale": "Kitchen at night with the heater off, user one metre away; illustrative until measured per ISO 24501 Annex A/B."},
   "cues": [
     {"id": "boot", "purpose": "startup", "bpm": 180,
      "notes": [{"pitch": "c6", "beats": 0.25}, {"pitch": "e6", "beats": 0.25}, {"pitch": "g6", "beats": 0.5}]},
