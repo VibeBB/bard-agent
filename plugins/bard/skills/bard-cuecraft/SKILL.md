@@ -34,7 +34,7 @@ rest.
 | `completion` | the task the user started has finished | rising interval (4th/5th/octave), last note longest | 300..1000 ms | no |
 | `success` | an action succeeded | short rising pair | 150..500 ms | no |
 | `notification` | something needs a glance, not action | two notes, neutral interval, mid band | 200..700 ms | no |
-| `warning` | attention needed soon | repeated single pitch with gaps, unresolved | 400..2000 ms | may loop **(checked)** |
+| `warning` | attention needed soon | repeated single pitch with gaps, unresolved | 400..2000 ms | must loop with a rest **(checked)** |
 | `error` | an action failed or a fault exists | falling or dissonant pair, low end of the band | 300..1500 ms | may loop **(checked)** |
 | `confirm` | the press or touch registered | one very short high tick | 50..300 ms **(checked)** | no |
 | `cancel` | the action was withdrawn | one short falling pair | 50..300 ms **(checked)** | no |
@@ -55,7 +55,7 @@ Every cue is 50..3000 ms long **(checked)** and must start and end on a sounded 
 
 | `device` | Range **(checked)** | Notes |
 | --- | --- | --- |
-| `piezo` | `c5`..`c8` (523–4186 Hz) | loudest near the element's resonance (often 2–4 kHz, see the part's datasheet); one pitch at a time; `program` is ignored by hardware |
+| `piezo` | `c5`..`c8` (523–4186 Hz) | loudest near the element's resonance (often 2–4 kHz, see the part's datasheet); one pitch at a time; `program` is ignored by hardware; keep pitches at or below 2500 Hz (d#7) for older listeners **(checked, waivable with a reason)** |
 | `speaker` | `c3`..`c8` | small speakers lose everything below ~`c4`; choose a General MIDI `program` for the MIDI preview |
 
 Cues are monophonic: the firmware plays `cues.json` `tones[]` as a sequence of

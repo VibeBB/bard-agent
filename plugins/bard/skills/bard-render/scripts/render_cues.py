@@ -66,6 +66,15 @@ PURPOSES = {
     "pairing",
 }
 LOOPABLE_PURPOSES = {"warning", "error"}
+# JIS S 0013:2011 (the national text of ISO 24500:2010), clause 4.2: a warning
+# keeps sounding while its cause lasts; clause 4.3: fundamentals should not
+# exceed 2.5 kHz because age-related hearing loss hits high frequencies first.
+ACCESSIBILITY_REFERENCE = "JIS S 0013:2011 / ISO 24500:2010"
+MUST_LOOP_PURPOSES = {"warning"}
+MAX_FUNDAMENTAL_HZ = 2500.0
+WAIVABLE_CHECKS = {"max_fundamental_hz"}
+# ISO 24501:2010 covers listening distances up to about 4 m.
+MAX_LISTENING_M = 4.0
 MAX_MS: dict[str, int] = {"confirm": 300, "cancel": 300}
 DEFAULT_MAX_MS = 3000
 MIN_MS = 50
@@ -114,7 +123,12 @@ TOP_KEYS = {
     "rationale",
     "originality",
     "cues",
+    "transducer",
+    "listening",
+    "accessibility_waivers",
 }
+TRANSDUCER_KEYS = {"part", "distance_cm", "response"}
+LISTENING_KEYS = {"distance_m", "ambient_db", "min_margin_db", "rationale"}
 CUE_KEYS = {"id", "purpose", "ux_feedback", "bpm", "program", "loop", "notes"}
 ORIGINALITY_KEYS = ("original_melody", "no_trademark_sound_imitation")
 
@@ -146,6 +160,21 @@ class Cue:
 
 
 @dataclass(frozen=True)
+class Transducer:
+    part: str
+    distance_cm: float
+    response: tuple[tuple[float, float], ...]
+
+
+@dataclass(frozen=True)
+class Listening:
+    distance_m: float
+    ambient_db: float
+    min_margin_db: float
+    rationale: str
+
+
+@dataclass(frozen=True)
 class CueSet:
     product: str
     device: str
@@ -153,6 +182,9 @@ class CueSet:
     rationale: str
     originality: dict[str, Any]
     cues: tuple[Cue, ...]
+    transducer: Transducer | None = None
+    listening: Listening | None = None
+    waivers: tuple[tuple[str, str], ...] = ()
 
 
 def _ms_int(value: Fraction) -> int:
@@ -165,6 +197,196 @@ def _is_int(value: object) -> bool:
 
 def _text(value: object, lo: int, hi: int) -> bool:
     return isinstance(value, str) and lo <= len(value) <= hi and bool(value.strip())
+
+
+def _number(value: object, lo: float, hi: float) -> bool:
+    return (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and lo <= value <= hi
+    )
+
+
+def _validate_transducer(raw: object, reasons: list[str]) -> Transducer | None:
+    if not isinstance(raw, dict):
+        reasons.append("transducer: object with part, distance_cm, response")
+        return None
+    t = cast(dict[str, Any], raw)
+    before = len(reasons)
+    unknown = set(t) - TRANSDUCER_KEYS
+    if unknown:
+        reasons.append(f"transducer: unknown keys {sorted(unknown)}")
+    if not _text(t.get("part"), 1, 120):
+        reasons.append("transducer.part: 1..120 characters")
+    distance = t.get("distance_cm")
+    if not _number(distance, 1, 100):
+        reasons.append("transducer.distance_cm: 1..100 (datasheet measuring distance)")
+    raw_response = t.get("response")
+    points: list[tuple[float, float]] = []
+    if not isinstance(raw_response, list) or not 2 <= len(raw_response) <= 32:
+        reasons.append("transducer.response: 2..32 {hz, spl_db} points")
+    else:
+        for i, rp in enumerate(cast(list[object], raw_response)):
+            where = f"transducer.response[{i}]"
+            if not isinstance(rp, dict) or set(cast(dict[str, Any], rp)) != {
+                "hz",
+                "spl_db",
+            }:
+                reasons.append(f"{where}: object with exactly hz and spl_db")
+                continue
+            point = cast(dict[str, Any], rp)
+            if not _number(point["hz"], 20, 20000):
+                reasons.append(f"{where}.hz: 20..20000")
+            elif not _number(point["spl_db"], 0, 140):
+                reasons.append(f"{where}.spl_db: 0..140")
+            elif points and point["hz"] <= points[-1][0]:
+                reasons.append(f"{where}.hz: frequencies must strictly increase")
+            else:
+                points.append((float(point["hz"]), float(point["spl_db"])))
+    if len(reasons) > before:
+        return None
+    return Transducer(
+        part=cast(str, t["part"]),
+        distance_cm=float(cast(float, distance)),
+        response=tuple(points),
+    )
+
+
+def _validate_listening(raw: object, reasons: list[str]) -> Listening | None:
+    if not isinstance(raw, dict):
+        reasons.append(f"listening: object with {sorted(LISTENING_KEYS)}")
+        return None
+    lst = cast(dict[str, Any], raw)
+    before = len(reasons)
+    if set(lst) != LISTENING_KEYS:
+        reasons.append(f"listening: exactly {sorted(LISTENING_KEYS)}")
+        return None
+    if not _number(lst["distance_m"], 0.1, MAX_LISTENING_M):
+        reasons.append(f"listening.distance_m: 0.1..{MAX_LISTENING_M}")
+    if not _number(lst["ambient_db"], 0, 120):
+        reasons.append("listening.ambient_db: 0..120 (A-weighted interfering sound)")
+    if not _number(lst["min_margin_db"], 0, 40):
+        reasons.append("listening.min_margin_db: 0..40")
+    if not _text(lst["rationale"], 20, 400):
+        reasons.append(
+            "listening.rationale: 20..400 characters (where the numbers come from)"
+        )
+    if len(reasons) > before:
+        return None
+    return Listening(
+        distance_m=float(lst["distance_m"]),
+        ambient_db=float(lst["ambient_db"]),
+        min_margin_db=float(lst["min_margin_db"]),
+        rationale=cast(str, lst["rationale"]),
+    )
+
+
+def _validate_waivers(raw: object, reasons: list[str]) -> tuple[tuple[str, str], ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        reasons.append("accessibility_waivers: list of {check, reason}")
+        return ()
+    waivers: list[tuple[str, str]] = []
+    for i, rw in enumerate(cast(list[object], raw)):
+        where = f"accessibility_waivers[{i}]"
+        if not isinstance(rw, dict) or set(cast(dict[str, Any], rw)) != {
+            "check",
+            "reason",
+        }:
+            reasons.append(f"{where}: object with exactly check and reason")
+            continue
+        w = cast(dict[str, Any], rw)
+        if w["check"] not in WAIVABLE_CHECKS:
+            reasons.append(f"{where}.check: one of {sorted(WAIVABLE_CHECKS)}")
+        elif not _text(w["reason"], 20, 400):
+            reasons.append(f"{where}.reason: 20..400 characters")
+        elif any(w["check"] == c for c, _ in waivers):
+            reasons.append(f"{where}: duplicate waiver for {w['check']}")
+        else:
+            waivers.append((w["check"], w["reason"]))
+    return tuple(waivers)
+
+
+def spl_at(transducer: Transducer, hz: float) -> float | None:
+    """Datasheet SPL at ``hz``, interpolated linearly over log frequency."""
+    points = transducer.response
+    if not points[0][0] <= hz <= points[-1][0]:
+        return None
+    for (h0, s0), (h1, s1) in zip(points, points[1:], strict=False):
+        if h0 <= hz <= h1:
+            t = (math.log(hz) - math.log(h0)) / (math.log(h1) - math.log(h0))
+            return s0 + t * (s1 - s0)
+    return None  # pragma: no cover - the range check above makes this unreachable
+
+
+def listener_spl(
+    transducer: Transducer, listening: Listening, hz: float
+) -> float | None:
+    """Free-field inverse-square estimate at the listening distance."""
+    at_source = spl_at(transducer, hz)
+    if at_source is None:
+        return None
+    ratio = listening.distance_m * 100.0 / transducer.distance_cm
+    return at_source - 20.0 * math.log10(ratio)
+
+
+def _check_accessibility(
+    cues: list[Cue],
+    transducer: Transducer | None,
+    listening: Listening | None,
+    waivers: tuple[tuple[str, str], ...],
+    reasons: list[str],
+) -> None:
+    waived = {check for check, _ in waivers}
+    above = False
+    for cue in cues:
+        if cue.purpose in MUST_LOOP_PURPOSES and not cue.loop:
+            reasons.append(
+                f"cues: {cue.id} is a {cue.purpose} and must loop while its "
+                "cause lasts "
+                f"({ACCESSIBILITY_REFERENCE} 4.2)"
+            )
+        if cue.loop and all(n.midi is not None for n in cue.notes):
+            reasons.append(
+                f"cues: {cue.id} loops without a rest; a repeating signal needs an "
+                "ON/OFF pattern so it reads as a signal, not a drone"
+            )
+        for note in cue.notes:
+            if note.midi is None:
+                continue
+            hz = _freq_hz(note.midi)
+            if hz > MAX_FUNDAMENTAL_HZ:
+                above = True
+                if "max_fundamental_hz" not in waived:
+                    reasons.append(
+                        f"cues: {cue.id} plays {hz} Hz above "
+                        f"{MAX_FUNDAMENTAL_HZ:.0f} Hz, "
+                        "hard to hear with age-related hearing loss "
+                        f"({ACCESSIBILITY_REFERENCE} 4.3); "
+                        "lower it or add a reasoned waiver"
+                    )
+            if transducer is None or listening is None:
+                continue
+            level = listener_spl(transducer, listening, hz)
+            if level is None:
+                reasons.append(
+                    f"cues: {cue.id} plays {hz} Hz outside the declared "
+                    "transducer response"
+                )
+            elif level + 1e-9 < listening.ambient_db + listening.min_margin_db:
+                reasons.append(
+                    f"cues: {cue.id} at {hz} Hz reaches {level:.1f} dB at "
+                    f"{listening.distance_m} m, below ambient "
+                    f"{listening.ambient_db} dB "
+                    f"+ margin {listening.min_margin_db} dB"
+                )
+    if "max_fundamental_hz" in waived and not above:
+        reasons.append(
+            "accessibility_waivers: max_fundamental_hz is waived but no cue exceeds "
+            f"{MAX_FUNDAMENTAL_HZ:.0f} Hz; remove the stale waiver"
+        )
 
 
 def _validate_sources(data: dict[str, Any], reasons: list[str]) -> list[Any]:
@@ -369,6 +591,15 @@ def validate_cue_set(data: object) -> CueSet:
                     "each cue needs a distinct opening"
                 )
             seen_openings.setdefault(opening, cue.id)
+    transducer = None
+    listening = None
+    if "transducer" in d or "listening" in d:
+        if not ("transducer" in d and "listening" in d):
+            reasons.append("transducer and listening: declare both or neither")
+        transducer = _validate_transducer(d.get("transducer"), reasons)
+        listening = _validate_listening(d.get("listening"), reasons)
+    waivers = _validate_waivers(d.get("accessibility_waivers"), reasons)
+    _check_accessibility(cues, transducer, listening, waivers, reasons)
     if reasons:
         raise ProposalError(reasons)
     return CueSet(
@@ -378,6 +609,9 @@ def validate_cue_set(data: object) -> CueSet:
         rationale=cast(str, rationale),
         originality=cast(dict[str, Any], originality),
         cues=tuple(cues),
+        transducer=transducer,
+        listening=listening,
+        waivers=waivers,
     )
 
 
@@ -457,6 +691,53 @@ def cue_tones(cue: Cue) -> list[dict[str, Any]]:
     return tones
 
 
+def _sounded_hz(cue: Cue) -> list[float]:
+    return [_freq_hz(n.midi) for n in cue.notes if n.midi is not None]
+
+
+def accessibility_report(cue_set: CueSet) -> dict[str, Any]:
+    return {
+        "reference": ACCESSIBILITY_REFERENCE,
+        "max_fundamental_hz": MAX_FUNDAMENTAL_HZ,
+        "highest_fundamental_hz": max(max(_sounded_hz(c)) for c in cue_set.cues),
+        "warnings_loop": True,
+        "waivers": [{"check": c, "reason": r} for c, r in cue_set.waivers],
+    }
+
+
+def audibility_report(cue_set: CueSet) -> dict[str, Any]:
+    transducer, listening = cue_set.transducer, cue_set.listening
+    if transducer is None or listening is None:
+        return {
+            "status": "unknown",
+            "reason": "no transducer response or listening condition declared",
+        }
+    rows: list[dict[str, Any]] = []
+    for cue in cue_set.cues:
+        levels = [
+            cast(float, listener_spl(transducer, listening, hz))
+            for hz in _sounded_hz(cue)
+        ]
+        lowest = min(levels)
+        rows.append(
+            {
+                "id": cue.id,
+                "min_spl_db": round(lowest, 1),
+                "margin_db": round(lowest - listening.ambient_db, 1),
+            }
+        )
+    return {
+        "status": "pass",
+        "part": transducer.part,
+        "datasheet_distance_cm": transducer.distance_cm,
+        "listening_distance_m": listening.distance_m,
+        "ambient_db": listening.ambient_db,
+        "min_margin_db": listening.min_margin_db,
+        "model": "datasheet SPL, log-frequency interpolation, inverse-square distance",
+        "cues": rows,
+    }
+
+
 def render_manifest(cue_set: CueSet, files: dict[str, bytes]) -> str:
     cues: list[dict[str, Any]] = []
     for cue in cue_set.cues:
@@ -485,6 +766,8 @@ def render_manifest(cue_set: CueSet, files: dict[str, bytes]) -> str:
         "device": cue_set.device,
         "cues": cues,
         "artifacts": sorted(files),
+        "accessibility": accessibility_report(cue_set),
+        "audibility": audibility_report(cue_set),
     }
     return json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
@@ -510,6 +793,26 @@ def render_markdown(cue_set: CueSet) -> str:
             f"| `{cue.id}` | {cue.purpose} | {cue.ux_feedback or '—'} | "
             f"{_ms_int(cue.ms(cue.total_beats))} ms | "
             f"{'yes' if cue.loop else 'no'} | {names} |"
+        )
+    access = accessibility_report(cue_set)
+    lines += [
+        "",
+        "## Accessibility",
+        "",
+        f"- reference: {access['reference']}",
+        f"- highest fundamental: {access['highest_fundamental_hz']} Hz "
+        f"(limit {access['max_fundamental_hz']:.0f} Hz)",
+        "- warning cues loop with an ON/OFF pattern",
+    ]
+    lines += [f"- waiver {c}: {r}" for c, r in cue_set.waivers]
+    audible = audibility_report(cue_set)
+    if audible["status"] == "unknown":
+        lines.append(f"- audibility: unknown — {audible['reason']}")
+    else:
+        lines.append(
+            f"- audibility ({audible['part']}, {audible['listening_distance_m']} m, "
+            f"ambient {audible['ambient_db']} dB): "
+            + ", ".join(f"{r['id']} {r['min_spl_db']} dB" for r in audible["cues"])
         )
     lines += ["", "## Rationale", "", cue_set.rationale, "", "## Sources", ""]
     for src in cue_set.sources:
