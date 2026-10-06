@@ -22,6 +22,7 @@
 | [`performance-and-limits.md`](performance-and-limits.md) | Timeouts, scan depths, iteration/budget limits, known limits |
 | [`operations.md`](operations.md) | Release process, plugin update notes, verification recipes |
 | [`development.md`](development.md) | Setup, verify commands, CI checks, shared-hook rules, version bump |
+| [`test-coverage.md`](test-coverage.md) | C0/C1/C2/MCC/MC/DC and boundary coverage, floors, test-design techniques |
 | [`improvement-notes.md`](improvement-notes.md) | What the VRP/vision/liaison refactor found and fixed, open items |
 | [`research/sdk-v1.50.0-feature-evaluation.md`](research/sdk-v1.50.0-feature-evaluation.md) | OpenHands SDK v1.50.0 and uv 0.12.21 adoption review |
 | [`research/sdk-v1.50.1-feature-evaluation.md`](research/sdk-v1.50.1-feature-evaluation.md) | OpenHands SDK v1.50.1 adoption decisions |
@@ -46,3 +47,4 @@
 | [0011](adr/ADR-0011-product-sound-cues.md) | Product sound cues as a separate `bard_cue_set` contract |
 | [0012](adr/ADR-0012-attest-published-tools-images.md) | Attest published tools images |
 | [0013](adr/ADR-0013-vibebb-records-liaison-vision.md) | VibeBB record protocol port, SLP v2 liaison CLI, and melody/cue projections |
+| [0014](adr/ADR-0014-structural-coverage.md) | Structural coverage gate (C0, C1, C2, MC/DC, boundaries) |
