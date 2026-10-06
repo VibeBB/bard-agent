@@ -126,7 +126,7 @@ jobs:
       - name: Pytest
         id: pytest
         continue-on-error: ${{ matrix.experimental || false }}
-        run: uv run pytest -q --cov --cov-report=term-missing:skip-covered
+        run: uv run python scripts/structural_coverage.py run --json out/structural-coverage.json
       - name: Verify docs
         id: verify-docs
         continue-on-error: ${{ matrix.experimental || false }}

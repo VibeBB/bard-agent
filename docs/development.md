@@ -11,7 +11,7 @@ uv sync                          # project venv (Python 3.12+)
 ```bash
 uv run ruff check . && uv run ruff format --check .
 uv run pyright
-env -u BASH_ENV -u "BASH_FUNC_gh%%" uv run pytest -q --cov
+env -u BASH_ENV -u "BASH_FUNC_gh%%" uv run python scripts/structural_coverage.py run
 uv run python scripts/check_shared_hooks.py
 uv run python scripts/check_shared_workflows.py
 uv run --group sdk-check python scripts/check_plugin_load.py
@@ -20,7 +20,9 @@ uvx zizmor@1.30.1 .github/workflows && actionlint -oneline
 ```
 
 The `BASH_ENV`/`BASH_FUNC_gh%%` unsets are needed because the Devin `gh`
-function breaks the stub-`gh` tests. Coverage `fail_under` is 79 (`pyproject`).
+function breaks the stub-`gh` tests. `structural_coverage.py run` wraps pytest and
+gates C0, C1, decision, C2, MC/DC and boundary floors from `pyproject.toml`
+([test-coverage.md](test-coverage.md)).
 
 Docker-dependent tests are opt-in: `BARD_REQUIRE_DOCKER=1 uv run pytest -q -k
 abcm2ps -rs` runs the real in-image renders (needs docker + the pinned
