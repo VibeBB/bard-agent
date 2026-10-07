@@ -27,7 +27,7 @@ songs about the work** in your project (an epic about a release, a lament for a
 deleted feature), and it **designs product sound cues** — the startup chime,
 the completion tone, the warning beep a piezo buzzer or small speaker plays.
 
-> Target: OpenHands Software Agent SDK v1.52.0 / OpenHands Agent Canvas
+> Target: OpenHands Software Agent SDK v1.53.0 / OpenHands Agent Canvas
 
 ## What you give and what you get back
 
@@ -141,7 +141,7 @@ development and CI — lives in [docs/README.md](docs/README.md).
 機能への哀歌）、そして**製品の効果音を設計する**こと（圧電ブザーや小型スピーカーが
 鳴らす起動音・完了音・警告音）です。
 
-> 対象: OpenHands Software Agent SDK v1.52.0 / OpenHands Agent Canvas
+> 対象: OpenHands Software Agent SDK v1.53.0 / OpenHands Agent Canvas
 
 ## 渡すもの・返ってくるもの
 
