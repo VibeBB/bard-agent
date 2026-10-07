@@ -79,6 +79,12 @@ the first existing directory of:
 2. `$OPENHANDS_PROJECT_DIR/plugins/bard`
 3. `$HOME/.agents/plugins/bard`
 4. `$HOME/.openhands/plugins/installed/bard`
+5. `$HOME/plugins/installed/bard`
+6. `$OH_PERSISTENCE_DIR/plugins/installed/bard`
+
+Candidates 5–6 cover the OpenHands docker conversation runtime, whose inner
+`HOME` is `/var/openhands/.openhands`; docker is unavailable inside it, so
+`render_score_png.py` fails closed there with runtime-switch guidance.
 
 Unresolved root: advisory hooks exit 0 (they degrade, never crash); the
 `pre_tool_use` `protect-song-artifacts` guard keeps its fail-closed exit 2.

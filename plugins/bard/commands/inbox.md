@@ -14,7 +14,8 @@ bard answers each with a `*.ux-response.json` beside it.
 
 1. Resolve the plugin root as the first existing directory of `$BARD_PLUGIN_ROOT`,
    `$OPENHANDS_PROJECT_DIR/plugins/bard`, `$HOME/.agents/plugins/bard`,
-   `$HOME/.openhands/plugins/installed/bard`, then run:
+   `$HOME/.openhands/plugins/installed/bard`, `$HOME/plugins/installed/bard`,
+   `$OH_PERSISTENCE_DIR/plugins/installed/bard`, then run:
 
    ```bash
    python3 <plugin root>/scripts/bard_cli.py ux-inbox [--root <workspace>]

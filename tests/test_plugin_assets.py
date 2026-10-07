@@ -67,6 +67,16 @@ def test_proposal_rule_is_path_triggered() -> None:
     assert "triggers:" not in head
 
 
+def test_out_rule_is_path_triggered() -> None:
+    head = (PLUGIN_ROOT / "skills" / "bard-out-rules" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )[:600]
+    for glob in (' "**/out/**"', ' "**/songs/**"', ' "**/cues/**"'):
+        assert glob in head
+    assert "paths:" in head
+    assert "triggers:" not in head
+
+
 def test_sing_command() -> None:
     fm = _frontmatter(PLUGIN_ROOT / "commands" / "sing.md")
     assert fm.get("description"), "sing.md frontmatter missing description"

@@ -18,6 +18,7 @@ PLUGIN_DIR = REPO_ROOT / "plugins" / "bard"
 EXPECTED_AGENTS = {"bard", "bard-critic", "bard-cue"}
 EXPECTED_SKILLS = {
     "bard-cuecraft",
+    "bard-out-rules",
     "bard-proposal-rules",
     "bard-render",
     "bard-songcraft",
@@ -25,6 +26,7 @@ EXPECTED_SKILLS = {
 EXPECTED_COMMANDS = {"cue", "doctor", "inbox", "sing"}
 EXPECTED_SESSION_START_HOOKS = {
     "bard-doctor",
+    "ensure-agent-profiles",
     "ensure-llm-profiles",
     "require-records",
 }

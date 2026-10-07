@@ -228,7 +228,7 @@ def test_ensure_llm_profiles_provisions(tmp_path: Path) -> None:
     assert proc.returncode == 0
     out = json.loads(proc.stdout)
     assert out["missing"] == []
-    for name in ("vibebb-author", "vibebb-review"):
+    for name in ("vibebb-author", "vibebb-review", "oracle"):
         profile = json.loads((profiles / f"{name}.json").read_text(encoding="utf-8"))
         assert profile["model"] == "test-model"
     # Idempotent: a second run provisions nothing and still reports ok.
@@ -255,7 +255,11 @@ def test_ensure_llm_profiles_tolerates_missing_settings(tmp_path: Path) -> None:
         check=False,
     )
     assert proc.returncode == 0
-    assert json.loads(proc.stdout)["missing"] == ["vibebb-author", "vibebb-review"]
+    assert json.loads(proc.stdout)["missing"] == [
+        "vibebb-author",
+        "vibebb-review",
+        "oracle",
+    ]
 
 
 IMAGE_OBS_SCRIPT = PLUGIN_ROOT / "hooks" / "scripts" / "record_image_observation.py"

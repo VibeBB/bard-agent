@@ -44,6 +44,7 @@ song); ``5`` an external tool failed or produced no PNG.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -263,12 +264,42 @@ def _container_user(docker: str) -> str:
     return f"{os.getuid()}:{os.getgid()}"
 
 
+def _inside_conversation_container() -> bool:
+    """True when running inside an OpenHands docker conversation runtime.
+
+    The runtime injects ``OH_PERSISTENCE_DIR``/``OH_RUNTIME_LAUNCHED_PROFILE``
+    into each ``agent-server-conversation-*`` container, which carries no
+    docker client — the pinned bard-tools image then has nowhere to launch.
+    ``OH_CONVERSATION_RUNTIME`` is not usable as the signal: the runtime
+    sets it to ``local`` inside the container itself.
+    """
+    if os.environ.get("OH_PERSISTENCE_DIR") or os.environ.get(
+        "OH_RUNTIME_LAUNCHED_PROFILE"
+    ):
+        return True
+    with contextlib.suppress(OSError):
+        return Path.home() == Path("/var/openhands/.openhands")
+    return False
+
+
+def _docker_missing() -> RenderError:
+    detail = "docker not on PATH"
+    if _inside_conversation_container():
+        detail += (
+            " — this appears to be an OpenHands docker conversation "
+            "container, which cannot launch tool containers; set the "
+            "conversation runtime to local (Agent Canvas -> Settings -> "
+            "Application) and start a new conversation"
+        )
+    return RenderError(detail, EXIT_NO_TOOLS)
+
+
 def _render_container(
     abc_path: Path, out_dir: Path, pin: ImagePin, *, override: bool
 ) -> None:
     docker = shutil.which("docker")
     if docker is None:
-        raise RenderError("docker not on PATH", EXIT_NO_TOOLS)
+        raise _docker_missing()
     ref = pin["ref"]
     try:
         _run([docker, "image", "inspect", ref], "docker image inspect")
@@ -311,7 +342,7 @@ def _render_svg_container(
 ) -> None:
     docker = shutil.which("docker")
     if docker is None:
-        raise RenderError("docker not on PATH", EXIT_NO_TOOLS)
+        raise _docker_missing()
     ref = pin["ref"]
     try:
         _run([docker, "image", "inspect", ref], "docker image inspect")
@@ -363,7 +394,7 @@ def prewarm_tools_image() -> str:
         )
     docker = shutil.which("docker")
     if docker is None:
-        raise RenderError("docker not on PATH", EXIT_NO_TOOLS)
+        raise _docker_missing()
     override = bool(os.environ.get(IMAGE_ENV, "").strip())
     try:
         _verify_attestation(pin, override=override)
