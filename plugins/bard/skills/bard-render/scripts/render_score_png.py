@@ -70,6 +70,7 @@ IMAGE_ENV = "BARD_TOOLS_IMAGE"
 PULL_TIMEOUT = 600
 _ATTEST_TIMEOUT_S = 120
 _GH_AUTH_TIMEOUT_S = 15
+_DOCKER_INFO_TIMEOUT_S = 10
 _VERIFY_ENV = "BARD_VERIFY_ATTESTATION"
 _REPOSITORY = "VibeBB/bard-agent"
 _PUBLISH_FILE = ".github/workflows/publish-bard-images.yml"
@@ -232,6 +233,36 @@ def _verify_attestation(pin: ImagePin, *, override: bool) -> None:
         )
 
 
+def _docker_info_security_options(docker: str) -> str | None:
+    """Return `docker info` security options, or None when unavailable."""
+    try:
+        result = subprocess.run(
+            [docker, "info", "-f", "{{json .SecurityOptions}}"],
+            capture_output=True,
+            text=True,
+            timeout=_DOCKER_INFO_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
+def _container_user(docker: str) -> str:
+    """uid:gid to run the render container as.
+
+    On rootless Docker the host uid maps to an unmapped subuid inside the
+    container user namespace, so the /work bind-mount writes fail. There
+    container root (0:0) maps back to the daemon's owner — the invoking
+    user — so 0:0 keeps writes working without weakening isolation (the
+    container stays read-only, network-less, and cap-dropped). On rootful
+    Docker keep the host uid so artifacts stay user-owned.
+    """
+    if "name=rootless" in (_docker_info_security_options(docker) or ""):
+        return "0:0"
+    return f"{os.getuid()}:{os.getgid()}"
+
+
 def _render_container(
     abc_path: Path, out_dir: Path, pin: ImagePin, *, override: bool
 ) -> None:
@@ -270,7 +301,7 @@ def _render_container(
         "/work",
     ]
     if hasattr(os, "getuid") and hasattr(os, "getgid"):
-        cmd += ["--user", f"{os.getuid()}:{os.getgid()}"]
+        cmd += ["--user", _container_user(docker)]
     cmd += [ref, "sh", "-c", CONTAINER_CMD, "sh", abc_path.name]
     _run(cmd, "docker run")
 
@@ -313,7 +344,7 @@ def _render_svg_container(
         "/work",
     ]
     if hasattr(os, "getuid") and hasattr(os, "getgid"):
-        cmd += ["--user", f"{os.getuid()}:{os.getgid()}"]
+        cmd += ["--user", _container_user(docker)]
     cmd += [ref, "sh", "-c", CONTAINER_CMD_SVG, "sh", svg_path.name, out_name]
     _run(cmd, "docker run")
 
