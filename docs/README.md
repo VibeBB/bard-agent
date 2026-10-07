@@ -28,6 +28,7 @@
 | [`research/sdk-v1.50.1-feature-evaluation.md`](research/sdk-v1.50.1-feature-evaluation.md) | OpenHands SDK v1.50.1 adoption decisions |
 | [`research/sdk-v1.51.0-feature-evaluation.md`](research/sdk-v1.51.0-feature-evaluation.md) | OpenHands SDK v1.51.0 and uv 0.12.22 adoption review |
 | [`research/sdk-v1.52.0-feature-evaluation.md`](research/sdk-v1.52.0-feature-evaluation.md) | OpenHands SDK v1.52.0 adoption review |
+| [`research/sdk-v1.53.0-feature-evaluation.md`](research/sdk-v1.53.0-feature-evaluation.md) | OpenHands SDK v1.53.0 adoption review |
 | [`../docker/README.md`](../docker/README.md) | `bard-tools` score-render image |
 
 ## Accepted ADR list

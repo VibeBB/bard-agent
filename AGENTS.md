@@ -1,6 +1,6 @@
 # Agent Work Contract
 
-> Target: OpenHands Software Agent SDK v1.52.0, Python 3.12+
+> Target: OpenHands Software Agent SDK v1.53.0, Python 3.12+
 
 This document is the working contract for implementation, validation, and
 documentation in this repository. The README is the product overview,
@@ -151,7 +151,7 @@ input and confirm that the broken proposal is rejected.
   `pin-script-guard` (runs `test_publish_image_pin_pr.py` on PRs that
   touch the pin-PR script, its tests, or the publish workflow), and
   `plugin-load` (checks
-  `Plugin.load` with `openhands-sdk==1.52.0` from the `sdk-check` group).
+  `Plugin.load` with `openhands-sdk==1.53.0` from the `sdk-check` group).
 - `.github/workflows/release.yml` is `workflow_dispatch` only. A `bump` input
   (defaulting to patch) or an explicit `version` input controls the release.
   A `dry_run` input rehearses the release: version arithmetic and tag checks
