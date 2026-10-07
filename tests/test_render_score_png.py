@@ -750,3 +750,50 @@ def test_abcm2ps_svg_rasterize_real_render(tmp_path: Path) -> None:
     png = tmp_path / "song.contour.png"
     assert payload["ok"] is True
     assert png.is_file() and png.read_bytes()[:4] == b"\x89PNG"
+
+
+def test_container_user_rootless(
+    score_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rootless daemons get 0:0; rootful/unreachable keep the host uid."""
+    users: list[str] = []
+
+    def run_rootless(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if cmd[1:4] == ["info", "-f", "{{json .SecurityOptions}}"]:
+            out = '["name=seccomp,profile=builtin","name=rootless","name=cgroupns"]'
+            return subprocess.CompletedProcess(cmd, 0, out, "")
+        return _fake_docker_run_ok(cmd, **kwargs)
+
+    def run_plain(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        return _fake_docker_run_ok(cmd, **kwargs)
+
+    abc = tmp_path / "song.abc"
+    abc.write_text("X:1\nT:t\nK:C\n", encoding="utf-8")
+    monkeypatch.setattr(score_module, "PIN_PATH", _pin_file(tmp_path))
+    monkeypatch.delenv("BARD_TOOLS_IMAGE", raising=False)
+    monkeypatch.setattr(score_module.shutil, "which", _which_docker_only)
+
+    def capture_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        proc = run_rootless(cmd, **kwargs)
+        if cmd[1] == "run":
+            users.append(cmd[cmd.index("--user") + 1])
+        return proc
+
+    monkeypatch.setattr(score_module.subprocess, "run", capture_run)
+    score_module.render_score_png(abc, tmp_path)
+    assert users == ["0:0"]
+
+    users.clear()
+    monkeypatch.setattr(score_module.subprocess, "run", capture_run)
+
+    def capture_plain(
+        cmd: list[str], **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        proc = run_plain(cmd, **kwargs)
+        if cmd[1] == "run":
+            users.append(cmd[cmd.index("--user") + 1])
+        return proc
+
+    monkeypatch.setattr(score_module.subprocess, "run", capture_plain)
+    score_module.render_score_png(abc, tmp_path)
+    assert users == [f"{os.getuid()}:{os.getgid()}"]
