@@ -18,8 +18,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # is down for minutes (archive.ubuntu.com outage killed several builds).
 # Retry the whole update+install round with bounded backoff.
 RUN for attempt in 1 2 3 4 5; do \
-        apt-get -o Acquire::Retries=5 update \
-        && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update \
+        && apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends \
             abcm2ps \
             abcmidi \
             fontconfig \
@@ -46,8 +46,8 @@ RUN for attempt in 1 2 3 4 5; do \
 # openssl/libssl3t64). Upgrade just those packages inside the build so the
 # publish gate stays green.
 RUN for attempt in 1 2 3 4 5; do \
-        apt-get -o Acquire::Retries=5 update \
-        && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update \
+        && apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends \
             --only-upgrade \
             libpcre2-8-0 \
             libssl3t64 \
