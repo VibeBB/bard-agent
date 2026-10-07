@@ -69,9 +69,11 @@ jobs:
       - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
           version: v0.75.0
-      # The trivy-action scans and the plain-CLI CIS scan below share one
-      # TRIVY_CACHE_DIR; the weekly key lets the run reuse a ~120 MB DB
-      # instead of re-downloading it every Monday.
+      # The scan legs below each run trivy with a private TRIVY_CACHE_DIR
+      # seeded from the weekly-cached copy: concurrent trivy processes in
+      # one cache dir race on db/metadata.json and corrupt it. The weekly
+      # key lets the run reuse a ~120 MB DB instead of re-downloading it
+      # every Monday.
       - id: trivy-db-week
         run: echo "key=trivy-db-$(date +%G-W%V)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -84,15 +86,27 @@ jobs:
         # Populate the shared cache dir serially so the scan legs below
         # only ever read the DB (concurrent DB downloads in one cache dir
         # are not safe).
-        run: trivy image --download-db-only
-      # The four scans read the same pinned image and the now-warm shared
+        run: |
+          trivy image --download-db-only
+          # The java-db mirror blob is ~934 MB; if the image ships jars,
+          # every leg would otherwise fetch it into its private cache dir at
+          # once (the disk-quota kill on the dashboard audit). Warm it once
+          # into the shared seed so the per-leg copies carry it.
+          trivy image --download-java-db-only
+          # Give every leg a private copy of the warm seed; the legs only
+          # ever write to their own dir.
+          for leg in sarif json cis; do
+            mkdir -p "$RUNNER_TEMP/trivy-cache-$leg"
+            cp -a "$TRIVY_CACHE_DIR/." "$RUNNER_TEMP/trivy-cache-$leg/"
+          done
+      # The four scans read the same pinned image and the now-warm
       # vulnerability DB, and each writes a disjoint report path, so they
       # run as one parallel group (implicit wait at the end).
       - parallel:
           - name: Scan pinned image (Trivy SARIF)
             uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
             env:
-              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
+              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache-sarif
             with:
               scan-type: image
               # The digest is frozen; the vulnerability DB is not — this scan
@@ -110,7 +124,7 @@ jobs:
           - name: Scan pinned image (Trivy JSON, full)
             uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
             env:
-              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
+              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache-json
             with:
               scan-type: image
               scan-ref: ${{ env.PINNED_IMAGE }}
@@ -122,7 +136,7 @@ jobs:
               skip-setup-trivy: true
           - name: Run Docker CIS compliance report
             env:
-              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
+              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache-cis
             run: |
               set -euo pipefail
               # Returns 0 when the report carries at least one CIS check result
@@ -145,7 +159,7 @@ jobs:
               sys.exit(0 if total else 1)
               PY
               }
-              for attempt in 1 2; do
+              for attempt in 1 2 3; do
                 trivy image --compliance docker-cis-1.6.0 --include-non-failures --report all \
                   --ignorefile /dev/null --format json \
                   --output "$RUNNER_TEMP/trivy-cis.json" "${PINNED_IMAGE}"
