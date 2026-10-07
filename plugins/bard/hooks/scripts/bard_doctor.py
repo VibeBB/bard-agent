@@ -3,7 +3,8 @@
 
 Resolves the plugin root through the same env-var chain the hooks use
 (`BARD_PLUGIN_ROOT`, `$OPENHANDS_PROJECT_DIR/plugins/bard`,
-`~/.agents/plugins/bard`, `~/.openhands/plugins/installed/bard`), probes for
+`~/.agents/plugins/bard`, `~/.openhands/plugins/installed/bard`,
+`~/plugins/installed/bard`, `$OH_PERSISTENCE_DIR/plugins/installed/bard`), probes for
 `docker` on `PATH` (the pinned `bard-tools` image renders `score.png`), reads
 the image pin (`skills/bard-render/tools-image.json`), and checks the plugin
 layout (`.plugin/plugin.json`, `agents/`, `skills/`). Findings are reported
@@ -41,6 +42,14 @@ def _candidate_roots() -> list[Path]:
     home = Path.home()
     candidates.append(home / ".agents" / "plugins" / "bard")
     candidates.append(home / ".openhands" / "plugins" / "installed" / "bard")
+    # OpenHands docker conversation runtime: inner
+    # HOME=/var/openhands/.openhands holds the installed plugins.
+    candidates.append(home / "plugins" / "installed" / "bard")
+    persistence = os.environ.get("OH_PERSISTENCE_DIR")
+    if persistence:
+        candidates.append(
+            Path(persistence).expanduser() / "plugins" / "installed" / "bard"
+        )
     return candidates
 
 

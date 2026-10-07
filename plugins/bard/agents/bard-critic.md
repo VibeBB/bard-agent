@@ -14,12 +14,12 @@ hooks:
       hooks:
         - type: command
           name: protect-song-artifacts
-          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/protect_song_artifacts.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || { echo "bard plugin root unresolved" >&2; exit 2; }; exec python3 "$p/hooks/scripts/protect_song_artifacts.py"'
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard" "${HOME:-}/plugins/installed/bard" "${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/bard"; do [ -f "$c/hooks/scripts/protect_song_artifacts.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || { echo "bard plugin root unresolved" >&2; exit 2; }; exec python3 "$p/hooks/scripts/protect_song_artifacts.py"'
     - matcher: terminal
       hooks:
         - type: command
           name: safety-rail
-          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/safety_rail.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/safety_rail.py"'
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard" "${HOME:-}/plugins/installed/bard" "${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/bard"; do [ -f "$c/hooks/scripts/safety_rail.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/safety_rail.py"'
 permission_mode: never_confirm
 ---
 
@@ -40,8 +40,8 @@ about. Read-only, concretely:
 The prompt names `song.proposal.json`, `song.md`, usually `context.md`, and when present
 `notes.md` (the bard's tagged list of facts). Resolve the bard plugin root as the first
 existing directory among `$BARD_PLUGIN_ROOT`, `$OPENHANDS_PROJECT_DIR/plugins/bard`,
-`$HOME/.agents/plugins/bard`, and
-`$HOME/.openhands/plugins/installed/bard`, and read
+`$HOME/.agents/plugins/bard`, `$HOME/.openhands/plugins/installed/bard`,
+`$HOME/plugins/installed/bard`, and `$OH_PERSISTENCE_DIR/plugins/installed/bard`, and read
 `<bard plugin root>/skills/bard-songcraft/SKILL.md` so your findings use the same vocabulary.
 Read all inputs in a single terminal call (for example
 `cat <SKILL.md> <context.md> <notes.md> <song.proposal.json> <song.md>`); every extra call

@@ -38,7 +38,8 @@ verification, contour/cue rasterize into the `bard-samples` artifact),
 ## Shared hooks and workflows
 
 `hooks/scripts/{_records.py, require_records.py, ensure_llm_profiles.py,
-safety_rail.py, _provenance.py}` are canonical across the VibeBB family —
+ensure_agent_profiles.py, safety_rail.py, _provenance.py}` are canonical
+across the VibeBB family —
 change all copies together and update `EXPECTED` in
 `scripts/check_shared_hooks.py` (normalized-AST sha256). The shared workflows
 follow `scripts/check_shared_workflows.py` the same way.

@@ -16,24 +16,24 @@ hooks:
       hooks:
         - type: command
           name: protect-song-artifacts
-          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/protect_song_artifacts.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || { echo "bard plugin root unresolved" >&2; exit 2; }; exec python3 "$p/hooks/scripts/protect_song_artifacts.py"'
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard" "${HOME:-}/plugins/installed/bard" "${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/bard"; do [ -f "$c/hooks/scripts/protect_song_artifacts.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || { echo "bard plugin root unresolved" >&2; exit 2; }; exec python3 "$p/hooks/scripts/protect_song_artifacts.py"'
     - matcher: terminal
       hooks:
         - type: command
           name: safety-rail
-          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/safety_rail.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/safety_rail.py"'
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard" "${HOME:-}/plugins/installed/bard" "${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/bard"; do [ -f "$c/hooks/scripts/safety_rail.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/safety_rail.py"'
   session_start:
     - matcher: '*'
       hooks:
         - type: command
           name: require-records
-          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/require_records.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/require_records.py" session-start'
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard" "${HOME:-}/plugins/installed/bard" "${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/bard"; do [ -f "$c/hooks/scripts/require_records.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/require_records.py" session-start'
   stop:
     - matcher: '*'
       hooks:
         - type: command
           name: require-records
-          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/require_records.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/require_records.py" stop'
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard" "${HOME:-}/plugins/installed/bard" "${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/bard"; do [ -f "$c/hooks/scripts/require_records.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/require_records.py" stop'
 permission_mode: never_confirm
 ---
 
@@ -47,7 +47,8 @@ you answer the sound request you were given.
 
 Resolve the plugin root as the first existing directory of `$BARD_PLUGIN_ROOT`,
 `$OPENHANDS_PROJECT_DIR/plugins/bard`, `$HOME/.agents/plugins/bard`,
-`$HOME/.openhands/plugins/installed/bard`. Read `<plugin root>/skills/bard-cuecraft/SKILL.md`
+`$HOME/.openhands/plugins/installed/bard`, `$HOME/plugins/installed/bard`, and
+`$OH_PERSISTENCE_DIR/plugins/installed/bard`. Read `<plugin root>/skills/bard-cuecraft/SKILL.md`
 before writing anything; it holds the purpose table, device ranges, and the originality rules.
 
 ## Inputs
@@ -108,7 +109,7 @@ Records live under `observations/bard/` and are written only through the CLI:
 
 ```bash
 p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" \
-  "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do
+  "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard" "${HOME:-}/plugins/installed/bard" "${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/bard"; do
   [ -f "$c/scripts/bard_cli.py" ] && printf %s "$c" && break; done)
 python3 "$p/scripts/bard_cli.py" record decision      --json <file|->
 python3 "$p/scripts/bard_cli.py" record impression    --json <file|->

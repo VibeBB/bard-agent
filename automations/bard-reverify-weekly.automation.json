@@ -1,0 +1,18 @@
+{
+  "name": "bard-reverify-weekly",
+  "plugins": [
+    {
+      "source": "github:VibeBB/bard-agent",
+      "ref": "main",
+      "repo_path": "plugins/bard"
+    }
+  ],
+  "prompt": "Re-run the bard determinism and validity checks for the workspace's checked-in song artifacts. Render the shipped example proposal `plugins/bard/skills/bard-render/examples/minimal.en.json` twice with `python3 $BARD_PLUGIN_ROOT/skills/bard-render/scripts/render_song.py --proposal <path> --out-dir <dir>` and confirm `song.abc`, `song.mid`, `song.mml`, `song.md`, and `song.provenance.json` are byte-identical between the two runs. Then re-validate each `songs/*/song.proposal.json` in the workspace (`render_song.py --proposal <path> --out-dir <scratch> --check`) and each `cues/*/cues.proposal.json` (`render_cues.py --cues <path> --out-dir <scratch> --check`), comparing the verdicts to the recorded artifacts, and write a short result to records/. If any re-render diverges or a validation regressed from pass to fail, say so explicitly in the run summary.",
+  "trigger": {
+    "type": "cron",
+    "schedule": "0 3 * * 1",
+    "timezone": "UTC"
+  },
+  "repos": [],
+  "enabled": true
+}

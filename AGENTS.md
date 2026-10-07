@@ -37,10 +37,8 @@ plugins/bard/
 │   ├── bard-cuecraft/        # Product sound cue purposes, device ranges, originality rules
 │   ├── bard-render/          # Proposal JSON validation and ABC/MIDI/MML/lyrics/provenance rendering,
 │   │                         # plus cue-set rendering (render_cues.py) (stdlib only)
-│   └── bard-proposal-rules/  # Path-triggered rule on *.proposal.json (contract + originality reminders)
-│       ├── SKILL.md
-│       ├── scripts/
-│       └── tests/
+│   ├── bard-proposal-rules/  # Path-triggered rule on *.proposal.json (contract + originality reminders)
+│   └── bard-out-rules/       # Path-triggered rule on out/, songs/, cues/ (read-only generated artifacts)
 docs/                         # Index (README.md), architecture/workflow/agents/skills/
                               # commands/mcp/hooks/contracts/records-and-vision/
                               # sister-cooperation/performance-and-limits/development/
@@ -107,7 +105,9 @@ tests/                        # Plugin-asset consistency checks
   `$BARD_PLUGIN_ROOT`,
   `$OPENHANDS_PROJECT_DIR/plugins/bard`,
   `$HOME/.agents/plugins/bard`,
-  `$HOME/.openhands/plugins/installed/bard`.
+  `$HOME/.openhands/plugins/installed/bard`,
+  `$HOME/plugins/installed/bard`,
+  `$OH_PERSISTENCE_DIR/plugins/installed/bard`.
 - Shared hooks are canonical across the family; change all 9 copies together
   and update `EXPECTED` in `scripts/check_shared_hooks.py`.
   `intake_attachments.py` and `record_*` hooks are intentionally repo-specific.

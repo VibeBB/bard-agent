@@ -2,8 +2,13 @@
 
 `plugins/bard/hooks/hooks.json` plus per-agent `hooks:` frontmatter
 (`agents/bard.md`, `bard-cue.md`; the critic gets no records hooks). Every
-command resolves the plugin root with the 4-root chain (see
-[architecture.md](architecture.md)); an unresolved root means advisory hooks
+command resolves the plugin root with the 6-candidate chain (see
+[architecture.md](architecture.md)); the two extra candidates
+(`~/plugins/installed/bard`, `$OH_PERSISTENCE_DIR/plugins/installed/bard`)
+cover the OpenHands docker conversation runtime, whose inner
+`HOME=/var/openhands/.openhands` — `render_score_png.py` then fails closed
+with guidance, since docker is unavailable there by design. An unresolved
+root means advisory hooks
 exit 0, while `protect-song-artifacts` exits 2.
 
 ## session_start
@@ -11,7 +16,8 @@ exit 0, while `protect-song-artifacts` exits 2.
 | Hook | Script | Behavior |
 | --- | --- | --- |
 | `bard-doctor` | `bard_doctor.py` | Advisory probe (root, layout, docker, pin, liaison inbox counts) → `additionalContext`; exit 0 |
-| `ensure-llm-profiles` | `ensure_llm_profiles.py` | Canonical shared hook; clones the active LLM profile into `vibebb-*` slots so the vision tool has a profile; exit 0 |
+| `ensure-llm-profiles` | `ensure_llm_profiles.py` | Canonical shared hook; clones the active LLM profile into `vibebb-author`/`vibebb-review`/`oracle` slots so the vision tool has a profile; exit 0 |
+| `ensure-agent-profiles` | `ensure_agent_profiles.py` | Canonical shared hook; writes `~/.openhands/agent-profiles/vibebb-bard.json` when missing — openhands-kind, `llm_profile_ref=vibebb-author`, MCP scoped to `bard`, no secrets; exit 0 |
 | `require-records` | `require_records.py session-start` | Writes the per-session marker `observations/bard/.sessions/<id>.json`; exit 0 |
 
 ## pre_tool_use
