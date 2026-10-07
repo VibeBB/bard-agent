@@ -14,14 +14,23 @@ ENV DEBIAN_FRONTEND=noninteractive
 # of silently passing the right side.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN apt-get -o Acquire::Retries=5 update \
-    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
-        abcm2ps \
-        abcmidi \
-        fontconfig \
-        fonts-ipafont \
-        librsvg2-bin \
-    && rm -rf /var/lib/apt/lists/* \
+# apt resilience: Acquire::Retries covers single fetches, not a mirror that
+# is down for minutes (archive.ubuntu.com outage killed several builds).
+# Retry the whole update+install round with bounded backoff.
+RUN for attempt in 1 2 3 4 5; do \
+        apt-get -o Acquire::Retries=5 update \
+        && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+            abcm2ps \
+            abcmidi \
+            fontconfig \
+            fonts-ipafont \
+            librsvg2-bin \
+        && rm -rf /var/lib/apt/lists/* \
+        && break; \
+        [ "$attempt" = 5 ] && exit 1; \
+        echo "::warning::apt update+install attempt ${attempt} failed; retrying"; \
+        sleep $((attempt * 30)); \
+    done \
     && abcm2ps -V 2>&1 | grep -E "abcm2ps-[0-9]" \
     && abc2midi -ver 2>&1 | grep -E "abc2midi" \
     && rsvg-convert --version | grep -E "rsvg-convert version" \
@@ -36,13 +45,19 @@ RUN apt-get -o Acquire::Retries=5 update \
 # publish (CVE-2026-103111 libpcre2-8-0; CVE-2026-75804 and CVE-2026-84782
 # openssl/libssl3t64). Upgrade just those packages inside the build so the
 # publish gate stays green.
-RUN apt-get -o Acquire::Retries=5 update \
-    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
-        --only-upgrade \
-        libpcre2-8-0 \
-        libssl3t64 \
-        openssl-provider-legacy \
-    && rm -rf /var/lib/apt/lists/*
+RUN for attempt in 1 2 3 4 5; do \
+        apt-get -o Acquire::Retries=5 update \
+        && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+            --only-upgrade \
+            libpcre2-8-0 \
+            libssl3t64 \
+            openssl-provider-legacy \
+        && rm -rf /var/lib/apt/lists/* \
+        && break; \
+        [ "$attempt" = 5 ] && exit 1; \
+        echo "::warning::apt update+install attempt ${attempt} failed; retrying"; \
+        sleep $((attempt * 30)); \
+    done
 
 # Tighten the login.defs umask to 027 (Lynis AUTH-9328): the image has no
 # interactive users, so files created at runtime stay group-readable only.
