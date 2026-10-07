@@ -95,45 +95,32 @@ jobs:
           trivy image --download-java-db-only
           # Give every leg a private copy of the warm seed; the legs only
           # ever write to their own dir.
-          for leg in sarif json cis; do
+          for leg in scan cis; do
             mkdir -p "$RUNNER_TEMP/trivy-cache-$leg"
             cp -a "$TRIVY_CACHE_DIR/." "$RUNNER_TEMP/trivy-cache-$leg/"
           done
-      # The four scans read the same pinned image and the now-warm
-      # vulnerability DB, and each writes a disjoint report path, so they
-      # run as one parallel group (implicit wait at the end).
+      # Each leg reads the same pinned image and the now-warm vulnerability
+      # DB, and each writes a disjoint report path, so they run as one
+      # parallel group (implicit wait at the end).
       - parallel:
-          - name: Scan pinned image (Trivy SARIF)
-            uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+          - name: Scan pinned image (Trivy JSON + SARIF)
             env:
-              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache-sarif
-            with:
-              scan-type: image
-              # The digest is frozen; the vulnerability DB is not — this scan
-              # surfaces newly disclosed CVEs against the shipped tools image.
-              scan-ref: ${{ env.PINNED_IMAGE }}
-              version: v0.75.0
-              scanners: vuln,secret,misconfig
-              severity: CRITICAL,HIGH
-              ignore-unfixed: true
-              exit-code: '0'
-              format: sarif
-              output: trivy-image.sarif
-              limit-severities-for-sarif: true
-              skip-setup-trivy: true
-          - name: Scan pinned image (Trivy JSON, full)
-            uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-            env:
-              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache-json
-            with:
-              scan-type: image
-              scan-ref: ${{ env.PINNED_IMAGE }}
-              version: v0.75.0
-              scanners: vuln,secret,misconfig,license
-              exit-code: '0'
-              format: json
-              output: trivy-image.json
-              skip-setup-trivy: true
+              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache-scan
+            # The digest is frozen; the vulnerability DB is not — this scan
+            # surfaces newly disclosed CVEs against the shipped tools image.
+            # One scan feeds both artifacts: the SARIF for code scanning is
+            # derived from the same JSON (trivy convert has no
+            # --ignore-unfixed, so unfixed vulnerabilities are dropped
+            # first and --severity applies the HIGH/CRITICAL limit).
+            run: |
+              set -euo pipefail
+              trivy image --scanners vuln,secret,misconfig,license \
+                --format json --output trivy-image.json "$PINNED_IMAGE"
+              jq '.Results = ((.Results // []) | map(if .Vulnerabilities then
+                    .Vulnerabilities |= map(select((.FixedVersion // "") != "")) else . end))' \
+                trivy-image.json > "$RUNNER_TEMP/trivy-sarif.json"
+              trivy convert --format sarif --severity HIGH,CRITICAL \
+                --output trivy-image.sarif "$RUNNER_TEMP/trivy-sarif.json"
           - name: Run Docker CIS compliance report
             env:
               TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache-cis
