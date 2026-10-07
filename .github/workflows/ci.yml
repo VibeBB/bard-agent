@@ -31,6 +31,8 @@ jobs:
   changes:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
+    # No actions/cache usage: forbid restore and save entirely.
+    cache-mode: none
     outputs:
       code: ${{ steps.scope.outputs.code }}
       pinscript: ${{ steps.scope.outputs.pinscript }}
@@ -105,32 +107,48 @@ jobs:
         # tests/test_plugin_assets.py::test_sdk_plugin_load exercises the
         # real plugin load instead of skipping on importorskip.
         run: uv sync --locked --group sdk-check
+      # The check legs are independent `uv run` invocations once the venv
+      # exists: run them as background steps so they overlap, and join them
+      # before the canary report that reads each steps.<id>.outcome. They
+      # keep top-level `id:`s (not a `parallel:` group) so the outcome
+      # references below stay visible to actionlint's expression checker.
       - name: Ruff
         id: ruff
         continue-on-error: ${{ matrix.experimental || false }}
+        background: true
         run: |
           uv run ruff check .
           uv run ruff format --check .
       - name: Pyright
         id: pyright
         continue-on-error: ${{ matrix.experimental || false }}
+        background: true
         run: uv run pyright
       - name: Check shared hooks
         id: check-shared-hooks
         continue-on-error: ${{ matrix.experimental || false }}
+        background: true
         run: uv run python scripts/check_shared_hooks.py
       - name: Check shared workflows
         id: check-shared-workflows
         continue-on-error: ${{ matrix.experimental || false }}
+        background: true
         run: uv run python scripts/check_shared_workflows.py
       - name: Pytest
         id: pytest
         continue-on-error: ${{ matrix.experimental || false }}
+        background: true
         run: uv run python scripts/structural_coverage.py run --json out/structural-coverage.json
       - name: Verify docs
         id: verify-docs
         continue-on-error: ${{ matrix.experimental || false }}
+        background: true
         run: uv run python scripts/verify_docs.py
+      # A leg's failure surfaces here (and fails non-canary legs); the
+      # canary legs' continue-on-error keeps the join green so the report
+      # step still annotates the outcome.
+      - name: Wait for check legs
+        wait-all:
 
       - name: Report 3.15 canary outcome
         if: matrix.experimental && (steps.setup-uv.outcome == 'failure' || steps.sync-dependencies.outcome == 'failure' || steps.ruff.outcome == 'failure' || steps.pyright.outcome == 'failure' || steps.check-shared-hooks.outcome == 'failure' || steps.check-shared-workflows.outcome == 'failure' || steps.pytest.outcome == 'failure' || steps.verify-docs.outcome == 'failure')
@@ -139,6 +157,8 @@ jobs:
   dockerfile-lint:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
+    # No actions/cache usage: forbid restore and save entirely.
+    cache-mode: none
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
@@ -148,7 +168,11 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+      # Hadolint is read-only on docker/**: overlap it with the BuildKit
+      # setup + --check and join it before the job ends.
       - name: Lint Dockerfiles with hadolint
+        id: hadolint
+        background: true
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           dockerfile: docker/bard-tools.Dockerfile
@@ -156,6 +180,8 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Run BuildKit checks
         run: docker build --check -f docker/bard-tools.Dockerfile .
+      - name: Wait for hadolint
+        wait: hadolint
 
   # prodeng-style guard: the pin-PR script drives branch protection and
   # auto-merge during real publishes, so its stub tests run on PRs that
@@ -205,7 +231,12 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+      # The pinned-image pull only needs the checked-out lock file: run it
+      # as a background step so it overlaps setup-uv and the venv sync, and
+      # join it before the first step that runs the image.
       - name: Pull pinned bard-tools image
+        id: pull-image
+        background: true
         run: |
           ref=$(python3 -c \
             "import json; d = json.load(open('plugins/bard/skills/bard-render/tools-image.json', encoding='utf-8')); print(d['image'] + '@' + d['digest'])")
@@ -216,6 +247,8 @@ jobs:
           cache-suffix: independent-check
       - name: Sync dependencies
         run: uv sync --locked
+      - name: Wait for pinned image pull
+        wait: pull-image
       - name: Verify pin attestation and prewarm image
         run: |
           set -euo pipefail
@@ -227,38 +260,43 @@ jobs:
             echo "::warning::attestation prewarm failed (attempt $attempt)"
             sleep 30
           done
-      - name: abcm2ps tests (inside pinned image)
-        env:
-          BARD_REQUIRE_DOCKER: "1"
-        run: uv run pytest -q -k abcm2ps -p no:cacheprovider -rs
-      - name: Render sample scores
-        run: |
-          for lang in en ja; do
-            uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
-              --proposal "tests/fixtures/valid_${lang}.json" \
-              --out-dir "out/ci/${lang}"
-            uv run python plugins/bard/skills/bard-render/scripts/render_score_png.py \
-              --abc "out/ci/${lang}/song.abc" --out-dir "out/ci/${lang}" --json
-            uv run python plugins/bard/skills/bard-render/scripts/render_score_png.py \
-              --svg "out/ci/${lang}/song.contour.svg" --out-dir "out/ci/${lang}" --json
-          done
-          mkdir -p out/ci/cues
-          uv run python plugins/bard/skills/bard-render/scripts/render_cues.py \
-            --cues "plugins/bard/skills/bard-render/examples/smart-kettle.cues.json" \
-            --out-dir out/ci/cues
-          uv run python plugins/bard/skills/bard-render/scripts/render_score_png.py \
-            --svg "out/ci/cues/cues.timeline.svg" --out-dir out/ci/cues --json
-      - name: Render shipped examples
-        run: |
-          for lang in en ja; do
-            uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
-              --proposal "plugins/bard/skills/bard-render/examples/minimal.${lang}.json" \
-              --out-dir "$(mktemp -d)/${lang}"
-            uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
-              --check \
-              --proposal "plugins/bard/skills/bard-render/examples/minimal.${lang}.json" \
-              --out-dir /tmp/unused
-          done
+      # The abcm2ps check and the two render checks are independent and
+      # write disjoint output paths (out/ci/* vs fresh mktemp dirs), so
+      # they run as a parallel group; the implicit wait still lands all of
+      # them before the artifact upload below.
+      - parallel:
+          - name: abcm2ps tests (inside pinned image)
+            env:
+              BARD_REQUIRE_DOCKER: "1"
+            run: uv run pytest -q -k abcm2ps -p no:cacheprovider -rs
+          - name: Render sample scores
+            run: |
+              for lang in en ja; do
+                uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
+                  --proposal "tests/fixtures/valid_${lang}.json" \
+                  --out-dir "out/ci/${lang}"
+                uv run python plugins/bard/skills/bard-render/scripts/render_score_png.py \
+                  --abc "out/ci/${lang}/song.abc" --out-dir "out/ci/${lang}" --json
+                uv run python plugins/bard/skills/bard-render/scripts/render_score_png.py \
+                  --svg "out/ci/${lang}/song.contour.svg" --out-dir "out/ci/${lang}" --json
+              done
+              mkdir -p out/ci/cues
+              uv run python plugins/bard/skills/bard-render/scripts/render_cues.py \
+                --cues "plugins/bard/skills/bard-render/examples/smart-kettle.cues.json" \
+                --out-dir out/ci/cues
+              uv run python plugins/bard/skills/bard-render/scripts/render_score_png.py \
+                --svg "out/ci/cues/cues.timeline.svg" --out-dir out/ci/cues --json
+          - name: Render shipped examples
+            run: |
+              for lang in en ja; do
+                uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
+                  --proposal "plugins/bard/skills/bard-render/examples/minimal.${lang}.json" \
+                  --out-dir "$(mktemp -d)/${lang}"
+                uv run python plugins/bard/skills/bard-render/scripts/render_song.py \
+                  --check \
+                  --proposal "plugins/bard/skills/bard-render/examples/minimal.${lang}.json" \
+                  --out-dir /tmp/unused
+              done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bard-samples

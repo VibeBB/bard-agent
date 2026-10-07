@@ -82,9 +82,113 @@ jobs:
             ghcr.io/${{ env.OWNER_LC }}/bard-tools:${{ env.SOURCE_SHA }}-tools
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Resolve published digest
+        env:
+          BUILT_DIGEST: ${{ steps.tools_publish.outputs.digest }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = "true" ]; then
+            # Nothing was pushed: reference the image by its local tag.
+            {
+              printf 'TOOLS_REF=ghcr.io/%s/bard-tools:%s-tools\n' "$OWNER_LC" "$SOURCE_SHA"
+              printf 'TOOLS_TAG=%s-tools\n' "$SOURCE_SHA"
+            } >> "$GITHUB_ENV"
+            exit 0
+          fi
+          case "$BUILT_DIGEST" in
+            sha256:*) ;;
+            *)
+              echo "unresolved bard-tools digest: $BUILT_DIGEST" >&2
+              exit 1
+              ;;
+          esac
+          {
+            printf 'TOOLS_REF=ghcr.io/%s/bard-tools@%s\n' "$OWNER_LC" "$BUILT_DIGEST"
+            printf 'TOOLS_DIGEST=%s\n' "$BUILT_DIGEST"
+            printf 'TOOLS_TAG=%s-tools\n' "$SOURCE_SHA"
+          } >> "$GITHUB_ENV"
+      # Attestation only needs the pushed digest: run it as a background
+      # step overlapping every post-build leg and join it before the
+      # :latest promotion that must not outrun a failed attest.
+      - name: Attest tools image provenance
+        if: inputs.dry_run != true
+        id: attest
+        background: true
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/vibebb/bard-tools
+          subject-digest: ${{ steps.tools_publish.outputs.digest }}
+          push-to-registry: true
+      # Independent post-build legs run as a parallel group; the implicit
+      # wait at the group end still lands the full JSON scan before the
+      # SARIF gate, so the diagnostic report exists even when the gate
+      # fails — exactly when it is needed.
+      - parallel:
+          - name: Scan tools image (Trivy JSON)
+            if: always() && steps.tools_publish.outcome == 'success'
+            uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+            env:
+              # Shared cache so both Trivy scans in this run reuse one DB
+              # download; the SARIF gate runs after this group, so the DB
+              # is never fetched concurrently.
+              TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
+            with:
+              scan-type: image
+              # Scan the immutable sha tag — the same manifest the pushed
+              # digest addresses on a real run, and the local image under
+              # dry_run.
+              scan-ref: ghcr.io/${{ env.OWNER_LC }}/bard-tools:${{ env.SOURCE_SHA }}-tools
+              version: v0.75.0
+              scanners: vuln,secret,misconfig,license
+              ignore-unfixed: false
+              exit-code: '0'
+              format: json
+              output: trivy-image.json
+          - name: Generate tools SPDX SBOM
+            uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+            env:
+              # dry_run pulls the just-built image from the local daemon.
+              SYFT_SOURCE_IMAGE_DEFAULT_PULL_SOURCE: ${{ inputs.dry_run == true && 'docker' || 'registry' }}
+              TMPDIR: ${{ runner.temp }}
+              SYFT_FILE_METADATA_SELECTION: none
+            with:
+              image: ${{ env.TOOLS_REF }}
+              format: spdx-json
+              output-file: ${{ runner.temp }}/bard-tools.full.spdx.json
+              upload-artifact: false
+              upload-release-assets: false
+          - name: Measure published tools image
+            env:
+              TOOLS_REF: ${{ env.TOOLS_REF }}
+            run: |
+              set -euo pipefail
+              python3 scripts/measure_image_tools.py \
+                --image-ref "$TOOLS_REF" \
+                --out "$RUNNER_TEMP/bard-tools-tools.json"
+          # The render toolchain smoke mirrors the Dockerfile build-time check:
+          # run the published image so a push that produced a broken artifact
+          # fails here instead of surfacing at render time.
+          - name: Verify published tools smoke
+            env:
+              TOOLS_REF: ${{ env.TOOLS_REF }}
+              DRY_RUN: ${{ inputs.dry_run }}
+            run: |
+              set -euo pipefail
+              # dry_run already holds the image in the local daemon.
+              if [ "$DRY_RUN" != "true" ]; then
+                docker pull "$TOOLS_REF"
+              fi
+              docker run --rm "$TOOLS_REF" sh -c \
+                "printf 'X:1\nT:smoke\nM:4/4\nL:1/8\nK:C\nC D E F |]\n' > /tmp/smoke.abc \
+                && abcm2ps -g /tmp/smoke.abc -O /tmp/smoke.svg \
+                && rsvg-convert /tmp/smoke001.svg -o /tmp/smoke.png \
+                && test -s /tmp/smoke.png"
       - name: Scan tools image (Trivy SARIF)
         id: trivy-scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
         with:
           scan-type: image
           # Scan the immutable sha tag — the same manifest the pushed
@@ -99,20 +203,6 @@ jobs:
           format: sarif
           output: trivy-image.sarif
           limit-severities-for-sarif: true
-      - name: Scan tools image (Trivy JSON)
-        # Runs even when the SARIF gate above found fixable CVEs, so the
-        # full report is still emitted on a gate failure.
-        if: always() && steps.tools_publish.outcome == 'success'
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: image
-          scan-ref: ghcr.io/${{ env.OWNER_LC }}/bard-tools:${{ env.SOURCE_SHA }}-tools
-          version: v0.75.0
-          scanners: vuln,secret,misconfig,license
-          ignore-unfixed: false
-          exit-code: '0'
-          format: json
-          output: trivy-image.json
           skip-setup-trivy: true
       - name: Upload Trivy SARIF
         # A rehearsal must not file code-scanning alerts.
@@ -160,53 +250,6 @@ jobs:
               for rid, cvss, level, message in rows:
                   print(f"| {rid} | {cvss} | {level} | {message} |")
           PY
-      - name: Attest tools image provenance
-        if: inputs.dry_run != true
-        id: attest
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-name: ghcr.io/vibebb/bard-tools
-          subject-digest: ${{ steps.tools_publish.outputs.digest }}
-          push-to-registry: true
-      - name: Resolve published digest
-        env:
-          BUILT_DIGEST: ${{ steps.tools_publish.outputs.digest }}
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          set -euo pipefail
-          if [ "$DRY_RUN" = "true" ]; then
-            # Nothing was pushed: reference the image by its local tag.
-            {
-              printf 'TOOLS_REF=ghcr.io/%s/bard-tools:%s-tools\n' "$OWNER_LC" "$SOURCE_SHA"
-              printf 'TOOLS_TAG=%s-tools\n' "$SOURCE_SHA"
-            } >> "$GITHUB_ENV"
-            exit 0
-          fi
-          case "$BUILT_DIGEST" in
-            sha256:*) ;;
-            *)
-              echo "unresolved bard-tools digest: $BUILT_DIGEST" >&2
-              exit 1
-              ;;
-          esac
-          {
-            printf 'TOOLS_REF=ghcr.io/%s/bard-tools@%s\n' "$OWNER_LC" "$BUILT_DIGEST"
-            printf 'TOOLS_DIGEST=%s\n' "$BUILT_DIGEST"
-            printf 'TOOLS_TAG=%s-tools\n' "$SOURCE_SHA"
-          } >> "$GITHUB_ENV"
-      - name: Generate tools SPDX SBOM
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
-        env:
-          # dry_run pulls the just-built image from the local daemon.
-          SYFT_SOURCE_IMAGE_DEFAULT_PULL_SOURCE: ${{ inputs.dry_run == true && 'docker' || 'registry' }}
-          TMPDIR: ${{ runner.temp }}
-          SYFT_FILE_METADATA_SELECTION: none
-        with:
-          image: ${{ env.TOOLS_REF }}
-          format: spdx-json
-          output-file: ${{ runner.temp }}/bard-tools.full.spdx.json
-          upload-artifact: false
-          upload-release-assets: false
       - name: Package tools SPDX SBOM
         run: |
           python3 scripts/package_level_sbom.py \
@@ -252,32 +295,10 @@ jobs:
           path: ${{ runner.temp }}/bard-tools.full.spdx.json
           retention-days: 90
           if-no-files-found: error
-      - name: Measure published tools image
-        env:
-          TOOLS_REF: ${{ env.TOOLS_REF }}
-        run: |
-          set -euo pipefail
-          python3 scripts/measure_image_tools.py \
-            --image-ref "$TOOLS_REF" \
-            --out "$RUNNER_TEMP/bard-tools-tools.json"
-      # The render toolchain smoke mirrors the Dockerfile build-time check:
-      # run the published image so a push that produced a broken artifact
-      # fails here instead of surfacing at render time.
-      - name: Verify published tools smoke
-        env:
-          TOOLS_REF: ${{ env.TOOLS_REF }}
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          set -euo pipefail
-          # dry_run already holds the image in the local daemon.
-          if [ "$DRY_RUN" != "true" ]; then
-            docker pull "$TOOLS_REF"
-          fi
-          docker run --rm "$TOOLS_REF" sh -c \
-            "printf 'X:1\nT:smoke\nM:4/4\nL:1/8\nK:C\nC D E F |]\n' > /tmp/smoke.abc \
-            && abcm2ps -g /tmp/smoke.abc -O /tmp/smoke.svg \
-            && rsvg-convert /tmp/smoke001.svg -o /tmp/smoke.png \
-            && test -s /tmp/smoke.png"
+      # Surface a failed provenance attestation before promoting :latest —
+      # the digest-lock update below also reads its attestation-url output.
+      - name: Wait for provenance attestation
+        wait: attest
       - name: Promote :latest
         # Every gate above passed: copy the verified manifest to :latest
         # server-side (attestations and the SBOM keep binding the digest).
