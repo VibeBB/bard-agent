@@ -45,7 +45,7 @@ jobs:
       packages: write # pushes the ghcr.io bard-tools image
       pull-requests: write # opens, auto-merges, and cleans up the lock PR
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
           disable-telemetry: true
@@ -211,7 +211,7 @@ jobs:
           skip-setup-trivy: true
       - name: Upload Trivy JSON report
         if: always() && hashFiles('trivy-image.json') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bard-tools-trivy
           path: trivy-image.json
@@ -287,7 +287,7 @@ jobs:
           sbom-path: ${{ runner.temp }}/bard-tools.spdx.json
           push-to-registry: true
       - name: Upload full tools SPDX SBOM
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bard-tools-spdx-sbom
           path: ${{ runner.temp }}/bard-tools.full.spdx.json
