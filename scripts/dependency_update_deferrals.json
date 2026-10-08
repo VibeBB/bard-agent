@@ -1,3 +1,18 @@
 {
-  "deferrals": []
+  "deferrals": [
+    {
+      "surface": "python-version",
+      "name": "Python version (pyproject.toml)",
+      "latest": "3.14",
+      "review_by": "2027-01-08",
+      "reason": "3.12/3.13 remain the supported floor; 3.14+ is exercised by the canary legs"
+    },
+    {
+      "surface": "python-version",
+      "name": "Python version (ci.yml)",
+      "latest": "3.14",
+      "review_by": "2027-01-08",
+      "reason": "3.12/3.13 remain the supported floor; 3.14+ is exercised by the canary legs"
+    }
+  ]
 }
