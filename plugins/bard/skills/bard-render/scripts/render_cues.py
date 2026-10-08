@@ -971,6 +971,7 @@ def render_provenance(
         },
         "sources": cue_set.sources,
         "script_sha256": script_sha,
+        "vision_points": render_song.vision_points(outputs),
         "license": "BSD-3-Clause",
         "originality": cue_set.originality,
         "device": cue_set.device,
