@@ -110,6 +110,7 @@ from song_render import (  # noqa: E402
     render_midi,
     render_mml,
     render_provenance,
+    vision_points,
 )
 from song_validate import (  # noqa: E402
     ALLOWED_BEATS,
@@ -188,6 +189,7 @@ __all__ = [
     "render_midi",
     "render_mml",
     "render_provenance",
+    "vision_points",
     "ABC_TOKEN_RE",
     "MML_TOKEN_RE",
     "_midi_note_spans",

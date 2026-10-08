@@ -738,6 +738,39 @@ def render_contour_svg(song: Song) -> str:
     return "\n".join(parts) + "\n"
 
 
+_VISION_POINT_RECORD_HINT = (
+    "observations/bard/vision-reviews.jsonl via `record vision-review`"
+)
+
+# Rendered-image name fragment -> vision-review checklist slug.
+_VISION_POINT_CHECKLISTS: tuple[tuple[str, str], ...] = (
+    ("contour", "melody-contour"),
+    ("score", "score-engraving"),
+    ("timeline", "cue-timeline"),
+)
+
+
+def vision_points(outputs: dict[str, bytes]) -> list[dict[str, str]]:
+    """Rendered rasters a vision reviewer must look at, with their checklist."""
+    points: list[dict[str, str]] = []
+    for name in sorted(outputs):
+        if not name.endswith((".svg", ".png")):
+            continue
+        checklist = next(
+            (c for token, c in _VISION_POINT_CHECKLISTS if token in name), None
+        )
+        if checklist is None:
+            continue
+        points.append(
+            {
+                "image_path": name,
+                "checklist": checklist,
+                "record_with": _VISION_POINT_RECORD_HINT,
+            }
+        )
+    return points
+
+
 def render_provenance(
     song: Song,
     proposal_path: Path,
@@ -760,6 +793,7 @@ def render_provenance(
         },
         "sources": song.sources,
         "script_sha256": script_sha,
+        "vision_points": vision_points(outputs),
         "license": "BSD-3-Clause",
         "originality": song.originality,
         "bpm": song.bpm,

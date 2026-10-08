@@ -65,6 +65,15 @@ def test_valid_fixture_renders(
     assert prov["artifact_kind"] == "bard_song_provenance"
     assert prov["authority"] == "none"
     assert prov["license"] == "BSD-3-Clause"
+    assert prov["vision_points"] == [
+        {
+            "image_path": "song.contour.svg",
+            "checklist": "melody-contour",
+            "record_with": (
+                "observations/bard/vision-reviews.jsonl via `record vision-review`"
+            ),
+        }
+    ]
     assert (
         prov["proposal"]["sha256"] == hashlib.sha256(proposal.read_bytes()).hexdigest()
     )
