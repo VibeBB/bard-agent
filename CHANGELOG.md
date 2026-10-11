@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- VRP v2 records (ADR-0015): hash-chained logs, structured and grounded
+  impressions, near-duplicate refusal, read receipts with dispositions,
+  insight lifecycle, blind second review of `score.png` by the new
+  `bard-blind-review` sub-agent with `record reconcile`, and `record
+  digest`/`search` across sister logs. `record song-delivery` writes
+  immutable, sha-pinned `liaison/<id>.bard-song.json` songs to sisters; their
+  receipts never trigger another song. `validate_score_review.py --record`
+  now needs `--vrp-json` with the v2 review body. v1 logs are archived as
+  `<name>.v1.jsonl`.
+
 - Product sound cues (earcons): the `bard_cue_set` 0.1 contract, the
   stdlib-only `render_cues.py` renderer (per-cue MIDI and MML plus a
   `cues.json` firmware tone table), the `bard-cue` sub-agent, the

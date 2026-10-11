@@ -21,7 +21,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 _SCRIPTS = Path(__file__).resolve()
 _HOOKS_SCRIPTS = _SCRIPTS.parents[3] / "hooks" / "scripts"
@@ -157,10 +157,26 @@ def _source_event_for(root: Path, image_sha: str) -> str | None:
     return None
 
 
+VRP_BODY_KEYS = frozenset(
+    {"impression", "facets", "claims", "lookback", "confidence", "unknowns", "delta"}
+)
+
+
 def record_review(
-    record: dict[str, Any], review_path: Path, root: Path
+    record: dict[str, Any],
+    review_path: Path,
+    root: Path,
+    vrp: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Mirror a validated ok-review into vision-reviews.jsonl via bard_records."""
+    """Mirror a validated ok-review into vision-reviews.jsonl via bard_records.
+
+    ``vrp`` carries the VRP v2 body (facets, claims, lookback, confidence,
+    unknowns, optionally impression/delta) that score-review.json lacks.
+    """
+    body = dict(vrp or {})
+    unknown = sorted(set(body) - VRP_BODY_KEYS)
+    if unknown:
+        raise ValueError(f"unknown --vrp-json fields: {unknown}")
     bard_records = _import_script("bard_records", _PLUGIN_SCRIPTS)
     detail = record["detail"]
     image_sha = str(detail["image_sha256"])
@@ -202,6 +218,7 @@ def record_review(
             "note": "covers song.abc engraving and score.png render",
         }
     )
+    payload.update(body)
     return bard_records.record_vision_review(payload, root)
 
 
@@ -220,12 +237,20 @@ def main() -> int:
         "VRP vision review to observations/bard/vision-reviews.jsonl",
     )
     parser.add_argument(
+        "--vrp-json",
+        type=Path,
+        default=None,
+        help="VRP v2 body for --record: facets, claims, lookback, confidence, unknowns",
+    )
+    parser.add_argument(
         "--root",
         type=Path,
         default=None,
         help="workspace root for --record (default: OPENHANDS_PROJECT_DIR or cwd)",
     )
     args = parser.parse_args()
+    if args.record and args.vrp_json is None:
+        parser.error("--record needs --vrp-json with the VRP v2 review body")
     try:
         raw = args.review.read_text(encoding="utf-8")
     except OSError as exc:
@@ -248,7 +273,12 @@ def main() -> int:
     ):
         root = args.root or Path.cwd()
         try:
-            recorded = record_review(record, args.review, root)
+            vrp: Any = json.loads(args.vrp_json.read_text(encoding="utf-8"))
+            if not isinstance(vrp, dict):
+                raise ValueError("--vrp-json must hold a JSON object")
+            recorded = record_review(
+                record, args.review, root, cast(dict[str, Any], vrp)
+            )
         except (ValueError, OSError) as exc:
             problems = [f"record vision-review failed: {exc}"]
     if args.json:

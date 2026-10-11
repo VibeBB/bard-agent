@@ -34,6 +34,13 @@ exit 0, while `protect-song-artifacts` exits 2.
 | `record-vision-tool-event` | `inspect_image_with_vision` | `record_vision_tool_event.py` | Appends the vision call to `vision-tool-events.jsonl`; exit 0 |
 | `record-image-observation` | `file_editor` | `record_image_observation.py` | Appends viewed/created image observations to `image-observations.jsonl`; exit 0 |
 
+## Agent-scoped: blind-guard
+
+`bard-blind-review` declares `blind-guard` (`blind_guard.py`, canonical
+across the family) on `pre_tool_use` for `file_editor|apply_patch|terminal|grep|glob`:
+it denies reads of `observations/`, advisory records, liaison answers and
+songs so the blind vision review stays independent; exit 2 on denial.
+
 ## stop (order matters)
 
 1. `require-records` — `require_records.py stop`: refuses (exit 2, bounded by

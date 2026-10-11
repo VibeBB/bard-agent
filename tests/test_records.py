@@ -1,412 +1,1271 @@
-"""Tests for the VRP v1 port: bard_records.py writer + require-records hooks.
+"""VibeBB Record Protocol v2 for bard: writers, shared hook rules, Stop and songs.
 
-The parity constants below were produced by running wire-agent's
-``src/wire/records.py`` (branch ``devin/1791218143-vibebb-record-protocol``)
-on the same payloads and workspace bytes; bard's writer must reproduce the
-identical event_id (the identity hash excludes ``plugin``) and the identical
-record body modulo ``plugin`` and ``recorded_at``.
+Ported from wire-agent tests/test_records.py; fixtures live under songs/demo.
 """
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
+import os
 import subprocess
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-PLUGIN_ROOT = REPO_ROOT / "plugins" / "bard"
-RECORDS_PATH = PLUGIN_ROOT / "scripts" / "bard_records.py"
-CLI_PATH = PLUGIN_ROOT / "scripts" / "bard_cli.py"
-REQUIRE_RECORDS = PLUGIN_ROOT / "hooks" / "scripts" / "require_records.py"
-POLICY_PATH = PLUGIN_ROOT / "hooks" / "records-policy.json"
-
-IMPRESSION = (
-    "The verse reads settled while the refrain lifts the register, which is exactly "
-    "the arc the context file asked for. One concern is that bar twelve leans on the "
-    "same rhythm cell three times in a row, so the maker may hear a stall where a push "
-    "was intended. Next pass should vary the pickup into the chorus before rendering, "
-    "and the score image should be inspected again once the new stem directions land "
-    "so the engraving impression stays honest about what the reader sees."
-)
-
-DECISION_PAYLOAD = {
-    "id": "mode-choice",
-    "stage": "compose",
-    "question": "Which mode should the verse use?",
-    "principles": ["Dorian reads as resolved-but-wistful in the songcraft table"],
-    "options": [
-        {
-            "name": "dorian",
-            "pros": ["matches wistful subject"],
-            "cons": ["narrow color"],
-        },
-        {"name": "aeolian", "pros": ["safer"], "cons": ["too dark for the hook"]},
-    ],
-    "chosen": "dorian",
-    "rationale": "Dorian keeps the verse wistful without collapsing into aeolian "
-    "gloom; the songcraft table recommends it for retrospective subjects and the "
-    "context file asks for exactly that register. " * 2,
-    "evidence": [{"path": "songs/demo/song.md"}],
-    "risks": ["chorus may need a borrowed chord"],
-    "revisit_when": "the critic flags mode fit",
-}
-
-IMPRESSION_PAYLOAD = {
-    "stage": "compose",
-    "artifacts": ["songs/demo"],
-    "impression": IMPRESSION,
-}
-
-VISION_PAYLOAD = {
-    "image_path": "songs/demo/score.png",
-    "source_event_id": "0" * 64,
-    "model": "test-model",
-    "checklist": "score-engraving",
-    "findings": [{"category": "layout", "severity": "info", "note": "stems aligned"}],
-    "impression": IMPRESSION,
-}
-
-# Wire's writer output on the identical payloads/bytes (record minus recorded_at).
-EXPECTED_WIRE = {
-    "decision": {
-        "event_id": "e186904ba85cfee312281ebfe781819c0b3cd33a004b918e47d546699f739e32",
-        "image": None,
-    },
-    "stage_impression": {
-        "event_id": "db55c007ef5129beb82c206d8db42957ed657b7df6bb49c0025b61afd74f526d",
-        "artifact_sha256": (
-            "18f901437f17ae832547a12a68a12b8248cec0c85371031962b93f89a28bb0c9"
-        ),
-    },
-    "vision_review": {
-        "event_id": "1952bb6496c871ab15336599c03e697fd5b3343a3e11848e4ecad2e767cad59f",
-        "image_sha256": (
-            "796120837694d3f3f29259cfeb25091698c2a0aa87873658d840b4993ee889b3"
-        ),
-    },
-}
+REPO = Path(__file__).parents[1]
 
 
-@pytest.fixture()
-def records_module() -> Any:
-    spec = importlib.util.spec_from_file_location("bard_records", RECORDS_PATH)
+def _load(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    sys.modules["bard_records"] = module
     spec.loader.exec_module(module)
     return module
 
 
-@pytest.fixture()
-def workspace(tmp_path: Path) -> Path:
-    song = tmp_path / "songs" / "demo"
-    song.mkdir(parents=True)
-    (song / "song.md").write_text("x", encoding="utf-8")
-    (song / "score.png").write_bytes(b"PNG")
+records = _load(
+    "bard_records", REPO / "plugins" / "bard" / "scripts" / "bard_records.py"
+)
+_vrp = records._vrp
+ValidationError = ValueError
+
+SCRIPTS = REPO / "plugins" / "bard" / "hooks" / "scripts"
+HOOK = SCRIPTS / "require_records.py"
+BLIND_GUARD = SCRIPTS / "blind_guard.py"
+
+IMPRESSION = (
+    "The harness drawing reads as a coherent build sheet: wire W1 runs from C1.1 to "
+    "C2.1 and every cavity carries a unique label. What worries me is the 3.3 V sense "
+    "lead, which runs parallel to the motor feed for most of its length and could pick "
+    "up switching noise. A fabricator would still be able to cut and crimp from the "
+    "tables alone, although the splice note is small. Next I would re-route the sense "
+    "lead along the far edge of the bundle and re-render to confirm the separation. "
+    "Overall the sheet communicates intent well, and the remaining risk sits in one "
+    "routing choice."
+)
+IMPRESSION_B = (
+    "After the regeneration, W1 still lands on C2.1 but the bundle now leaves the "
+    "enclosure through the lower grommet, which shortens the exposed run by a hand "
+    "width. The crimp table lists every terminal and the cut lengths add up against "
+    "the route plan, so the kitting step should be quick. I am less sure about the "
+    "strain relief at the grommet because the contract gives no bend radius for the "
+    "jacket. Somebody assembling it would appreciate the clearer branch order, while "
+    "the end user never sees any of it unless the lid is opened for service later."
+)
+IMPRESSION_C = (
+    "Third pass on the same harness: the BOM rows for C1.1 and C2.1 now carry "
+    "manufacturer part numbers instead of family names, which removes a purchasing "
+    "question entirely. Splice S1 moved off the flex zone near the hinge, so fatigue "
+    "is no longer the dominant risk I see here. The drawing gained a test-point table "
+    "that production can use for continuity checks without a second document. My "
+    "remaining doubt concerns colour coding under monochrome printing on the shop "
+    "floor, which I will verify with a grayscale export before handing it over."
+)
+IMPRESSION_JA = (
+    "電源ペアと信号ペアが明確に分かれており、配線表だけで切断・圧着まで進められる構成だと感じた。"
+    "一方でW1のセンス線がモータ給電線と長く並走しており、スイッチングノイズを拾う懸念が残る。"
+    "製造現場の作業者は端子番号を迷わず読めるが、スプライス注記の文字が小さく見落とされやすい。"
+    "次の工程ではセンス線を束の反対側へ移し、再描画して分離が保たれているかを確認したい。"
+    "全体としては設計意図が伝わる図面であり、誤読のリスクは注記の大きさに集中している。"
+    "コネクタの嵌合方向は矢印で示されているが、裏面視か表面視かの明記が無いので追記したい。"
+    "ケーブル長の基準点は嵌合面に揃っており、治具板への展開もそのまま行えると判断した。"
+    "保守担当者が現地で断線を探す場面を想像すると、試験点の一覧が図面に同居している点は心強い。"
+    "ただしモノクロ印刷では電線色の区別が失われるため、色名の略号を併記するかどうかを次に検討したい。"
+    "圧着端子の品番は部品表と一致しており、購買部門が型番を問い合わせる手間も生じないと考える。"
+)
+FELT = (
+    "The verse about the long parallel run made the sense lead feel fragile rather than "
+    "merely suboptimal. It is a song, not a gate, but it is a reason to look again."
+)
+
+
+def _hook_module() -> ModuleType:
+    sys.path.insert(0, str(SCRIPTS))
+    spec = importlib.util.spec_from_file_location("_records", SCRIPTS / "_records.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+HOOK_RECORDS = _hook_module()
+
+
+def _facets(**overrides: Any) -> dict[str, Any]:
+    facets: dict[str, Any] = {
+        "observed": ["W1 runs C1.1 to C2.1", "sense lead parallels the motor feed"],
+        "works": ["cavity labels are unique"],
+        "concerns": [
+            {
+                "id": "c1",
+                "text": "sense lead couples motor switching noise",
+                "severity": "warning",
+                "about": "self",
+                "anchor": "W1",
+            }
+        ],
+        "feelings": {
+            "maker": "can kit and crimp from the tables",
+            "user": "never sees it unless servicing",
+        },
+        "next_actions": ["re-route the sense lead along the far edge"],
+    }
+    return facets | overrides
+
+
+def _impression(
+    text: str = IMPRESSION, artifacts: list[str] | None = None, **overrides: Any
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "stage": "export",
+        "artifacts": artifacts or ["songs/demo"],
+        "impression": text,
+        "facets": _facets(),
+        "claims": [
+            {
+                "text": "wire W1 exists in the wire list",
+                "anchor": "W1",
+                "artifact": "songs/demo/song.abc",
+            },
+            {
+                "text": "C1.1 is the source cavity",
+                "anchor": "C1.1",
+                "artifact": "songs/demo/song.abc",
+            },
+        ],
+        "confidence": "medium",
+        "unknowns": ["actual motor current ripple"],
+    }
+    return payload | overrides
+
+
+def _vision(reviewer: str = "primary", **overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "image_path": "songs/demo/score.png",
+        "model": "openhands/kimi-k3",
+        "checklist": "score-engraving",
+        "reviewer": reviewer,
+        "findings": [
+            {"category": "label_collision", "severity": "warning", "note": "W1"}
+        ],
+        "impression": IMPRESSION,
+        "facets": _facets(),
+        "claims": [
+            {
+                "text": "W1 label is drawn",
+                "anchor": "W1",
+                "artifact": "songs/demo/score.png",
+            }
+        ],
+        "lookback": [
+            {"claim": 0, "verdict": "confirmed", "note": "second look shows W1"}
+        ],
+        "confidence": "medium",
+        "unknowns": [],
+    }
+    return payload | overrides
+
+
+LIST_CLAIM = [
+    {
+        "text": "W1 is in the wire list",
+        "anchor": "W1",
+        "artifact": "songs/demo/song.abc",
+    }
+]
+
+
+def _decision(evidence_path: str) -> dict[str, Any]:
+    return {
+        "id": "sense-lead-routing",
+        "stage": "design",
+        "question": "Where should the 3.3 V sense lead run inside the bundle?",
+        "principles": [
+            "Inductive coupling falls with separation and shorter parallel run length",
+            "IPC/WHMA-A-620 segregation of power and signal conductors",
+        ],
+        "options": [
+            {"name": "same-bundle", "pros": ["shortest"], "cons": ["noise coupling"]},
+            {"name": "far-edge", "pros": ["separation"], "cons": ["+40 mm length"]},
+        ],
+        "chosen": "far-edge",
+        "rationale": (
+            "The sense lead feeds an ADC whose LSB is about 0.8 mV, while the motor feed "
+            "switches several amperes at 20 kHz; mutual inductance along a 300 mm parallel "
+            "run would inject more than an LSB, so physical separation is the cheapest fix."
+        ),
+        "evidence": [
+            {"path": evidence_path},
+            {"reference": "IPC/WHMA-A-620E section 13"},
+        ],
+        "assumptions": ["motor PWM is 20 kHz"],
+        "unknowns": ["actual motor current ripple"],
+        "risks": ["longer lead adds 40 mm of copper"],
+        "revisit_when": "a measured ADC noise floor exceeds 2 LSB",
+    }
+
+
+def _sister(root: Path, system: str, kind: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Append a valid v2 record to another plugin's log, as that plugin's writer would."""
+    log = root / "observations" / system / _vrp.LOG_FILES[kind]
+    log.parent.mkdir(parents=True, exist_ok=True)
+    existing, _ = _vrp.load_jsonl(log)
+    record: dict[str, Any] = {
+        "schema_version": 2,
+        "kind": kind,
+        "plugin": system,
+        "sequence": len(existing) + 1,
+        "prev_event_id": _vrp.chain_head(existing),
+        "recorded_at": datetime.now(UTC).isoformat(),
+        "writer": {"plugin": system},
+        **body,
+    }
+    record["event_id"] = _vrp.compute_event_id(record)
+    assert _vrp.record_errors(kind, record) == []
+    with log.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return record
+
+
+def _sister_impression(
+    root: Path, system: str, artifact: str, text: str, **body: Any
+) -> dict[str, Any]:
+    path = root / artifact
+    claims = [
+        {
+            "text": "the export names the connector",
+            "anchor": "J1",
+            "artifact": artifact,
+        },
+        {"text": "the export names the net", "anchor": "VBUS", "artifact": artifact},
+    ]
+    payload: dict[str, Any] = {
+        "stage": "export",
+        "artifacts": [{"path": artifact, "sha256": _vrp.tree_sha256(path)}],
+        "impression": text,
+        "facets": _facets(
+            concerns=[
+                {
+                    "id": "c1",
+                    "text": "J1 pin 3 carries VBUS next to a signal pin",
+                    "severity": "error",
+                    "about": "bard",
+                    "anchor": "J1",
+                }
+            ]
+        ),
+        "claims": claims,
+        "confidence": "high",
+        "unknowns": [],
+    }
+    return _sister(root, system, "stage_impression", payload | body)
+
+
+SISTER_TEXT = (
+    "The circuit export names J1 as the harness connector and routes VBUS to pin 3, "
+    "directly beside the I2C clock on pin 4. That arrangement works electrically, yet a "
+    "mis-mated plug would put five volts onto a logic input with nothing to stop it. "
+    "The wire team should key the housing or move VBUS to the outer cavity. A maker will "
+    "find the netlist easy to follow, and a user will only notice if a repair goes wrong."
+)
+
+
+@pytest.fixture
+def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("OPENHANDS_PROJECT_DIR", str(tmp_path))
+    (tmp_path / "songs" / "demo").mkdir(parents=True)
+    (tmp_path / "songs" / "demo" / "song.abc").write_text(
+        "W1,C1.1,C2.1\n", encoding="utf-8"
+    )
+    (tmp_path / "songs" / "demo" / "score.png").write_bytes(b"\x89PNG fake")
     return tmp_path
 
 
-# ---------------------------------------------------------------------------
-# writer: accept/reject and wire parity
+def _connectivity(root: Path) -> Path:
+    path = root / "circuit" / "board.connectivity.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"connectors": ["J1"], "nets": ["VBUS"]}\n', encoding="utf-8")
+    return path
 
 
-def test_decision_parity(records_module: Any, workspace: Path) -> None:
-    result = records_module.record_decision(DECISION_PAYLOAD, root=workspace)
-    record = result["record"]
-    assert record["event_id"] == EXPECTED_WIRE["decision"]["event_id"]
-    assert record["plugin"] == "bard"
-    assert record["kind"] == "decision"
-    assert record["sequence"] == 1
-    assert record["evidence"][0]["sha256"] == (
-        "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
-    )
+# --- text and structure -------------------------------------------------
 
 
-def test_impression_parity(records_module: Any, workspace: Path) -> None:
-    result = records_module.record_impression(IMPRESSION_PAYLOAD, root=workspace)
-    record = result["record"]
-    assert record["event_id"] == EXPECTED_WIRE["stage_impression"]["event_id"]
-    assert (
-        record["artifacts"][0]["sha256"]
-        == (EXPECTED_WIRE["stage_impression"]["artifact_sha256"])
-    )
+def test_impression_rules() -> None:
+    assert records.impression_is_prose(IMPRESSION) == IMPRESSION
+    assert records.impression_is_prose(IMPRESSION_JA) == IMPRESSION_JA
+    with pytest.raises(ValueError, match="characters"):
+        records.impression_is_prose("Looks fine. No issues. Done.")
+    with pytest.raises(ValueError, match="sentences"):
+        records.impression_is_prose("x" * 500 + ". y")
+    with pytest.raises(ValueError, match="repeats"):
+        records.impression_is_prose("The drawing is fine and readable overall. " * 12)
+    assert records.sentence_count("Supply is 3.3 V and 5.0 V") == 0
+    assert HOOK_RECORDS.impression_errors(IMPRESSION) == []
+    assert HOOK_RECORDS.impression_errors("Looks fine. No issues. Done.")
 
 
-def test_vision_review_parity(records_module: Any, workspace: Path) -> None:
-    result = records_module.record_vision_review(VISION_PAYLOAD, root=workspace)
-    record = result["record"]
-    assert record["event_id"] == EXPECTED_WIRE["vision_review"]["event_id"]
-    assert record["image_sha256"] == EXPECTED_WIRE["vision_review"]["image_sha256"]
-    assert record["source_event_id"] == "0" * 64
-
-
-def test_decision_rejects_unknown_key(records_module: Any, workspace: Path) -> None:
-    payload = dict(DECISION_PAYLOAD)
-    payload["bogus"] = "x"
-    with pytest.raises(ValueError, match="unknown keys"):
-        records_module.record_decision(payload, root=workspace)
-
-
-def test_decision_rejects_unchosen_option(records_module: Any, workspace: Path) -> None:
-    payload = dict(DECISION_PAYLOAD)
-    payload["chosen"] = "phrygian"
-    with pytest.raises(ValueError, match="chosen"):
-        records_module.record_decision(payload, root=workspace)
-
-
-def test_decision_rejects_short_rationale(records_module: Any, workspace: Path) -> None:
-    payload = dict(DECISION_PAYLOAD)
-    payload["rationale"] = "because it fits"
-    with pytest.raises(ValueError, match="rationale"):
-        records_module.record_decision(payload, root=workspace)
-
-
-def test_impression_length_and_sentence_rules(
-    records_module: Any, workspace: Path
-) -> None:
-    short = dict(IMPRESSION_PAYLOAD)
-    short["impression"] = "Looks fine. It reads well enough. Done now."
-    with pytest.raises(ValueError, match="400"):
-        records_module.record_impression(short, root=workspace)
-    one_sentence = dict(IMPRESSION_PAYLOAD)
-    one_sentence["impression"] = "all one breath " * 40
-    with pytest.raises(ValueError):
-        records_module.record_impression(one_sentence, root=workspace)
-
-
-def test_impression_repeated_sentence_rejected(
-    records_module: Any, workspace: Path
-) -> None:
-    payload = dict(IMPRESSION_PAYLOAD)
-    payload["impression"] = "The stage landed well. " * 20
-    with pytest.raises(ValueError):
-        records_module.record_impression(payload, root=workspace)
-
-
-def test_vision_review_requires_binding(records_module: Any, workspace: Path) -> None:
-    payload = {
-        "model": "test-model",
-        "checklist": "melody-contour",
-        "findings": [],
-        "impression": IMPRESSION,
-    }
-    with pytest.raises(ValueError, match="image_path or source_event_id"):
-        records_module.record_vision_review(payload, root=workspace)
-
-
-def test_vision_review_binds_image_sha(records_module: Any, workspace: Path) -> None:
-    result = records_module.record_vision_review(VISION_PAYLOAD, root=workspace)
-    assert result["record"]["image_sha256"] == (
-        "796120837694d3f3f29259cfeb25091698c2a0aa87873658d840b4993ee889b3"
-    )
-
-
-def test_workspace_escape_rejected(records_module: Any, workspace: Path) -> None:
-    payload = dict(IMPRESSION_PAYLOAD)
-    payload["artifacts"] = ["../outside"]
+def test_record_impression_chains_and_binds(workspace: Path) -> None:
+    first = records.record_impression(_impression())["record"]
+    assert first["artifacts"] == [
+        {
+            "path": "songs/demo",
+            "sha256": records.tree_sha256(workspace / "songs" / "demo"),
+        }
+    ]
+    assert first["sequence"] == 1
+    assert first["prev_event_id"] == _vrp.GENESIS
+    assert first["event_id"] == _vrp.compute_event_id(first)
+    assert first["writer"] == {"plugin": "bard"}
+    assert HOOK_RECORDS.record_errors("stage_impression", first) == []
+    second = records.record_impression(_impression(IMPRESSION_B))["record"]
+    assert second["sequence"] == 2
+    assert second["prev_event_id"] == first["event_id"]
     with pytest.raises(ValueError, match="outside the workspace"):
-        records_module.record_impression(payload, root=workspace)
-
-
-def test_summary_counts(records_module: Any, workspace: Path) -> None:
-    records_module.record_decision(DECISION_PAYLOAD, root=workspace)
-    records_module.record_impression(IMPRESSION_PAYLOAD, root=workspace)
-    summary = records_module.records_summary(workspace)
-    assert summary["counts"]["decision"] == 1
-    assert summary["counts"]["stage_impression"] == 1
-    assert summary["counts"]["vision_review"] == 0
-
-
-# ---------------------------------------------------------------------------
-# CLI surface
-
-
-def _cli(*args: str, stdin: str = "") -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(CLI_PATH), *args],
-        input=stdin,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-
-def test_cli_record_impression(workspace: Path) -> None:
-    proc = _cli(
-        "record",
-        "impression",
-        "--json",
-        "-",
-        "--root",
-        str(workspace),
-        stdin=json.dumps(IMPRESSION_PAYLOAD),
-    )
-    assert proc.returncode == 0, proc.stderr
-    out = json.loads(proc.stdout)
-    assert out["record"]["plugin"] == "bard"
-
-
-def test_cli_rejects_bad_payload(workspace: Path) -> None:
-    proc = _cli(
-        "record",
-        "impression",
-        "--json",
-        "-",
-        "--root",
-        str(workspace),
-        stdin=json.dumps({"stage": "compose"}),
-    )
-    assert proc.returncode == 2
-
-
-def test_cli_status(workspace: Path) -> None:
-    proc = _cli("record", "status", "--root", str(workspace))
-    assert proc.returncode == 0
-    out = json.loads(proc.stdout)
-    assert out["counts"]["decision"] == 0
-
-
-# ---------------------------------------------------------------------------
-# require_records hook (subprocess, like test_hooks.py)
-
-
-def _run_hook(
-    phase: str, cwd: Path, env: dict[str, str] | None = None
-) -> subprocess.CompletedProcess[str]:
-    import os
-
-    hook_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(cwd)}
-    if env:
-        hook_env.update(env)
-    return subprocess.run(
-        [sys.executable, str(REQUIRE_RECORDS), phase],
-        input=json.dumps({}),
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        env=hook_env,
-        check=False,
-    )
-
-
-def test_session_start_creates_marker(tmp_path: Path) -> None:
-    proc = _run_hook("session-start", tmp_path)
-    assert proc.returncode == 0
-    sessions = tmp_path / "observations" / "bard" / ".sessions"
-    assert any(sessions.glob("*.json"))
-
-
-def test_stop_blocks_missing_records(tmp_path: Path) -> None:
-    _run_hook("session-start", tmp_path)
-    (tmp_path / "songs" / "demo").mkdir(parents=True)
-    (tmp_path / "songs" / "demo" / "song.md").write_text("x", encoding="utf-8")
-    proc = _run_hook("stop", tmp_path)
-    assert proc.returncode == 2
-    payload = json.loads(proc.stdout)
-    assert payload["decision"] == "deny"
-    assert "stage_impression" in payload["reason"]
-    assert "decision" in payload["reason"]
-
-
-def test_stop_passes_with_records(records_module: Any, workspace: Path) -> None:
-    _run_hook("session-start", workspace)
-    records_module.record_decision(DECISION_PAYLOAD, root=workspace)
-    records_module.record_impression(IMPRESSION_PAYLOAD, root=workspace)
-    proc = _run_hook("stop", workspace)
-    assert proc.returncode == 0
-
-
-def test_stop_without_marker_allows(tmp_path: Path) -> None:
-    proc = _run_hook("stop", tmp_path)
-    assert proc.returncode == 0
-
-
-def test_policy_file_shape() -> None:
-    policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
-    assert policy["plugin"] == "bard"
-    assert "songs/*/*" in policy["artifact_globs"]
-    assert "cues/*/*" in policy["artifact_globs"]
-    assert policy["records_dir"] == "observations/bard"
-    assert policy["max_stop_denials"] == 2
-
-
-def test_shared_hook_digests() -> None:
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-    check = importlib.import_module("check_shared_hooks")
-    for name in ("_records.py", "require_records.py"):
-        assert (
-            check._digest(PLUGIN_ROOT / "hooks" / "scripts" / name, "bard")
-            == check.EXPECTED[name]
+        records.record_impression(_impression(IMPRESSION_C, artifacts=["/etc/passwd"]))
+    with pytest.raises(ValueError, match="does not exist"):
+        records.record_impression(
+            _impression(IMPRESSION_C, artifacts=["songs/demo/missing.csv"])
         )
 
 
-# ---------------------------------------------------------------------------
-# prompt/CLI drift guard: every documented bard_cli.py invocation must parse
+def test_writer_metadata_from_env(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VRP_AGENT", "wire-design")
+    monkeypatch.setenv("VRP_MODEL", "openhands/kimi-k3")
+    record = records.record_impression(_impression())["record"]
+    assert record["writer"] == {
+        "plugin": "bard",
+        "agent": "wire-design",
+        "model": "openhands/kimi-k3",
+    }
 
 
-def _documented_invocations() -> list[tuple[str, list[str]]]:
-    """bard_cli.py argument lists quoted in plugin Markdown files."""
-    found: list[tuple[str, list[str]]] = []
-    import re
-    import shlex
-
-    for md in sorted(PLUGIN_ROOT.rglob("*.md")):
-        for lineno, line in enumerate(md.read_text(encoding="utf-8").splitlines(), 1):
-            match = re.search(r"bard_cli\.py\s+(.+)$", line)
-            if match is None:
-                continue
-            tail = match.group(1)
-            tail = re.split(r"<<|&&|\|\||;|#|`", tail)[0]
-            try:
-                tokens = shlex.split(tail)
-            except ValueError:
-                tokens = tail.split()
-            # drop leading placeholders (e.g. "$p/scripts/" fragments)
-            if tokens and tokens[0].startswith("$"):
-                tokens = tokens[1:]
-            if not tokens:
-                continue
-            # alternation a|b|c -> first alternative; placeholders -> "-"
-            args: list[str] = []
-            skip_next = False
-            for token in tokens:
-                if skip_next:
-                    skip_next = False
-                    continue
-                if token in ("<file|->", "<file>", "<stem>", "<json>"):
-                    args.append("-")
-                elif token.startswith("<"):
-                    # a bare placeholder in command position is a subcommand
-                    args.append("decision" if args and args[-1] == "record" else "-")
-                elif "|" in token and not token.startswith("-"):
-                    args.append(token.split("|")[0])
-                else:
-                    args.append(token)
-            found.append((f"{md.name}:{lineno}", args))
-    return found
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"facets": _facets(observed=["only one thing seen"])}, "observed"),
+        ({"facets": _facets(works=[])}, "works"),
+        ({"facets": _facets(concerns=[])}, "no_concerns_reason"),
+        ({"facets": _facets(next_actions=[])}, "next_actions"),
+        ({"claims": []}, "claims"),
+        ({"confidence": "certain"}, "confidence"),
+    ],
+)
+def test_structured_facets_are_required(
+    workspace: Path, change: dict[str, Any], message: str
+) -> None:
+    with pytest.raises((ValidationError, ValueError), match=message):
+        records.record_impression(_impression(**change))
+    record = _impression(**change) | {"kind": "stage_impression"}
+    assert any(
+        message in e for e in HOOK_RECORDS.impression_body_errors(record, min_claims=2)
+    )
 
 
-def test_documented_cli_invocations_parse() -> None:
-    """Every `bard_cli.py ...` line in plugins/**/*.md must be valid syntax.
+def test_no_concerns_needs_a_reason(workspace: Path) -> None:
+    reason = "every gate passes with margin and the drawing was checked twice"
+    facets = _facets(concerns=[], no_concerns_reason=reason)
+    assert records.record_impression(_impression(facets=facets))["verdict"] == "pass"
 
-    Parsing is checked with `--help` (argparse exits 0 only when the
-    preceding arguments are well formed), so nothing is executed.
-    """
-    invocations = _documented_invocations()
-    assert invocations, "no bard_cli.py invocations found in plugin docs"
-    bad: list[str] = []
-    for where, args in invocations:
-        proc = subprocess.run(
-            [sys.executable, str(CLI_PATH), *args, "--help"],
+
+def test_claims_must_be_grounded(workspace: Path) -> None:
+    ghost = [
+        {
+            "text": "wire W9 exists in the list",
+            "anchor": "W9",
+            "artifact": "songs/demo/song.abc",
+        },
+        {
+            "text": "C1.1 is the source cavity",
+            "anchor": "C1.1",
+            "artifact": "songs/demo/song.abc",
+        },
+    ]
+    with pytest.raises(ValueError, match="'W9' does not occur"):
+        records.record_impression(_impression(claims=ghost))
+    elsewhere = [
+        {
+            "text": "wire W1 is in the list",
+            "anchor": "W1",
+            "artifact": "songs/demo/song.abc",
+        },
+        {"text": "something outside", "anchor": "root", "artifact": "README.md"},
+    ]
+    with pytest.raises(ValueError, match="not among the bound artifacts"):
+        records.record_impression(_impression(claims=elsewhere))
+    unanchored = IMPRESSION.replace("W1", "the wire").replace("C1.1", "one cavity")
+    with pytest.raises(ValueError, match="mention at least one claim anchor"):
+        records.record_impression(_impression(unanchored))
+
+
+def test_near_duplicate_is_rejected_and_delta_required(workspace: Path) -> None:
+    records.record_impression(_impression())
+    with pytest.raises(ValueError, match="similar to an earlier one; read"):
+        records.record_impression(_impression(IMPRESSION + " Nothing else."))
+    parts = _vrp.sentences(IMPRESSION)
+    parts[3] = _vrp.sentences(IMPRESSION_B)[0]
+    half = " ".join(parts)
+    with pytest.raises(ValueError, match="add delta"):
+        records.record_impression(_impression(half))
+    delta = "the grommet exit moved and the exposed run is now one hand width shorter"
+    assert (
+        records.record_impression(_impression(half, delta=delta))["verdict"] == "pass"
+    )
+
+
+# --- chain integrity -----------------------------------------------------
+
+
+def _log(workspace: Path, kind: str = "stage_impression") -> Path:
+    return workspace / records.RECORDS_DIR / records.LOG_FILES[kind]
+
+
+def _rewrite(path: Path, lines: list[dict[str, Any]]) -> None:
+    path.write_text("".join(json.dumps(r) + "\n" for r in lines), encoding="utf-8")
+
+
+def _three(workspace: Path) -> list[dict[str, Any]]:
+    for text in (IMPRESSION, IMPRESSION_B, IMPRESSION_C):
+        records.record_impression(_impression(text))
+    rows, _ = _vrp.load_jsonl(_log(workspace))
+    return rows
+
+
+def _rehash(record: dict[str, Any]) -> dict[str, Any]:
+    return record | {"event_id": _vrp.compute_event_id(record)}
+
+
+def test_chain_detects_edit(workspace: Path) -> None:
+    rows = _three(workspace)
+    rows[1]["impression"] = rows[1]["impression"].replace("hand", "foot")
+    _rewrite(_log(workspace), rows)
+    problems = _vrp.verify_log(_log(workspace), "stage_impression")[1]
+    assert any("line 2: event_id does not match" in p for p in problems)
+
+
+def test_chain_detects_relink(workspace: Path) -> None:
+    rows = _three(workspace)
+    rows[2] = _rehash(rows[2] | {"prev_event_id": "f" * 64})
+    _rewrite(_log(workspace), rows)
+    problems = _vrp.verify_log(_log(workspace), "stage_impression")[1]
+    assert any("line 3: prev_event_id" in p for p in problems)
+
+
+def test_chain_detects_deletion(workspace: Path) -> None:
+    rows = _three(workspace)
+    _rewrite(_log(workspace), [rows[0], rows[2]])
+    problems = _vrp.verify_log(_log(workspace), "stage_impression")[1]
+    assert any("sequence 3" in p for p in problems)
+    assert any("prev_event_id" in p for p in problems)
+
+
+def test_chain_detects_time_regression(workspace: Path) -> None:
+    rows = _three(workspace)
+    earlier = (datetime.now(UTC) - timedelta(days=2)).isoformat()
+    rows[2] = _rehash(rows[2] | {"recorded_at": earlier})
+    _rewrite(_log(workspace), rows)
+    problems = _vrp.verify_log(_log(workspace), "stage_impression")[1]
+    assert any("goes back in time" in p for p in problems)
+
+
+def test_chain_detects_duplicate_and_malformed(workspace: Path) -> None:
+    rows = _three(workspace)
+    _rewrite(_log(workspace), [rows[0], rows[0]])
+    with _log(workspace).open("a", encoding="utf-8") as stream:
+        stream.write("{not json\n")
+    problems = _vrp.verify_log(_log(workspace), "stage_impression")[1]
+    assert any("duplicate event_id" in p for p in problems)
+    assert any("malformed" in p for p in problems)
+
+
+def test_writer_refuses_to_extend_a_broken_chain(workspace: Path) -> None:
+    rows = _three(workspace)
+    rows[0]["stage"] = "brief"
+    _rewrite(_log(workspace), rows)
+    with pytest.raises(ValueError, match="fail integrity"):
+        records.record_impression(_impression(IMPRESSION_JA))
+    assert (
+        records.record_decision(_decision("songs/demo/song.abc"))["verdict"] == "pass"
+    )
+    assert records.records_summary()["verdict"] == "unknown"
+
+
+def test_legacy_v1_log_is_archived(workspace: Path) -> None:
+    log = _log(workspace)
+    log.parent.mkdir(parents=True)
+    log.write_text(json.dumps({"schema_version": 1, "kind": "stage_impression"}) + "\n")
+    assert _vrp.verify_log(log, "stage_impression") == ([], [])
+    records.record_impression(_impression())
+    assert (log.parent / "impressions.v1.jsonl").is_file()
+    assert _vrp.verify_log(log, "stage_impression")[1] == []
+
+
+# --- decisions ------------------------------------------------------------
+
+
+def test_record_decision_requires_principled_choice(workspace: Path) -> None:
+    record = records.record_decision(_decision("songs/demo/song.abc"))["record"]
+    digest = hashlib.sha256(
+        (workspace / "songs" / "demo" / "song.abc").read_bytes()
+    ).hexdigest()
+    assert record["evidence"][0] == {"path": "songs/demo/song.abc", "sha256": digest}
+    assert record["evidence"][1]["reference"].startswith("IPC")
+    assert HOOK_RECORDS.record_errors("decision", record) == []
+    for key, value in (
+        ("options", _decision("songs/demo/song.abc")["options"][:1]),
+        ("chosen", "teleport"),
+        ("rationale", "because"),
+        ("principles", []),
+        ("principles", ["vibes"]),
+        ("risks", []),
+        ("evidence", []),
+    ):
+        with pytest.raises(ValidationError):
+            records.record_decision(_decision("songs/demo/song.abc") | {key: value})
+    with pytest.raises(ValidationError):
+        records.record_decision(_decision("songs/demo/song.abc") | {"surprise": 1})
+
+
+def test_decision_impression_refs_must_resolve(workspace: Path) -> None:
+    _connectivity(workspace)
+    sister = _sister_impression(
+        workspace, "circuit", "circuit/board.connectivity.json", SISTER_TEXT
+    )
+    good = {"system": "circuit", "event_id": sister["event_id"]}
+    record = records.record_decision(
+        _decision("songs/demo/song.abc") | {"impression_refs": [good]}
+    )
+    assert record["record"]["impression_refs"] == [good]
+    bad = {"system": "circuit", "event_id": "a" * 64}
+    with pytest.raises(ValueError, match="unresolved refs"):
+        records.record_decision(
+            _decision("songs/demo/song.abc") | {"impression_refs": [bad]}
+        )
+
+
+# --- reading sister impressions --------------------------------------------
+
+
+def test_upstream_must_resolve(workspace: Path) -> None:
+    _connectivity(workspace)
+    sister = _sister_impression(
+        workspace, "circuit", "circuit/board.connectivity.json", SISTER_TEXT
+    )
+    effect = "keyed the J1 housing so a mis-mate cannot put VBUS on a signal cavity"
+    entry = {
+        "system": "circuit",
+        "event_id": sister["event_id"],
+        "disposition": "adopted",
+        "effect": effect,
+        "concern_ids": ["c1"],
+    }
+    assert records.record_impression(_impression(upstream=[entry]))["verdict"] == "pass"
+    for broken, message in (
+        (entry | {"event_id": "b" * 64}, "has no impression"),
+        (entry | {"system": "sim"}, "no records for sim"),
+        (entry | {"concern_ids": ["c9"]}, "are not in that impression"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            records.record_impression(_impression(IMPRESSION_B, upstream=[broken]))
+    log = workspace / "observations" / "circuit" / "impressions.jsonl"
+    log.write_text(
+        log.read_text(encoding="utf-8").replace("VBUS", "VDD", 1), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="fail integrity"):
+        records.record_impression(_impression(IMPRESSION_C, upstream=[entry]))
+
+
+def test_read_receipt_resolves_bound_impressions(workspace: Path) -> None:
+    source = _connectivity(workspace)
+    sister = _sister_impression(
+        workspace, "circuit", "circuit/board.connectivity.json", SISTER_TEXT
+    )
+    read = records.record_read({"artifact": str(source), "producer": "circuit"})[
+        "record"
+    ]
+    assert read["refs"] == [{"system": "circuit", "event_id": sister["event_id"]}]
+    assert read["unresolved"] == []
+    mech = workspace / "mech.envelope.json"
+    mech.write_text("{}", encoding="utf-8")
+    lonely = records.record_read({"artifact": "mech.envelope.json", "producer": "mech"})
+    assert lonely["record"]["refs"] == []
+    assert lonely["record"]["unresolved"]
+
+
+def test_explicit_impression_refs_in_artifact(workspace: Path) -> None:
+    source = _connectivity(workspace)
+    sister = _sister_impression(
+        workspace, "circuit", "circuit/board.connectivity.json", SISTER_TEXT
+    )
+    refs_in_doc: list[dict[str, str]] = [
+        {"system": "circuit", "event_id": sister["event_id"]}
+    ]
+    doc = {"connectors": ["J1"], "impression_refs": refs_in_doc}
+    source.write_text(json.dumps(doc), encoding="utf-8")
+    refs, unresolved = records.impressions_for_artifact(source, "circuit")
+    assert refs == [{"system": "circuit", "event_id": sister["event_id"]}]
+    assert unresolved == []
+    refs_in_doc.append({"system": "circuit", "event_id": "c" * 64})
+    source.write_text(json.dumps(doc), encoding="utf-8")
+    _, unresolved = records.impressions_for_artifact(source, "circuit")
+    assert any("has no impression" in u for u in unresolved)
+
+
+# --- loop guards ------------------------------------------------------------
+
+
+def test_disputed_concern_cannot_ping_pong(workspace: Path) -> None:
+    mine = records.record_impression(
+        _impression(
+            facets=_facets(
+                concerns=[
+                    {
+                        "id": "c1",
+                        "text": "circuit routes VBUS beside the I2C clock on J1",
+                        "severity": "error",
+                        "about": "circuit",
+                        "anchor": "W1",
+                    }
+                ]
+            )
+        )
+    )["record"]
+    effect = "VBUS beside SCL is protected by the keyed housing, so no layout change"
+    _sister_impression(
+        workspace,
+        "circuit",
+        "songs/demo/song.abc",
+        SISTER_TEXT.replace("J1", "W1"),
+        claims=[
+            {"text": "W1 is listed", "anchor": "W1", "artifact": "songs/demo/song.abc"},
+            {
+                "text": "C2.1 is listed",
+                "anchor": "C2.1",
+                "artifact": "songs/demo/song.abc",
+            },
+        ],
+        upstream=[
+            {
+                "system": "bard",
+                "event_id": mine["event_id"],
+                "disposition": "disputed",
+                "effect": effect,
+                "concern_ids": ["c1"],
+            }
+        ],
+    )
+    again = _facets(
+        concerns=[
+            {
+                "id": "c2",
+                "text": "circuit routes VBUS beside the I2C clock on J1 again",
+                "severity": "error",
+                "about": "circuit",
+            }
+        ]
+    )
+    with pytest.raises(ValueError, match="repeats one circuit disputed"):
+        records.record_impression(_impression(IMPRESSION_B, facets=again))
+    (workspace / "songs" / "demo" / "song.abc").write_text(
+        "W1,C1.1,C2.1\nW2,C1.2,C2.2\n"
+    )
+    assert (
+        records.record_impression(_impression(IMPRESSION_B, facets=again))["verdict"]
+        == "pass"
+    )
+
+
+def _with_insight(text: str, **insight: Any) -> dict[str, Any]:
+    base = {
+        "id": "i1",
+        "hypothesis": "a keyed J1 housing removes the mis-mate risk without moving VBUS",
+        "proposed_change": "switch J1 to the keyed variant",
+        "expected_effect": "mis-mate becomes mechanically impossible",
+        "test": "connector keying gate on the contract",
+        "target": "bard",
+    }
+    return _impression(text, insights=[base | insight])
+
+
+def test_insight_lifecycle_and_no_rejected_reproposal(workspace: Path) -> None:
+    origin = records.record_impression(_with_insight(IMPRESSION))["record"]
+    ref = {"system": "bard", "event_id": origin["event_id"], "insight_id": "i1"}
+    reason = "the keyed variant is not stocked in the required 2.54 mm pitch at all"
+    evidence = [{"reference": "vendor catalogue 2026"}]
+    with pytest.raises(ValueError, match="cannot move from proposed to adopted"):
+        records.record_insight(
+            {
+                "insight": ref,
+                "status": "adopted",
+                "reason": reason,
+                "evidence": evidence,
+                "gate_verdicts": [{"gate": "keying", "verdict": "pass"}],
+                "decision_refs": ["d" * 64],
+            }
+        )
+    records.record_insight(
+        {"insight": ref, "status": "tried", "reason": reason, "evidence": evidence}
+    )
+    with pytest.raises(ValueError, match="deterministic gate verdict of pass"):
+        records.record_insight(
+            {
+                "insight": ref,
+                "status": "adopted",
+                "reason": reason,
+                "evidence": evidence,
+            }
+        )
+    records.record_insight(
+        {"insight": ref, "status": "rejected", "reason": reason, "evidence": evidence}
+    )
+    with pytest.raises(ValueError, match="cannot move from rejected"):
+        records.record_insight(
+            {"insight": ref, "status": "tried", "reason": reason, "evidence": evidence}
+        )
+    with pytest.raises(ValueError, match="repeats rejected"):
+        records.record_impression(_with_insight(IMPRESSION_B, id="i2"))
+    revisit = _with_insight(
+        IMPRESSION_B,
+        id="i2",
+        revisits=ref,
+        revisit_reason="a second source now stocks the keyed housing in 2.54 mm pitch",
+    )
+    assert records.record_impression(revisit)["verdict"] == "pass"
+    digest = _vrp.digest(workspace)
+    assert {i["status"] for i in digest["insights"]} == {"rejected", "proposed"}
+
+
+def test_blind_review_rounds_are_finite(workspace: Path) -> None:
+    with pytest.raises(ValueError, match="needs a primary review"):
+        records.record_vision_review(_vision("blind", impression=IMPRESSION_B))
+    primary = records.record_vision_review(_vision())["record"]
+    blind = records.record_vision_review(
+        _vision(
+            "blind",
+            impression=IMPRESSION_B.replace("W1", "W1 "),
+            findings=[
+                {"category": "missing_dimension", "severity": "error", "note": "S1"}
+            ],
+        )
+    )["record"]
+    with pytest.raises(ValueError, match="already has its blind review"):
+        records.record_vision_review(_vision("blind", impression=IMPRESSION_C + " W1."))
+    with pytest.raises(ValueError, match="only allowed after a round-1 reconcile"):
+        records.record_vision_review(
+            _vision("tiebreak", impression=IMPRESSION_C + " W1.")
+        )
+    first = records.record_reconcile(
+        {"reviews": [primary["event_id"], blind["event_id"]]}
+    )
+    assert first["record"]["outcome"] == "disagree"
+    with pytest.raises(ValueError, match="already reconciled"):
+        records.record_reconcile({"reviews": [primary["event_id"], blind["event_id"]]})
+    tiebreak = records.record_vision_review(
+        _vision(
+            "tiebreak",
+            impression=IMPRESSION_C + " W1 stays.",
+            findings=[{"category": "design_intent", "severity": "info", "note": "x"}],
+        )
+    )["record"]
+    with pytest.raises(ValueError, match="already has its tiebreak"):
+        records.record_vision_review(_vision("tiebreak", impression=IMPRESSION_JA))
+    ids = [primary["event_id"], blind["event_id"], tiebreak["event_id"]]
+    final = records.record_reconcile({"reviews": ids})["record"]
+    assert final["round"] == 2
+    assert final["outcome"] == "unresolved"
+    with pytest.raises(ValueError, match="already reconciled"):
+        records.record_reconcile({"reviews": ids})
+
+
+def test_vision_lookback_covers_every_claim(workspace: Path) -> None:
+    with pytest.raises(ValueError, match="lookback misses claims"):
+        records.record_vision_review(_vision(lookback=[]))
+    refuted = [{"claim": 0, "verdict": "refuted", "note": "W1 label is actually W7"}]
+    with pytest.raises(ValueError, match="refuted claim must surface"):
+        records.record_vision_review(_vision(lookback=refuted, findings=[]))
+    event = records.record_vision_review(
+        _vision(image_path=None, source_event_id="a" * 64, claims=LIST_CLAIM)
+    )
+    assert event["record"].get("image_sha256") is None
+
+
+def _song(root: Path, to: str = "wire", song_id: str = "ode-to-w1") -> Path:
+    verse = (
+        "Along the bundle W1 hums, beside the motor's restless drums, keep it apart."
+    )
+    doc = {
+        "kind": "bard_song_delivery",
+        "schema_version": 1,
+        "id": song_id,
+        "system": "bard",
+        "to": to,
+        "title": "Ode to W1",
+        "verse": verse,
+        "song": {
+            "path": "songs/demo/song.abc",
+            "sha256": _vrp.sha256_file(root / "songs" / "demo" / "song.abc"),
+        },
+        "impression_refs": [{"system": "bard", "event_id": "e" * 64}],
+        "reason": "wire carries the sense lead the song is about",
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    path = root / "liaison" / f"{song_id}.bard-song.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return path
+
+
+# --- cross-plugin search ------------------------------------------------------
+
+
+def test_digest_and_search_across_plugins(workspace: Path) -> None:
+    _connectivity(workspace)
+    sister = _sister_impression(
+        workspace, "circuit", "circuit/board.connectivity.json", SISTER_TEXT
+    )
+    records.record_impression(_impression())
+    digest = records.records_digest()
+    refs = {c["ref"] for c in digest["open_concerns"]}
+    assert f"circuit:{sister['event_id']}#c1" in refs
+    assert digest["open_concerns"][0]["severity"] == "error"
+    assert digest["systems"]["circuit"]["integrity"] == "ok"
+    hits = records.records_search({"query": "VBUS", "severity": "error"})["results"]
+    assert [h["system"] for h in hits] == ["circuit"]
+    by_artifact = records.records_search({"artifact": "songs/demo"})["results"]
+    assert [h["system"] for h in by_artifact] == ["bard"]
+    with pytest.raises(ValueError, match="unknown search fields"):
+        records.records_search({"sql": "drop"})
+    log = workspace / "observations" / "circuit" / "impressions.jsonl"
+    log.write_text(log.read_text(encoding="utf-8") + "{broken\n", encoding="utf-8")
+    result = records.records_search({"query": "VBUS"})
+    assert result["verdict"] == "unknown"
+    assert result["results"] == []
+    assert "circuit" in result["integrity_problems"]
+
+
+# --- hook mirror ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("kind", "field"),
+    [
+        ("decision", "principles"),
+        ("decision", "options"),
+        ("decision", "rationale"),
+        ("decision", "evidence"),
+        ("decision", "risks"),
+        ("decision", "revisit_when"),
+        ("decision", "unknowns"),
+        ("decision", "prev_event_id"),
+        ("stage_impression", "impression"),
+        ("stage_impression", "artifacts"),
+        ("stage_impression", "facets"),
+        ("stage_impression", "claims"),
+        ("stage_impression", "writer"),
+        ("vision_review", "impression"),
+        ("vision_review", "model"),
+        ("vision_review", "lookback"),
+        ("vision_review", "recorded_at"),
+        ("vision_review", "event_id"),
+    ],
+)
+def test_hook_mirror_rejects_mutations(workspace: Path, kind: str, field: str) -> None:
+    def song() -> dict[str, Any]:
+        _song(workspace)
+        return records.record_song_receipt(
+            {
+                "delivery": "liaison/ode-to-w1.bard-song.json",
+                "felt": FELT,
+                "prompted_review": False,
+            }
+        )
+
+    writers = {
+        "decision": lambda: records.record_decision(_decision("songs/demo/song.abc")),
+        "stage_impression": lambda: records.record_impression(_impression()),
+        "vision_review": lambda: records.record_vision_review(_vision()),
+        "song_receipt": song,
+    }
+    record = dict(writers[kind]()["record"])
+    assert HOOK_RECORDS.record_errors(kind, record) == []
+    del record[field]
+    assert HOOK_RECORDS.record_errors(kind, record)
+    record[field] = ""
+    assert HOOK_RECORDS.record_errors(kind, record)
+
+
+# --- Stop hook ---------------------------------------------------------------
+
+
+def _hook(
+    mode: str, root: Path, session: str = "s1"
+) -> subprocess.CompletedProcess[str]:
+    env = dict(os.environ) | {"OPENHANDS_PROJECT_DIR": str(root)}
+    return subprocess.run(
+        [sys.executable, str(HOOK), mode],
+        input=json.dumps({"session_id": session, "working_dir": str(root)}),
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+
+def _status(root: Path) -> dict[str, Any]:
+    path = root / records.RECORDS_DIR / "records-status.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_stop_without_marker_allows(tmp_path: Path) -> None:
+    assert _hook("stop", tmp_path).returncode == 0
+
+
+def test_stop_clean_session_passes(tmp_path: Path) -> None:
+    assert _hook("session-start", tmp_path).returncode == 0
+    result = _hook("stop", tmp_path)
+    assert result.returncode == 0, result.stdout
+    assert _status(tmp_path)["verdict"] == "pass"
+
+
+def test_stop_enforces_records(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENHANDS_PROJECT_DIR", str(tmp_path))
+    assert _hook("session-start", tmp_path).returncode == 0
+    out = tmp_path / "songs" / "demo"
+    out.mkdir(parents=True)
+    (out / "song.abc").write_text("W1,C1.1,C2.1\n", encoding="utf-8")
+    log = tmp_path / records.RECORDS_DIR
+    event = {"event_id": "b" * 64, "question": "is it legible?", "session_id": "s1"}
+    (log / "vision-tool-events.jsonl").write_text(
+        json.dumps(event) + "\n", encoding="utf-8"
+    )
+
+    denied = _hook("stop", tmp_path)
+    assert denied.returncode == 2
+    payload = json.loads(denied.stdout)
+    assert payload["decision"] == "deny"
+    assert "songs/demo/song.abc" in payload["additionalContext"]
+    assert "vision tool event" in payload["additionalContext"]
+    assert "no decision record" in payload["additionalContext"]
+    assert "refusal 1/2" in payload["additionalContext"]
+    assert _status(tmp_path)["verdict"] == "fail"
+
+    records.record_decision(_decision("songs/demo/song.abc"))
+    records.record_impression(_impression())
+    records.record_vision_review(
+        _vision(image_path=None, source_event_id="b" * 64, claims=LIST_CLAIM)
+    )
+    passed = _hook("stop", tmp_path)
+    assert passed.returncode == 0, passed.stdout
+    assert _status(tmp_path)["verdict"] == "pass"
+
+    (out / "song.abc").write_text("W1,C1.1,C2.1\nW2,C1.2,C2.2\n", encoding="utf-8")
+    stale = _hook("stop", tmp_path)
+    assert stale.returncode == 2
+    assert "no fresh stage_impression" in json.loads(stale.stdout)["reason"]
+
+    released = _hook("stop", tmp_path)
+    assert released.returncode == 0
+    assert json.loads(released.stdout)["decision"] == "allow"
+    assert "still unmet" in json.loads(released.stdout)["additionalContext"]
+    third = _hook("stop", tmp_path)
+    assert third.returncode == 0
+
+
+def test_stop_flags_broken_chain(tmp_path: Path) -> None:
+    assert _hook("session-start", tmp_path).returncode == 0
+    log = tmp_path / records.RECORDS_DIR
+    forged = {
+        "schema_version": 2,
+        "kind": "stage_impression",
+        "plugin": "bard",
+        "sequence": 1,
+        "prev_event_id": _vrp.GENESIS,
+        "event_id": "c" * 64,
+        "recorded_at": "2999-01-01T00:00:00+00:00",
+        "writer": {"plugin": "bard"},
+        "stage": "export",
+        "artifacts": [{"path": "songs/demo", "sha256": "d" * 64}],
+        "impression": "ok.",
+    }
+    (log / "impressions.jsonl").write_text(
+        json.dumps(forged) + "\n{not json\n", encoding="utf-8"
+    )
+    result = _hook("stop", tmp_path)
+    assert result.returncode == 2
+    reason = json.loads(result.stdout)["reason"]
+    assert "malformed" in reason
+    assert "event_id does not match" in reason
+    assert "invalid stage_impression" in reason
+
+
+def test_viewed_image_needs_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENHANDS_PROJECT_DIR", str(tmp_path))
+    assert _hook("session-start", tmp_path).returncode == 0
+    log = tmp_path / records.RECORDS_DIR
+    image = tmp_path / "photo.jpg"
+    image.write_bytes(b"\xff\xd8jpg")
+    digest = hashlib.sha256(b"\xff\xd8jpg").hexdigest()
+    observation = {
+        "event_id": "e" * 64,
+        "image_path": str(image),
+        "image_sha256": digest,
+        "session_id": "s1",
+    }
+    (log / "image-observations.jsonl").write_text(
+        json.dumps(observation) + "\n", encoding="utf-8"
+    )
+    assert _hook("stop", tmp_path).returncode == 2
+    claim = [{"text": "W1 is drawn on it", "anchor": "W1", "artifact": "photo.jpg"}]
+    records.record_vision_review(
+        _vision(image_path="photo.jpg", checklist="intake-image", claims=claim)
+    )
+    assert _hook("stop", tmp_path).returncode == 0
+
+
+def test_stop_requires_upstream_answer(workspace: Path) -> None:
+    assert _hook("session-start", workspace).returncode == 0
+    source = _connectivity(workspace)
+    sister = _sister_impression(
+        workspace, "circuit", "circuit/board.connectivity.json", SISTER_TEXT
+    )
+    records.record_read({"artifact": str(source), "producer": "circuit"})
+    denied = _hook("stop", workspace)
+    assert denied.returncode == 2
+    assert f"sister impression circuit:{sister['event_id'][:12]}" in denied.stdout
+    effect = "keyed the J1 housing so a mis-mate cannot put VBUS on a signal cavity"
+    upstream = [
+        {
+            "system": "circuit",
+            "event_id": sister["event_id"],
+            "disposition": "noted",
+            "effect": effect,
+        }
+    ]
+    records.record_decision(_decision("songs/demo/song.abc"))
+    records.record_impression(_impression(upstream=upstream))
+    assert _hook("stop", workspace).returncode == 0
+
+
+def test_stop_requires_dual_review_then_terminates(workspace: Path) -> None:
+    assert _hook("session-start", workspace).returncode == 0
+    records.record_decision(_decision("songs/demo/song.abc"))
+    records.record_impression(_impression())
+    primary = records.record_vision_review(_vision())["record"]
+    first = _hook("stop", workspace)
+    assert first.returncode == 2
+    assert "needs a blind second review" in first.stdout
+    blind = records.record_vision_review(
+        _vision(
+            "blind",
+            impression=IMPRESSION_B,
+            findings=[
+                {"category": "missing_dimension", "severity": "error", "note": "S1"}
+            ],
+            claims=[
+                {
+                    "text": "W1 is drawn",
+                    "anchor": "W1",
+                    "artifact": "songs/demo/score.png",
+                }
+            ],
+        )
+    )["record"]
+    records.record_reconcile({"reviews": [primary["event_id"], blind["event_id"]]})
+    second = _hook("stop", workspace)
+    assert second.returncode == 2
+    assert "one tiebreak review" in second.stdout
+    tiebreak = records.record_vision_review(
+        _vision(
+            "tiebreak",
+            impression=IMPRESSION_C + " W1 stays.",
+            findings=[{"category": "design_intent", "severity": "info", "note": "x"}],
+        )
+    )["record"]
+    records.record_reconcile(
+        {"reviews": [primary["event_id"], blind["event_id"], tiebreak["event_id"]]}
+    )
+    final = _hook("stop", workspace)
+    assert final.returncode == 0, final.stdout
+    status = _status(workspace)
+    assert status["verdict"] == "pass"
+    assert any("treat it as unknown" in w for w in status["warnings"])
+
+
+def test_session_start_recalls_sister_concerns(workspace: Path) -> None:
+    _connectivity(workspace)
+    _sister_impression(
+        workspace, "circuit", "circuit/board.connectivity.json", SISTER_TEXT
+    )
+    _song(workspace)
+    result = _hook("session-start", workspace, session="s2")
+    assert result.returncode == 0
+    context = json.loads(result.stdout)["additionalContext"]
+    assert "J1 pin 3 carries VBUS" in context
+    assert "bard sent you a song" not in context
+
+
+def test_records_policy_matches_core() -> None:
+    policy = HOOK_RECORDS.load_policy(SCRIPTS.parents[1])
+    assert policy["plugin"] == records.PLUGIN
+    assert policy["records_dir"] == records.RECORDS_DIR.as_posix()
+    assert policy["schema_version"] == records.SCHEMA_VERSION == 2
+    assert policy["dual_review_globs"]
+    assert HOOK_RECORDS.IMPRESSION_MIN_CHARS == records.IMPRESSION_MIN_CHARS
+    assert HOOK_RECORDS.LOG_FILES == records.LOG_FILES
+    assert records._vrp.SEVERITIES == HOOK_RECORDS.SEVERITIES
+    hooks = json.loads((SCRIPTS.parent / "hooks.json").read_text(encoding="utf-8"))
+    for event, mode in (("session_start", "session-start"), ("stop", "stop")):
+        commands = [h["command"] for g in hooks[event] for h in g["hooks"]]
+        assert any(f'require_records.py" {mode}' in c for c in commands)
+
+
+# --- blind guard ---------------------------------------------------------------
+
+
+def _guard(tool: str, tool_input: dict[str, Any]) -> int:
+    return subprocess.run(
+        [sys.executable, str(BLIND_GUARD)],
+        input=json.dumps({"tool_name": tool, "tool_input": tool_input}),
+        capture_output=True,
+        text=True,
+        check=False,
+    ).returncode
+
+
+@pytest.mark.parametrize(
+    ("tool", "tool_input"),
+    [
+        (
+            "file_editor",
+            {"command": "view", "path": "/w/observations/bard/vision-reviews.jsonl"},
+        ),
+        ("terminal", {"command": "cat observations/bard/impressions.jsonl"}),
+        ("terminal", {"command": "ls observations"}),
+        (
+            "grep",
+            {
+                "pattern": "W1",
+                "path": "songs/demo/review-visual-harness-diagram.advisory.json",
+            },
+        ),
+        ("glob", {"pattern": "**/*.advisory.json"}),
+        ("file_editor", {"command": "view", "path": "liaison/r1.ux-response.json"}),
+    ],
+)
+def test_blind_guard_denies_earlier_reviews(
+    tool: str, tool_input: dict[str, Any]
+) -> None:
+    assert _guard(tool, tool_input) == 2
+
+
+@pytest.mark.parametrize(
+    ("tool", "tool_input"),
+    [
+        ("file_editor", {"command": "view", "path": "songs/demo/score.png"}),
+        ("terminal", {"command": "cat demo.contract.json"}),
+        ("inspect_image_with_vision", {"question": "observations of the drawing?"}),
+    ],
+)
+def test_blind_guard_allows_the_image_and_contract(
+    tool: str, tool_input: dict[str, Any]
+) -> None:
+    assert _guard(tool, tool_input) == 0
+
+
+# --- bard specifics -----------------------------------------------------------
+
+
+def test_writer_uses_the_shared_hook_module() -> None:
+    assert Path(_vrp.__file__).resolve() == (SCRIPTS / "_records.py").resolve()
+
+
+def _delivery(event_id: str, **overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": "ode-to-j1",
+        "to": "wire",
+        "title": "Ode to J1",
+        "verse": "Beside the clock on pin four the VBUS line waits, key the plug before it mates.",
+        "song": "songs/demo/song.abc",
+        "impression_refs": [{"system": "circuit", "event_id": event_id}],
+        "reason": "wire owns the J1 housing the circuit impression worries about",
+    }
+    return payload | overrides
+
+
+def test_song_delivery_binds_the_song_and_is_immutable(workspace: Path) -> None:
+    _connectivity(workspace)
+    sister = _sister_impression(
+        workspace, "circuit", "circuit/board.connectivity.json", SISTER_TEXT
+    )
+    out = records.deliver_song(_delivery(sister["event_id"]))
+    doc = json.loads(Path(out["path"]).read_text(encoding="utf-8"))
+    assert Path(out["path"]).name == "ode-to-j1.bard-song.json"
+    assert _vrp.song_delivery_errors(doc) == []
+    assert doc["song"] == {
+        "path": "songs/demo/song.abc",
+        "sha256": _vrp.sha256_file(workspace / "songs" / "demo" / "song.abc"),
+    }
+    with pytest.raises(ValueError, match="immutable"):
+        records.deliver_song(_delivery(sister["event_id"]))
+    assert not (workspace / "observations" / "bard").exists()
+
+
+def test_song_delivery_refuses_loops_and_bad_targets(workspace: Path) -> None:
+    _connectivity(workspace)
+    sister = _sister_impression(
+        workspace, "circuit", "circuit/board.connectivity.json", SISTER_TEXT
+    )
+    with pytest.raises(ValueError, match="unresolved impression_refs"):
+        records.deliver_song(_delivery("e" * 64))
+    with pytest.raises(ValueError, match="sister plugin"):
+        records.deliver_song(_delivery(sister["event_id"], to="bard"))
+    with pytest.raises(ValueError, match="unknown song_delivery fields"):
+        records.deliver_song(_delivery(sister["event_id"], compose_reply=True))
+    with pytest.raises(ValueError, match="does not exist"):
+        records.deliver_song(
+            _delivery(sister["event_id"], song="songs/demo/missing.abc")
+        )
+    assert not (workspace / "liaison").exists()
+
+
+def test_bard_never_receipts_its_own_song(workspace: Path) -> None:
+    _song(workspace, to="mech", song_id="ode-to-lid")
+    receipt = {
+        "delivery": "liaison/ode-to-lid.bard-song.json",
+        "felt": FELT,
+        "prompted_review": False,
+    }
+    with pytest.raises(ValueError, match="addressed to mech"):
+        records.record_song_receipt(receipt)
+
+
+def test_cli_records_v2_kinds(workspace: Path) -> None:
+    cli = REPO / "plugins" / "bard" / "scripts" / "bard_cli.py"
+
+    def run(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(cli), "record", *args, "--root", str(workspace)],
+            input=stdin,
             capture_output=True,
             text=True,
             check=False,
         )
-        if proc.returncode != 0:
-            bad.append(f"{where}: {args} -> exit {proc.returncode}")
-    assert not bad, "\n".join(bad)
+
+    made = run("impression", "--json", "-", stdin=json.dumps(_impression()))
+    assert made.returncode == 0, made.stderr
+    assert json.loads(made.stdout)["record"]["plugin"] == "bard"
+    digest = run("digest")
+    assert digest.returncode == 0, digest.stderr
+    assert "bard" in json.loads(digest.stdout)["systems"]
+    found = run("search", "--json", "-", stdin=json.dumps({"query": "sense lead"}))
+    assert found.returncode == 0, found.stderr

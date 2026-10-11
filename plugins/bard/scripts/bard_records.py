@@ -1,32 +1,30 @@
-"""Writers for the VibeBB Record Protocol (VRP) v1 — bard port.
+"""VibeBB Record Protocol (VRP) v2 writers for bard — standard library only.
 
-bard has no ``src`` package and no MCP server, so the typed record writers
-live here as a plugin script, standard library only. They mirror
-``src/wire/records.py`` in the wire-agent repository: the same input fields
-and strictness (unknown keys rejected), the same written record JSON shape
-(``model_dump(exclude_none=True)`` equivalent), the same ``event_id``
-identity construction, and the same workspace-path containment.
+The rules live in ``hooks/scripts/_records.py``, the family's canonical
+stdlib module (byte-identical to wire-agent's ``_vrp.py``). Each writer
+checks the payload shape, hashes the files it cites, re-runs the same
+validators the Stop hook uses, and appends a chained line under
+``observations/bard/``: ``prev_event_id`` links to the previous line and
+``event_id`` is the sha256 of the line's canonical content.
 
-Every built record is re-validated with the stdlib mirror in
-``hooks/scripts/_records.py`` before it is appended, so a line that would
-fail the Stop hook is rejected at write time. Records are advisory evidence
-(L2): they never change a deterministic gate verdict.
+Write-time checks need the workspace and are only done here: claims must
+quote tokens found in the cited artifact, a new impression must not be a
+near copy of an earlier one, upstream citations must resolve to intact
+sister logs, a disputed concern cannot return on unchanged bytes, a
+rejected insight needs ``revisits``, and review rounds are capped.
 
-Usage through ``bard_cli.py``::
-
-    python3 bard_cli.py record decision --json <file|-> [--root <workspace>]
-    python3 bard_cli.py record impression --json <file|-> [--root <workspace>]
-    python3 bard_cli.py record vision-review --json <file|-> [--root <workspace>]
-    python3 bard_cli.py record status [--root <workspace>]
+bard also writes song deliveries (``liaison/<id>.bard-song.json``). A
+delivery may only cite impressions; receipts are never song material, so a
+sister's receipt cannot start another song. Records are advisory evidence
+and never change a gate verdict.
 """
 
 from __future__ import annotations
 
-import hashlib
+import fcntl
 import importlib.util
 import json
 import os
-import re
 import sys
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -37,7 +35,7 @@ _HOOKS_SCRIPTS = Path(__file__).resolve().parents[1] / "hooks" / "scripts"
 
 
 def _load_records_mirror() -> Any:
-    """Import the shared stdlib VRP validator from hooks/scripts."""
+    """Import the shared stdlib VRP module from hooks/scripts."""
     sys.path.insert(0, str(_HOOKS_SCRIPTS))
     spec = importlib.util.spec_from_file_location(
         "_records", _HOOKS_SCRIPTS / "_records.py"
@@ -49,32 +47,110 @@ def _load_records_mirror() -> Any:
     return module
 
 
-_records = _load_records_mirror()
+_vrp = _load_records_mirror()
 
 PLUGIN: Final = "bard"
-SCHEMA_VERSION: Final = 1
-RECORDS_DIR: Final = Path("observations") / PLUGIN
-IMPRESSION_MIN_CHARS: Final = 400
-IMPRESSION_MIN_SENTENCES: Final = 3
-RATIONALE_MIN_CHARS: Final = 200
-PRINCIPLE_MIN_CHARS: Final = 12
-QUESTION_MIN_CHARS: Final = 10
-LOG_FILES: Final[dict[str, str]] = {
-    "decision": "decisions.jsonl",
-    "stage_impression": "impressions.jsonl",
-    "vision_review": "vision-reviews.jsonl",
-}
-SKIP_PARTS: Final = frozenset(_records.SKIP_PARTS)
-SEVERITIES: Final = frozenset(_records.SEVERITIES)
-DECIDERS: Final = frozenset(_records.DECIDERS)
-_SLUG_RE: Final = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
-_SHA256_RE: Final = re.compile(r"^[0-9a-f]{64}$")
+SCHEMA_VERSION: Final = _vrp.SCHEMA_VERSION
+RECORDS_DIR: Final = Path(_vrp.OBSERVATIONS_DIR) / PLUGIN
+IMPRESSION_MIN_CHARS: Final = _vrp.IMPRESSION_MIN_CHARS
+IMPRESSION_MIN_SENTENCES: Final = _vrp.IMPRESSION_MIN_SENTENCES
+RATIONALE_MIN_CHARS: Final = _vrp.RATIONALE_MIN_CHARS
+LOG_FILES: Final[dict[str, str]] = dict(_vrp.LOG_FILES)
 
-sentence_count = _records.sentence_count
-sha256_file = _records.sha256_file
-tree_sha256 = _records.tree_sha256
-impression_errors = _records.impression_errors
-record_errors = _records.record_errors
+sentence_count = _vrp.sentence_count
+sha256_file = _vrp.sha256_file
+tree_sha256 = _vrp.tree_sha256
+impression_errors = _vrp.impression_errors
+record_errors = _vrp.record_errors
+
+
+def impression_is_prose(text: str) -> str:
+    """Return ``text`` when it meets the impression prose rules, else raise."""
+    errors = _vrp.impression_errors(text)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return text
+
+
+_IMPRESSION_KEYS: Final = frozenset(
+    {
+        "impression",
+        "facets",
+        "claims",
+        "insights",
+        "upstream",
+        "confidence",
+        "unknowns",
+        "delta",
+    }
+)
+_ALLOWED: Final[dict[str, frozenset[str]]] = {
+    "decision": frozenset(
+        {
+            "id",
+            "stage",
+            "question",
+            "principles",
+            "options",
+            "chosen",
+            "rationale",
+            "evidence",
+            "assumptions",
+            "unknowns",
+            "risks",
+            "revisit_when",
+            "decided_by",
+            "impression_refs",
+            "insight_refs",
+        }
+    ),
+    "stage_impression": _IMPRESSION_KEYS | {"stage", "artifacts"},
+    "vision_review": _IMPRESSION_KEYS
+    | {
+        "image_path",
+        "source_event_id",
+        "model",
+        "checklist",
+        "reviewer",
+        "findings",
+        "lookback",
+    },
+    "insight_status": frozenset(
+        {
+            "insight",
+            "status",
+            "reason",
+            "evidence",
+            "gate_verdicts",
+            "decision_refs",
+            "revisit_when",
+        }
+    ),
+    "review_reconcile": frozenset({"reviews"}),
+    "song_receipt": frozenset({"delivery", "felt", "prompted_review", "follow_up"}),
+    "upstream_read": frozenset({"artifact", "producer"}),
+    "song_delivery": frozenset(
+        {"id", "to", "title", "verse", "song", "impression_refs", "reason"}
+    ),
+}
+_DEFAULTS: Final[dict[str, dict[str, Any]]] = {
+    "decision": {
+        "assumptions": [],
+        "unknowns": [],
+        "decided_by": "agent",
+        "impression_refs": [],
+        "insight_refs": [],
+    },
+    "stage_impression": {"insights": [], "upstream": [], "unknowns": []},
+    "vision_review": {
+        "insights": [],
+        "upstream": [],
+        "unknowns": [],
+        "reviewer": "primary",
+        "findings": [],
+    },
+    "insight_status": {"gate_verdicts": [], "decision_refs": []},
+}
 
 
 def workspace_root() -> Path:
@@ -113,233 +189,43 @@ def records_dir(root: Path | None = None) -> Path:
     return (root or workspace_root()) / RECORDS_DIR
 
 
-# ---------------------------------------------------------------------------
-# input validation (strict: unknown keys rejected, same limits as wire)
+def _drop_none(value: Any) -> Any:
+    if isinstance(value, dict):
+        items = cast(dict[str, Any], value).items()
+        return {k: _drop_none(v) for k, v in items if v is not None}
+    if isinstance(value, list):
+        return [_drop_none(v) for v in cast(list[Any], value)]
+    return value
 
 
-def _fail(message: str) -> None:
-    raise ValueError(message)
+def _payload(kind: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Reject unknown keys, apply the documented defaults, drop nulls."""
+    if not isinstance(payload, Mapping):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise ValueError("payload must be a JSON object")
+    unknown = sorted(set(payload) - _ALLOWED[kind])
+    if unknown:
+        raise ValueError(f"unknown {kind} fields: {unknown}")
+    body: dict[str, Any] = {**_DEFAULTS.get(kind, {}), **dict(payload)}
+    facets = body.get("facets")
+    if isinstance(facets, dict) and "concerns" not in facets:
+        body["facets"] = {**cast(dict[str, Any], facets), "concerns": []}
+    return cast(dict[str, Any], _drop_none(body))
 
 
-def _need(cond: bool, message: str) -> None:
-    if not cond:
-        _fail(message)
+def _strings(body: Mapping[str, Any], key: str) -> list[str]:
+    value = body.get(key)
+    if not isinstance(value, list) or not all(
+        isinstance(v, str) for v in cast(list[Any], value)
+    ):
+        raise ValueError(f"{key} must be a list of strings")
+    return cast(list[str], value)
 
 
-def _is_str(value: Any, min_chars: int = 1) -> bool:
-    return isinstance(value, str) and len(value.strip()) >= min_chars
-
-
-def _str_list(value: Any, min_items: int, min_chars: int, field: str) -> list[str]:
-    _need(isinstance(value, list), f"{field} must be a list of strings")
-    items = list(value)
-    _need(len(items) >= min_items, f"{field} needs at least {min_items} item(s)")
-    for item in items:
-        _need(
-            isinstance(item, str) and len(item.strip()) >= min_chars,
-            f"{field} entries need at least {min_chars} character(s)",
-        )
-    return items
-
-
-def _extra_keys(data: Mapping[str, Any], allowed: set[str]) -> list[str]:
-    return sorted(set(data) - allowed)
-
-
-def _impression_prose(value: Any) -> str:
-    """Reject a terse status line where a long-form impression is required."""
-    errors = impression_errors(value)
-    if errors:
-        _fail("; ".join(errors))
-    return value.strip()
-
-
-def _validate_option(raw: Any, index: int) -> dict[str, Any]:
-    where = f"options[{index}]"
-    _need(isinstance(raw, dict), f"{where} must be an object")
-    option = dict(raw)
-    _need(
-        not _extra_keys(option, {"name", "pros", "cons"}),
-        f"{where}: unknown keys {_extra_keys(option, {'name', 'pros', 'cons'})}",
-    )
-    name = option.get("name")
-    _need(_is_str(name), f"{where}.name is required")
-    pros = _str_list(option.get("pros"), 1, 1, f"{where}.pros")
-    cons = _str_list(option.get("cons"), 1, 1, f"{where}.cons")
-    return {"name": name, "pros": pros, "cons": cons}
-
-
-def _validate_evidence_input(raw: Any, index: int) -> dict[str, Any]:
-    where = f"evidence[{index}]"
-    _need(isinstance(raw, dict), f"{where} must be an object")
-    entry = dict(raw)
-    _need(
-        not _extra_keys(entry, {"path", "reference"}),
-        f"{where}: unknown keys {_extra_keys(entry, {'path', 'reference'})}",
-    )
-    path = entry.get("path")
-    reference = entry.get("reference")
-    _need(
-        path is not None or (isinstance(reference, str) and bool(reference.strip())),
-        f"{where} needs a path (bound by sha256) or a reference",
-    )
-    return {"path": path, "reference": reference}
-
-
-def _validate_finding(raw: Any, index: int) -> dict[str, Any]:
-    where = f"findings[{index}]"
-    _need(isinstance(raw, dict), f"{where} must be an object")
-    finding = dict(raw)
-    _need(
-        not _extra_keys(finding, {"category", "severity", "note"}),
-        f"{where}: unknown keys "
-        f"{_extra_keys(finding, {'category', 'severity', 'note'})}",
-    )
-    _need(_is_str(finding.get("category")), f"{where}.category is required")
-    _need(
-        finding.get("severity") in SEVERITIES,
-        f"{where}.severity must be one of {sorted(SEVERITIES)}",
-    )
-    _need(_is_str(finding.get("note")), f"{where}.note is required")
-    return {
-        "category": finding["category"],
-        "severity": finding["severity"],
-        "note": finding["note"],
-    }
-
-
-def _decision_body(payload: Mapping[str, Any]) -> dict[str, Any]:
-    data = dict(payload)
-    allowed = {
-        "id",
-        "stage",
-        "question",
-        "principles",
-        "options",
-        "chosen",
-        "rationale",
-        "evidence",
-        "assumptions",
-        "unknowns",
-        "risks",
-        "revisit_when",
-        "decided_by",
-    }
-    _need(not _extra_keys(data, allowed), f"unknown keys {_extra_keys(data, allowed)}")
-    for key in ("id", "stage"):
-        value = data.get(key)
-        _need(
-            isinstance(value, str) and _SLUG_RE.match(value) is not None,
-            f"{key} must be a lowercase slug",
-        )
-    _need(
-        _is_str(data.get("question"), QUESTION_MIN_CHARS),
-        f"question must state the decision in at least {QUESTION_MIN_CHARS} chars",
-    )
-    principles = _str_list(data.get("principles"), 1, PRINCIPLE_MIN_CHARS, "principles")
-    raw_options = data.get("options")
-    _need(
-        isinstance(raw_options, list) and len(raw_options) >= 2,
-        "options must list at least two considered alternatives",
-    )
-    options = [
-        _validate_option(item, i) for i, item in enumerate(cast(list[Any], raw_options))
-    ]
-    names = [o["name"] for o in options]
-    _need(len(set(names)) == len(names), "option names must be unique")
-    _need(data.get("chosen") in names, "chosen must name one of the options")
-    _need(
-        _is_str(data.get("rationale"), RATIONALE_MIN_CHARS),
-        f"rationale must explain the choice in at least {RATIONALE_MIN_CHARS} chars",
-    )
-    raw_evidence = data.get("evidence")
-    _need(
-        isinstance(raw_evidence, list) and len(raw_evidence) >= 1,
-        "evidence must cite at least one artifact (path) or reference",
-    )
-    evidence_in = [
-        _validate_evidence_input(item, i)
-        for i, item in enumerate(cast(list[Any], raw_evidence))
-    ]
-    assumptions = _str_list(data.get("assumptions", []), 0, 1, "assumptions")
-    unknowns = _str_list(data.get("unknowns", []), 0, 1, "unknowns")
-    risks = _str_list(data.get("risks"), 1, 1, "risks")
-    _need(
-        _is_str(data.get("revisit_when")),
-        "revisit_when must name the observation that would reopen the decision",
-    )
-    decided_by = data.get("decided_by", "agent")
-    _need(decided_by in DECIDERS, "decided_by must be 'agent' or 'user'")
-    return {
-        "id": data["id"],
-        "stage": data["stage"],
-        "question": data["question"],
-        "principles": principles,
-        "options": options,
-        "chosen": data["chosen"],
-        "rationale": data["rationale"],
-        "evidence": evidence_in,
-        "assumptions": assumptions,
-        "unknowns": unknowns,
-        "risks": risks,
-        "revisit_when": data["revisit_when"],
-        "decided_by": decided_by,
-    }
-
-
-def _impression_body(payload: Mapping[str, Any]) -> dict[str, Any]:
-    data = dict(payload)
-    allowed = {"stage", "artifacts", "impression"}
-    _need(not _extra_keys(data, allowed), f"unknown keys {_extra_keys(data, allowed)}")
-    stage = data.get("stage")
-    _need(
-        isinstance(stage, str) and _SLUG_RE.match(stage) is not None,
-        "stage must be a lowercase slug",
-    )
-    artifacts = _str_list(data.get("artifacts"), 1, 1, "artifacts")
-    impression = _impression_prose(data.get("impression"))
-    return {"stage": stage, "artifacts_in": artifacts, "impression": impression}
-
-
-def _vision_review_body(payload: Mapping[str, Any]) -> dict[str, Any]:
-    data = dict(payload)
-    allowed = {
-        "image_path",
-        "source_event_id",
-        "model",
-        "checklist",
-        "findings",
-        "impression",
-    }
-    _need(not _extra_keys(data, allowed), f"unknown keys {_extra_keys(data, allowed)}")
-    image_path = data.get("image_path")
-    source_event_id = data.get("source_event_id")
-    _need(
-        image_path is not None or source_event_id is not None,
-        "a vision review needs image_path or source_event_id",
-    )
-    _need(_is_str(data.get("model")), "model is required")
-    checklist = data.get("checklist")
-    _need(
-        isinstance(checklist, str) and _SLUG_RE.match(checklist) is not None,
-        "checklist must be a lowercase slug",
-    )
-    findings_in = data.get("findings", [])
-    _need(isinstance(findings_in, list), "findings must be a list")
-    findings = [_validate_finding(item, i) for i, item in enumerate(findings_in)]
-    impression = _impression_prose(data.get("impression"))
-    return {
-        "image_path": image_path,
-        "source_event_id": source_event_id,
-        "model": data["model"],
-        "checklist": checklist,
-        "findings": findings,
-        "impression": impression,
-    }
-
-
-# ---------------------------------------------------------------------------
-# appending
+def _text(body: Mapping[str, Any], key: str) -> str:
+    value = body.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{key} is required")
+    return value
 
 
 def _relative(value: str, root: Path) -> tuple[str, Path]:
@@ -352,51 +238,156 @@ def _relative(value: str, root: Path) -> tuple[str, Path]:
     return relative, path
 
 
+def _archive_legacy(log: Path) -> None:
+    records, _ = _vrp.load_jsonl(log)
+    if not _vrp.is_legacy(records):
+        return
+    index = 1
+    target = log.with_name(f"{log.stem}.v1.jsonl")
+    while target.exists():
+        index += 1
+        target = log.with_name(f"{log.stem}.v1-{index}.jsonl")
+    log.rename(target)
+
+
 def _append(kind: str, body: dict[str, Any], root: Path) -> dict[str, Any]:
     log = records_dir(root) / LOG_FILES[kind]
     log.parent.mkdir(parents=True, exist_ok=True)
-    existing = log.read_text(encoding="utf-8").splitlines() if log.is_file() else []
-    sequence = len([line for line in existing if line.strip()]) + 1
-    identity = {"kind": kind, "sequence": sequence, **body}
-    event_id = hashlib.sha256(
-        json.dumps(
-            identity, sort_keys=True, ensure_ascii=False, separators=(",", ":")
-        ).encode()
-    ).hexdigest()
-    record = {
-        "schema_version": SCHEMA_VERSION,
-        "kind": kind,
-        "plugin": PLUGIN,
-        "sequence": sequence,
-        "event_id": event_id,
-        "recorded_at": datetime.now(UTC).isoformat(),
-        **body,
-    }
-    # model_dump(exclude_none=True) equivalent: drop None-valued top-level fields.
-    validated = {k: v for k, v in record.items() if v is not None}
-    errors = record_errors(kind, validated)
-    if errors:
-        _fail("record fails the shared validator: " + "; ".join(errors))
-    with log.open("a", encoding="utf-8") as stream:
-        stream.write(
-            json.dumps(validated, ensure_ascii=False, separators=(",", ":")) + "\n"
-        )
-    return {"verdict": "pass", "kind": kind, "path": str(log), "record": validated}
+    with (log.parent / ".lock").open("a", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        _archive_legacy(log)
+        existing, problems = _vrp.verify_log(log, kind)
+        if problems:
+            raise ValueError(
+                f"{log.name} fails integrity, refusing to append: {problems[0]}."
+                " Move the"
+                " file aside (it stays as evidence) to start a new chain."
+            )
+        now = datetime.now(UTC)
+        last = _vrp.parse_time(existing[-1].get("recorded_at")) if existing else None
+        if last is not None and now.timestamp() < last:
+            raise ValueError(
+                "system clock is behind the last record; refusing to append"
+            )
+        writer: dict[str, Any] = {"plugin": PLUGIN}
+        for key, env in (("agent", "VRP_AGENT"), ("model", "VRP_MODEL")):
+            if os.environ.get(env, "").strip():
+                writer[key] = os.environ[env].strip()
+        record: dict[str, Any] = {
+            "schema_version": SCHEMA_VERSION,
+            "kind": kind,
+            "plugin": PLUGIN,
+            "sequence": len(existing) + 1,
+            "prev_event_id": _vrp.chain_head(existing),
+            "recorded_at": now.isoformat(),
+            "writer": writer,
+            **{key: value for key, value in body.items() if value is not None},
+        }
+        record["event_id"] = _vrp.compute_event_id(record)
+        errors = _vrp.record_errors(kind, record)
+        if errors:
+            raise ValueError(f"invalid {kind}: " + "; ".join(errors))
+        with log.open("a", encoding="utf-8") as stream:
+            stream.write(
+                json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+            )
+    return {"verdict": "pass", "kind": kind, "path": str(log), "record": record}
+
+
+def _workspace(
+    base: Path,
+) -> dict[str, tuple[dict[str, list[dict[str, Any]]], list[str]]]:
+    return _vrp.plugin_logs(base)
+
+
+def _own(
+    workspace: dict[str, tuple[dict[str, list[dict[str, Any]]], list[str]]],
+) -> dict[str, list[dict[str, Any]]]:
+    logs, problems = workspace.get(PLUGIN, ({}, []))
+    if problems:
+        raise ValueError(f"{PLUGIN} records fail integrity: {problems[0]}")
+    return logs
+
+
+def _context_errors(
+    kind: str, body: dict[str, Any], base: Path, artifacts: list[dict[str, str]]
+) -> list[str]:
+    workspace = _workspace(base)
+    own = _own(workspace)
+    draft = (
+        {"kind": kind, **body, "artifacts": artifacts}
+        if artifacts
+        else {"kind": kind, **body}
+    )
+    errors = _vrp.grounding_errors(draft, base)
+    errors += _vrp.novelty_errors(draft, own.get(kind, []))
+    errors += _vrp.upstream_resolution_errors(draft, workspace)
+    errors += _vrp.reraise_errors(draft, PLUGIN, workspace)
+    errors += _vrp.rejected_insight_errors(draft, workspace)
+    return errors
+
+
+def _hash_evidence(items: Any, base: Path) -> list[dict[str, Any]]:
+    if not isinstance(items, list) or not items:
+        raise ValueError("evidence must cite at least one path or reference")
+    evidence: list[dict[str, Any]] = []
+    for item in cast(list[Any], items):
+        if not isinstance(item, dict):
+            raise ValueError("evidence entries must be objects")
+        entry = cast(dict[str, Any], item)
+        if set(entry) - {"path", "reference"}:
+            raise ValueError(
+                f"unknown evidence fields: {sorted(set(entry) - {'path', 'reference'})}"
+            )
+        if isinstance(entry.get("path"), str):
+            relative, path = _relative(entry["path"], base)
+            evidence.append({"path": relative, "sha256": tree_sha256(path)})
+        elif isinstance(entry.get("reference"), str) and entry["reference"].strip():
+            evidence.append({"reference": entry["reference"]})
+        else:
+            raise ValueError("evidence needs a path (bound by sha256) or a reference")
+    return evidence
+
+
+def _refs(body: Mapping[str, Any], key: str) -> list[dict[str, Any]]:
+    value = body.get(key, [])
+    if not isinstance(value, list) or not all(
+        isinstance(v, dict) for v in cast(list[Any], value)
+    ):
+        raise ValueError(f"{key} must be a list of objects")
+    return cast(list[dict[str, Any]], value)
 
 
 def record_decision(
     payload: Mapping[str, Any], root: Path | None = None
 ) -> dict[str, Any]:
     base = (root or workspace_root()).resolve()
-    body = _decision_body(payload)
-    evidence: list[dict[str, Any]] = []
-    for item in body["evidence"]:
-        if item["path"] is not None:
-            relative, path = _relative(str(item["path"]), base)
-            evidence.append({"path": relative, "sha256": tree_sha256(path)})
-        else:
-            evidence.append({"reference": item["reference"]})
-    body["evidence"] = evidence
+    body = _payload("decision", payload)
+    body["evidence"] = _hash_evidence(body.get("evidence"), base)
+    workspace = _workspace(base)
+    problems = [
+        p
+        for ref in _refs(body, "impression_refs")
+        if (
+            p := _vrp.resolve_ref(
+                workspace, str(ref.get("system")), str(ref.get("event_id"))
+            )[1]
+        )
+    ]
+    for ref in _refs(body, "insight_refs"):
+        target, problem = _vrp.resolve_ref(
+            workspace, str(ref.get("system")), str(ref.get("event_id"))
+        )
+        ids = {
+            str(i.get("id"))
+            for i in cast(list[dict[str, Any]], (target or {}).get("insights") or [])
+        }
+        if problem or ref.get("insight_id") not in ids:
+            problems.append(
+                problem or f"insight {ref.get('insight_id')} is not in that impression"
+            )
+    if problems:
+        raise ValueError("unresolved refs: " + "; ".join(problems))
     return _append("decision", body, base)
 
 
@@ -404,11 +395,19 @@ def record_impression(
     payload: Mapping[str, Any], root: Path | None = None
 ) -> dict[str, Any]:
     base = (root or workspace_root()).resolve()
-    body = _impression_body(payload)
+    body = _payload("stage_impression", payload)
+    paths = _strings(body, "artifacts")
+    if not paths:
+        raise ValueError("artifacts must list at least one file or directory")
     artifacts: list[dict[str, str]] = []
-    for value in body.pop("artifacts_in"):
+    for value in paths:
         relative, path = _relative(value, base)
         artifacts.append({"path": relative, "sha256": tree_sha256(path)})
+    body.pop("artifacts")
+    errors = _vrp.impression_errors(body.get("impression"))
+    errors += _context_errors("stage_impression", body, base, artifacts)
+    if errors:
+        raise ValueError("; ".join(errors))
     body["artifacts"] = artifacts
     return _append("stage_impression", body, base)
 
@@ -417,43 +416,293 @@ def record_vision_review(
     payload: Mapping[str, Any], root: Path | None = None
 ) -> dict[str, Any]:
     base = (root or workspace_root()).resolve()
-    body = _vision_review_body(payload)
-    body["image_sha256"] = None
-    if body["image_path"] is not None:
-        relative, path = _relative(str(body["image_path"]), base)
+    body = _payload("vision_review", payload)
+    image = body.get("image_path")
+    if image is None and body.get("source_event_id") is None:
+        raise ValueError("a vision review needs image_path or source_event_id")
+    if body.get("reviewer") != "primary" and image is None:
+        raise ValueError("blind and tiebreak reviews must bind image_path")
+    if image is not None:
+        relative, path = _relative(_text(body, "image_path"), base)
         if not path.is_file():
-            raise ValueError(f"image is not a file: {body['image_path']}")
+            raise ValueError(f"image is not a file: {image}")
         body["image_path"] = relative
         body["image_sha256"] = sha256_file(path)
-    # Reorder to wire's field order for the identity hash (sort_keys makes
-    # order irrelevant, but the written record keeps insertion order).
-    ordered = {
-        "image_path": body["image_path"],
-        "image_sha256": body["image_sha256"],
-        "source_event_id": body["source_event_id"],
-        "model": body["model"],
-        "checklist": body["checklist"],
-        "findings": body["findings"],
-        "impression": body["impression"],
+    own = _own(_workspace(base))
+    errors = _vrp.impression_errors(body.get("impression"))
+    errors += _context_errors("vision_review", body, base, [])
+    errors += _round_errors(str(body.get("reviewer")), body.get("image_sha256"), own)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return _append("vision_review", body, base)
+
+
+def _round_errors(
+    reviewer: str, digest: Any, own: dict[str, list[dict[str, Any]]]
+) -> list[str]:
+    """Blind needs a primary; a tiebreak needs a round-1 split; each happens once."""
+    if reviewer == "primary":
+        return []
+    reviews = [
+        r for r in own.get("vision_review", []) if r.get("image_sha256") == digest
+    ]
+    primaries = [r for r in reviews if r.get("reviewer") == "primary"]
+    if not primaries:
+        return [
+            f"a {reviewer} review needs a primary review of the same image bytes first"
+        ]
+    primary = primaries[-1]
+    after = _vrp.parse_time(primary.get("recorded_at")) or 0.0
+    later = [
+        r
+        for r in reviews
+        if r.get("reviewer") == reviewer
+        and (_vrp.parse_time(r.get("recorded_at")) or 0.0) >= after
+    ]
+    if later:
+        return [
+            f"this image already has its {reviewer} review; reviews are not repeated"
+        ]
+    if reviewer == "tiebreak":
+        splits = [
+            c
+            for c in own.get("review_reconcile", [])
+            if primary.get("event_id") in cast(list[str], c.get("reviews") or [])
+            and c.get("outcome") == "disagree"
+        ]
+        if not splits:
+            return [
+                "a tiebreak review is only allowed after a round-1 reconcile"
+                " that disagrees"
+            ]
+    return []
+
+
+def record_reconcile(
+    payload: Mapping[str, Any], root: Path | None = None
+) -> dict[str, Any]:
+    base = (root or workspace_root()).resolve()
+    request = _strings(_payload("review_reconcile", payload), "reviews")
+    if not 2 <= len(request) <= 3:
+        raise ValueError(
+            "reviews must list [primary, blind] or [primary, blind, tiebreak]"
+        )
+    own = _own(_workspace(base))
+    by_id = {str(r.get("event_id")): r for r in own.get("vision_review", [])}
+    missing = [event for event in request if event not in by_id]
+    if missing:
+        raise ValueError(f"unknown vision review event ids: {missing}")
+    reviews = [by_id[event] for event in request]
+    roles = [str(r.get("reviewer")) for r in reviews]
+    expected = ["primary", "blind", "tiebreak"][: len(reviews)]
+    if roles != expected:
+        raise ValueError(f"reviews must be ordered {expected}, got {roles}")
+    digests = {r.get("image_sha256") for r in reviews}
+    if len(digests) != 1 or None in digests:
+        raise ValueError("reconciled reviews must bind the same image bytes")
+    prior = [
+        c
+        for c in own.get("review_reconcile", [])
+        if request[0] in cast(list[str], c.get("reviews") or [])
+    ]
+    result = _vrp.reconcile(reviews[0], reviews[1:])
+    if any(int(c.get("round") or 0) >= result["round"] for c in prior):
+        raise ValueError(
+            f"round {result['round']} is already reconciled for this primary review"
+        )
+    if result["round"] == 2 and not any(c.get("outcome") == "disagree" for c in prior):
+        raise ValueError("round 2 needs a round-1 reconcile that disagrees")
+    body = {"image_sha256": digests.pop(), "reviews": list(request), **result}
+    return _append("review_reconcile", body, base)
+
+
+def record_insight(
+    payload: Mapping[str, Any], root: Path | None = None
+) -> dict[str, Any]:
+    base = (root or workspace_root()).resolve()
+    body = _payload("insight_status", payload)
+    body["evidence"] = _hash_evidence(body.get("evidence"), base)
+    errors = _vrp.insight_write_errors(body, _workspace(base))
+    if errors:
+        raise ValueError("; ".join(errors))
+    return _append("insight_status", body, base)
+
+
+def record_song_receipt(
+    payload: Mapping[str, Any], root: Path | None = None
+) -> dict[str, Any]:
+    """Reject every receipt: bard never addresses a song to itself."""
+    base = (root or workspace_root()).resolve()
+    body = _payload("song_receipt", payload)
+    relative, path = _relative(_text(body, "delivery"), base)
+    if not relative.startswith(_vrp.LIAISON_DIR + "/") or not relative.endswith(
+        _vrp.SONG_DELIVERY_SUFFIX
+    ):
+        raise ValueError(f"delivery must be liaison/<id>{_vrp.SONG_DELIVERY_SUFFIX}")
+    doc: Any = json.loads(path.read_text(encoding="utf-8"))
+    problems = _vrp.song_delivery_errors(doc)
+    if problems:
+        raise ValueError("song delivery is malformed: " + "; ".join(problems))
+    song = cast(dict[str, Any], doc)
+    if song.get("to") != PLUGIN:
+        raise ValueError(f"this song is addressed to {song.get('to')}, not {PLUGIN}")
+    raise ValueError("bard does not address songs to itself")  # pragma: no cover
+
+
+def impressions_for_artifact(
+    path: Path, producer: str, root: Path | None = None
+) -> tuple[list[dict[str, str]], list[str]]:
+    """(refs, unresolved) for a sister artifact: its explicit impression_refs plus
+    every intact producer impression bound to exactly these bytes."""
+    base = (root or workspace_root()).resolve()
+    workspace = _workspace(base)
+    refs: list[dict[str, str]] = []
+    unresolved: list[str] = []
+    try:
+        value: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        value = None
+    explicit: list[Any] = []
+    if isinstance(value, dict):
+        doc = cast(dict[str, Any], value)
+        provenance = doc.get("provenance")
+        explicit = cast(list[Any], doc.get("impression_refs") or [])
+        if isinstance(provenance, dict):
+            explicit += cast(
+                list[Any], cast(dict[str, Any], provenance).get("impression_refs") or []
+            )
+    for item in explicit:
+        if not isinstance(item, dict):
+            unresolved.append("malformed impression_ref")
+            continue
+        entry = cast(dict[str, Any], item)
+        system, event = str(entry.get("system") or producer), str(entry.get("event_id"))
+        _, problem = _vrp.resolve_ref(workspace, system, event)
+        if problem:
+            unresolved.append(problem)
+        elif {"system": system, "event_id": event} not in refs:
+            refs.append({"system": system, "event_id": event})
+    logs, problems = workspace.get(producer, ({}, []))
+    if problems:
+        unresolved.append(f"{producer} records fail integrity: {problems[0]}")
+    else:
+        digest = sha256_file(path)
+        for kind in _vrp.IMPRESSION_KINDS:
+            for record in logs.get(kind, []):
+                shas = [
+                    str(a.get("sha256"))
+                    for a in cast(list[dict[str, Any]], record.get("artifacts") or [])
+                ]
+                if digest in shas or record.get("image_sha256") == digest:
+                    ref = {"system": producer, "event_id": str(record.get("event_id"))}
+                    if ref not in refs:
+                        refs.append(ref)
+    if not refs and not unresolved:
+        unresolved.append(f"no {producer} impression is bound to {path.name}")
+    return refs, unresolved
+
+
+def record_read(payload: Mapping[str, Any], root: Path | None = None) -> dict[str, Any]:
+    """Record a sister artifact taken in, with the impressions that came with it."""
+    base = (root or workspace_root()).resolve()
+    body = _payload("upstream_read", payload)
+    relative, path = _relative(_text(body, "artifact"), base)
+    if not path.is_file():
+        raise ValueError(f"artifact is not a file: {body['artifact']}")
+    producer = _text(body, "producer")
+    if not _vrp._slug(producer):  # pyright: ignore[reportPrivateUsage]
+        raise ValueError("producer must be a plugin slug")
+    refs, unresolved = impressions_for_artifact(path, producer, base)
+    record = {
+        "artifact": {"path": relative, "sha256": sha256_file(path)},
+        "producer": producer,
+        "refs": refs,
+        "unresolved": unresolved,
     }
-    return _append("vision_review", ordered, base)
+    return _append("upstream_read", record, base)
+
+
+def deliver_song(
+    payload: Mapping[str, Any], root: Path | None = None
+) -> dict[str, Any]:
+    """Write ``liaison/<id>.bard-song.json`` for one sister.
+
+    The song must be a workspace file (bound by sha256) and every cited
+    impression must resolve to an intact impression log. Receipts and read
+    records cannot be cited, so no sister record can ask for another song.
+    Deliveries are immutable: an existing id is never overwritten.
+    """
+    base = (root or workspace_root()).resolve()
+    body = _payload("song_delivery", payload)
+    relative, path = _relative(_text(body, "song"), base)
+    if not path.is_file():
+        raise ValueError(f"song is not a file: {body['song']}")
+    workspace = _workspace(base)
+    problems: list[str] = []
+    for ref in _refs(body, "impression_refs"):
+        system, event = str(ref.get("system")), str(ref.get("event_id"))
+        target, problem = _vrp.resolve_ref(workspace, system, event)
+        if problem:
+            problems.append(problem)
+        elif target is None or target.get("kind") not in _vrp.IMPRESSION_KINDS:
+            problems.append(f"{system}:{event[:12]} is not an impression")
+    if problems:
+        raise ValueError("unresolved impression_refs: " + "; ".join(problems))
+    doc = {
+        "kind": "bard_song_delivery",
+        "schema_version": 1,
+        "id": body.get("id"),
+        "system": PLUGIN,
+        "to": body.get("to"),
+        "title": body.get("title"),
+        "verse": body.get("verse"),
+        "song": {"path": relative, "sha256": sha256_file(path)},
+        "impression_refs": _refs(body, "impression_refs"),
+        "reason": body.get("reason"),
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    errors = _vrp.song_delivery_errors(doc)
+    if errors:
+        raise ValueError("invalid song delivery: " + "; ".join(errors))
+    target = base / _vrp.LIAISON_DIR / f"{doc['id']}{_vrp.SONG_DELIVERY_SUFFIX}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with target.open("x", encoding="utf-8") as stream:
+            stream.write(json.dumps(doc, ensure_ascii=False, indent=2) + "\n")
+    except FileExistsError as exc:
+        raise ValueError(
+            f"song delivery {target.name} already exists; deliveries are immutable"
+        ) from exc
+    return {
+        "verdict": "pass",
+        "kind": "song_delivery",
+        "path": str(target),
+        "delivery": doc,
+    }
 
 
 RECORDERS = {
     "decision": record_decision,
     "impression": record_impression,
     "vision-review": record_vision_review,
+    "reconcile": record_reconcile,
+    "insight": record_insight,
+    "read": record_read,
+    "song-delivery": deliver_song,
 }
 
 
 def records_summary(root: Path | None = None) -> dict[str, Any]:
-    """Counts per log plus the last Stop-hook verdict; informational only."""
+    """Counts per log, chain heads, integrity and the last Stop-hook verdict."""
     directory = records_dir(root)
     counts: dict[str, int] = {}
+    heads: dict[str, str] = {}
+    integrity: list[str] = []
     for kind, filename in LOG_FILES.items():
-        path = directory / filename
-        lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
-        counts[kind] = len([line for line in lines if line.strip()])
+        records, problems = _vrp.verify_log(directory / filename, kind)
+        counts[kind] = len(records)
+        heads[kind] = _vrp.chain_head(records)
+        integrity += problems
     status_path = directory / "records-status.json"
     status: Any = None
     if status_path.is_file():
@@ -465,8 +714,33 @@ def records_summary(root: Path | None = None) -> dict[str, Any]:
                 "problems": ["records-status.json is malformed"],
             }
     return {
-        "verdict": "pass",
+        "verdict": "unknown" if integrity else "pass",
         "records_dir": str(directory),
         "counts": counts,
+        "heads": heads,
+        "integrity_problems": integrity,
         "last_stop": status,
     }
+
+
+def records_digest(root: Path | None = None) -> dict[str, Any]:
+    return _vrp.digest((root or workspace_root()).resolve())
+
+
+def records_search(
+    payload: Mapping[str, Any], root: Path | None = None
+) -> dict[str, Any]:
+    allowed = {
+        "query",
+        "system",
+        "kind",
+        "stage",
+        "artifact",
+        "severity",
+        "open_only",
+        "limit",
+    }
+    unknown = sorted(set(payload) - allowed)
+    if unknown:
+        raise ValueError(f"unknown search fields: {unknown}")
+    return _vrp.search((root or workspace_root()).resolve(), **dict(payload))

@@ -152,21 +152,87 @@ def test_cli_validates_file(validator: Any, tmp_path: Path) -> None:
     assert result.returncode == 1
 
 
+def _vrp_body() -> dict[str, Any]:
+    impression = (
+        "The engraving shows the title Demo above a single staff, and the lyric "
+        "syllable light sits under the first quarter note where the proposal places "
+        "it. Stems and "
+        "beams read cleanly at this size, so a singer could follow the line without "
+        "guessing. The melisma on the last word is slurred but the slur ends a little "
+        "early, which could make a reader stop one note short. Next I would re-render "
+        "with a wider final bar and look again at the slur end before calling it done."
+    )
+    return {
+        "impression": impression,
+        "facets": {
+            "observed": ["title Demo above one staff", "syllable light under note one"],
+            "works": ["stems and beams read cleanly"],
+            "concerns": [
+                {
+                    "id": "c1",
+                    "text": "melisma slur ends one note early",
+                    "severity": "warning",
+                    "about": "self",
+                    "anchor": "light",
+                }
+            ],
+            "feelings": {"maker": "can engrave from it", "user": "can sing from it"},
+            "next_actions": ["widen the final bar and re-check the slur"],
+        },
+        "claims": [
+            {
+                "text": "title is shown",
+                "anchor": "Demo",
+                "artifact": "songs/demo/score.png",
+            },
+            {
+                "text": "first syllable",
+                "anchor": "light",
+                "artifact": "songs/demo/score.png",
+            },
+        ],
+        "lookback": [
+            {"claim": 0, "verdict": "confirmed", "note": "title is at the top"},
+            {"claim": 1, "verdict": "confirmed", "note": "syllable under note one"},
+        ],
+        "confidence": "medium",
+        "unknowns": [],
+    }
+
+
 def test_record_flag_appends_vrp_review(validator: Any, tmp_path: Path) -> None:
     """--record writes a VRP vision_review bound to the score.png sha256."""
     song = tmp_path / "songs" / "demo"
     song.mkdir(parents=True)
     png = song / "score.png"
-    png.write_bytes(b"PNG")
-    (song / "song.abc").write_text("X:1\n", encoding="utf-8")
+    png.write_bytes(b"\x89PNG fake")
+    (song / "song.abc").write_text("X:1\nT:Demo\nw:light\n", encoding="utf-8")
     record = _ok_record()
     record["artifacts"] = ["songs/demo/score.png", "songs/demo/song.abc"]
     record["detail"]["image_path"] = "songs/demo/score.png"
-    record["detail"]["image_sha256"] = hashlib.sha256(b"PNG").hexdigest()
+    record["detail"]["image_sha256"] = hashlib.sha256(b"\x89PNG fake").hexdigest()
     review = song / "score-review.json"
     review.write_text(json.dumps(record), encoding="utf-8")
-    proc = subprocess.run(
+    vrp = tmp_path / "vrp.json"
+    vrp.write_text(json.dumps(_vrp_body()), encoding="utf-8")
+    missing = subprocess.run(
         [sys.executable, str(SCRIPT_PATH), str(review), "--record"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        check=False,
+    )
+    assert missing.returncode == 2
+    assert "--vrp-json" in missing.stderr
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            str(review),
+            "--record",
+            "--vrp-json",
+            str(vrp),
+        ],
         capture_output=True,
         text=True,
         cwd=tmp_path,
@@ -178,5 +244,5 @@ def test_record_flag_appends_vrp_review(validator: Any, tmp_path: Path) -> None:
     entry = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert entry["kind"] == "vision_review"
     assert entry["plugin"] == "bard"
-    assert entry["image_sha256"] == hashlib.sha256(b"PNG").hexdigest()
+    assert entry["image_sha256"] == hashlib.sha256(b"\x89PNG fake").hexdigest()
     assert entry["checklist"] == "score-engraving"

@@ -114,6 +114,12 @@ p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" 
 python3 "$p/scripts/bard_cli.py" record decision      --json <file|->
 python3 "$p/scripts/bard_cli.py" record impression    --json <file|->
 python3 "$p/scripts/bard_cli.py" record vision-review --json <file|->
+python3 "$p/scripts/bard_cli.py" record reconcile     --json <file|->
+python3 "$p/scripts/bard_cli.py" record insight       --json <file|->
+python3 "$p/scripts/bard_cli.py" record read          --json <file|->
+python3 "$p/scripts/bard_cli.py" record song-delivery --json <file|->
+python3 "$p/scripts/bard_cli.py" record search        --json <file|->
+python3 "$p/scripts/bard_cli.py" record digest
 python3 "$p/scripts/bard_cli.py" record status
 ```
 
@@ -123,3 +129,13 @@ with the acoustic principle and evidence paths. After each stage file write an i
 (≥400 characters, ≥3 sentences). View `cues.timeline.png` when it renders and record a
 vision-review bound to its sha256 (checklist `cue-timeline`). Finish with one directory
 impression and `record status`. Records are creative advisory evidence, never a gate.
+
+The records follow VRP v2 ([docs/records-and-vision.md](../../../docs/records-and-vision.md)):
+every impression carries `facets` (≥2 `observed`, `works`, `concerns` with id/severity/
+`about`/anchor, `feelings.maker`/`feelings.user`, `next_actions`), ≥2 `claims` whose `anchor`
+is an exact token of the cited file (a lyric syllable, `K:` line, cue id), `confidence` and
+`unknowns`. Start with `record digest`: answer every sister impression you act on in the
+`upstream` field (`adopted`/`deferred`/`disputed`/`noted`) and take a sister artifact in with
+`record read`. A disputed concern cannot be raised again on the same bytes, and a rejected
+insight needs `revisits` and a reason. The writer refuses near-duplicate impressions and
+a log whose hash chain is broken.

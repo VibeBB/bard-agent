@@ -15,7 +15,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_DIR = REPO_ROOT / "plugins" / "bard"
 
-EXPECTED_AGENTS = {"bard", "bard-critic", "bard-cue"}
+EXPECTED_AGENTS = {"bard", "bard-blind-review", "bard-critic", "bard-cue"}
 EXPECTED_SKILLS = {
     "bard-cuecraft",
     "bard-out-rules",
@@ -50,8 +50,12 @@ def _registered_tools() -> set[str]:
     import openhands.tools.glob.definition  # noqa: F401  # pyright: ignore[reportMissingImports,reportMissingModuleSource,reportUnusedImport]
     import openhands.tools.grep.definition  # noqa: F401  # pyright: ignore[reportMissingImports,reportMissingModuleSource,reportUnusedImport]
     import openhands.tools.task.definition  # noqa: F401  # pyright: ignore[reportMissingImports,reportMissingModuleSource,reportUnusedImport]
+    from openhands.sdk.tool.builtins import (  # pyright: ignore[reportMissingImports,reportMissingModuleSource]
+        BUILT_IN_TOOL_CLASSES,
+    )
 
-    return set(list_registered_tools())
+    # resolve_tool falls back to BUILT_IN_TOOL_CLASSES for unregistered names.
+    return set(list_registered_tools()) | set(BUILT_IN_TOOL_CLASSES)
 
 
 def check_plugin(plugin_dir: Path) -> list[str]:

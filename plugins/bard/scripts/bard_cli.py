@@ -13,7 +13,13 @@ Usage::
     python3 bard_cli.py record decision --json <file|-> [--root DIR]
     python3 bard_cli.py record impression --json <file|-> [--root DIR]
     python3 bard_cli.py record vision-review --json <file|-> [--root DIR]
+    python3 bard_cli.py record reconcile --json <file|-> [--root DIR]
+    python3 bard_cli.py record insight --json <file|-> [--root DIR]
+    python3 bard_cli.py record read --json <file|-> [--root DIR]
+    python3 bard_cli.py record song-delivery --json <file|-> [--root DIR]
     python3 bard_cli.py record status [--root DIR]
+    python3 bard_cli.py record digest [--root DIR]
+    python3 bard_cli.py record search --json <file|-> [--root DIR]
     python3 bard_cli.py ux-inbox [--root DIR]
     python3 bard_cli.py ux-respond --json <file|-> [--root DIR]
 """
@@ -60,14 +66,15 @@ def main(argv: list[str] | None = None) -> int:
 
     record = sub.add_parser("record", help="append a VRP record")
     record_sub = record.add_subparsers(dest="kind", required=True)
-    for kind in ("decision", "impression", "vision-review"):
+    for kind in (*bard_records.RECORDERS, "search"):
         p = record_sub.add_parser(kind)
         p.add_argument(
             "--json", required=True, help="payload JSON file or '-' for stdin"
         )
         p.add_argument("--root", type=Path, default=None, help="workspace root")
-    status = record_sub.add_parser("status", help="show records summary")
-    status.add_argument("--root", type=Path, default=None, help="workspace root")
+    for kind, text in (("status", "show records summary"), ("digest", "family digest")):
+        view = record_sub.add_parser(kind, help=text)
+        view.add_argument("--root", type=Path, default=None, help="workspace root")
 
     inbox_p = sub.add_parser("ux-inbox", help="list bard liaison requests")
     inbox_p.add_argument("--root", type=Path, default=None, help="workspace root")
@@ -86,9 +93,15 @@ def main(argv: list[str] | None = None) -> int:
             if args.kind == "status":
                 _emit(bard_records.records_summary(root))
                 return 0
+            if args.kind == "digest":
+                _emit(bard_records.records_digest(root))
+                return 0
             payload = _read_json_arg(args.json)
             if not isinstance(payload, dict):
                 raise ValueError("payload must be a JSON object")
+            if args.kind == "search":
+                _emit(bard_records.records_search(payload, root))
+                return 0
             _emit(bard_records.RECORDERS[args.kind](payload, root))
             return 0
         if args.command == "ux-inbox":
