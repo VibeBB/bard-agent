@@ -378,3 +378,20 @@ def test_respond_refuses_refs_into_broken_chain(liaison: Any, tmp_path: Path) ->
     payload["reason"] = ""
     with pytest.raises(ValueError, match="fails integrity"):
         liaison.respond(payload, root=tmp_path)
+
+
+def test_records_heads_are_genesis_then_skip_a_broken_chain(
+    liaison: Any, tmp_path: Path
+) -> None:
+    records = liaison._records
+    heads, broken = liaison._records_heads(tmp_path)
+    assert broken == []
+    assert heads == dict.fromkeys(records.LOG_FILES, records.GENESIS)
+    log = tmp_path / liaison.RECORDS_DIR / records.LOG_FILES["upstream_read"]
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(
+        '{"schema_version": 2, "event_id": "' + "1" * 64 + '"}\n', encoding="utf-8"
+    )
+    heads, broken = liaison._records_heads(tmp_path)
+    assert broken == ["upstream_read"]
+    assert "upstream_read" not in heads

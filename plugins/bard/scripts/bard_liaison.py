@@ -116,6 +116,7 @@ RESPONSE_KEYS: Final = frozenset(
         "decision_refs",
         "impression_refs",
         "questions_for_user",
+        "records_heads",
         "responded_at",
     }
 )
@@ -532,6 +533,19 @@ def _load_request_file(
     return path, request, warnings
 
 
+def _records_heads(root: Path) -> tuple[dict[str, str], list[str]]:
+    """Chain head per intact VRP log, plus the kinds whose chain is broken."""
+    heads: dict[str, str] = {}
+    broken: list[str] = []
+    for kind, name in _records.LOG_FILES.items():
+        records, problems = _records.verify_log(root / RECORDS_DIR / name, kind)
+        if problems:
+            broken.append(kind)
+        else:
+            heads[kind] = _records.chain_head(records)
+    return heads, broken
+
+
 def respond(payload: Any, root: Path | None = None) -> dict[str, Any]:
     """Validate a respond input and write <stem>.ux-response.json."""
     base = (root or Path.cwd()).resolve()
@@ -633,6 +647,11 @@ def respond(payload: Any, root: Path | None = None) -> dict[str, Any]:
                 "rejected or deferred to omit it"
             )
         input_hashes[rel] = _sha256_file(path)
+    heads, broken_logs = _records_heads(base)
+    if status == "done" and broken_logs:
+        raise ValueError(
+            f"refusing 'done': VRP logs fail integrity ({', '.join(broken_logs)})"
+        )
     response = {
         "schema_version": SCHEMA_VERSION,
         "system": SYSTEM,
@@ -646,6 +665,7 @@ def respond(payload: Any, root: Path | None = None) -> dict[str, Any]:
         "decision_refs": decision_refs,
         "impression_refs": impression_refs,
         "questions_for_user": questions,
+        "records_heads": heads,
         "responded_at": datetime.now(UTC).isoformat(),
     }
     out_path = _response_path(req_path)
