@@ -364,3 +364,17 @@ def test_respond_bare_id_without_request_file(liaison: Any, tmp_path: Path) -> N
     payload = {**_respond_payload(tmp_path), "request": "missing-pack"}
     with pytest.raises(ValueError, match="no request file"):
         liaison.respond(payload, root=tmp_path)
+
+
+def test_respond_refuses_refs_into_broken_chain(liaison: Any, tmp_path: Path) -> None:
+    _write_request(tmp_path, "cue-pack", _request(tmp_path))
+    log = tmp_path / "observations" / "bard" / "decisions.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(json.dumps({"event_id": "f" * 64}) + "\n", encoding="utf-8")
+    payload = _respond_payload(tmp_path)
+    payload["decision_refs"] = ["f" * 64]
+    payload["impression_refs"] = []
+    payload["status"] = "accepted"
+    payload["reason"] = ""
+    with pytest.raises(ValueError, match="fails integrity"):
+        liaison.respond(payload, root=tmp_path)

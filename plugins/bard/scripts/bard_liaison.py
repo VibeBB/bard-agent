@@ -494,12 +494,13 @@ def inbox(root: Path | None = None) -> dict[str, Any]:
 
 
 def _known_event_ids(root: Path, filenames: list[str]) -> set[str]:
+    """Event ids from intact VRP v2 logs; a broken chain refuses every ref."""
+    kinds = {name: kind for kind, name in _records.LOG_FILES.items()}
     ids: set[str] = set()
     for name in filenames:
-        path = root / RECORDS_DIR / name
-        if not path.is_file():
-            continue
-        records, _malformed = _records.load_jsonl(path)
+        records, problems = _records.verify_log(root / RECORDS_DIR / name, kinds[name])
+        if problems:
+            raise ValueError(f"VRP {kinds[name]} log fails integrity: {problems[0]}")
         ids.update(str(record.get("event_id")) for record in records)
     return ids
 

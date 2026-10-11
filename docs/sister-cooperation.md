@@ -36,6 +36,8 @@ Output `{requests[], malformed[]}`; exit 0.
   (event_id in `impressions.jsonl` or `vision-reviews.jsonl`), and refuses
   outright when any `gate_verdicts` entry is `fail` or `unknown` — answer
   `needs_info`/`rejected`/`deferred` with a real reason instead.
+  Refs resolve only against an intact VRP v2 chain: a log that fails
+  `verify_log` (forged, edited or truncated lines) refuses every ref into it.
 - `input_hashes` is recomputed from the current files; a missing request input
   is only allowed under the soft statuses.
 - Response written as `<stem>.ux-response.json` (sorted keys, indent 2, UTF-8;
