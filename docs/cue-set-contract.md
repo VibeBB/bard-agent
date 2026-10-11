@@ -77,10 +77,18 @@ www.vibebb.org).
 | `cue-<id>.mml` | `bard-mml 0.1`: `;` header lines (product, cue, purpose, device, bpm, loop, license) and one `@melody` voice using the song tokens plus length `32` (0.125 beats) and `16.` (0.375 beats) |
 | `cues.json` | `artifact_kind: bard_cue_manifest`, `system: bard`, `authority: none`, `product`, `device`, `artifacts` (the MIDI/MML file names), and per cue `id`, `purpose`, `ux_feedback`, `loop`, `bpm`, `program`, `duration_ms`, `mid`/`mml` `{path, sha256}`, `tones[]` of `{start_ms, duration_ms, midi, freq_hz}`, an `accessibility` report (`reference`, `max_fundamental_hz`, `highest_fundamental_hz`, `warnings_loop`, `waivers`), and an `audibility` report (`status: unknown` with a `reason` when no transducer is declared; otherwise `status: pass`, the transducer and listening values, the estimation `model`, and per cue `id`, `min_spl_db`, `margin_db` over ambient) (`midi: null`, `freq_hz: 0.0` for rests; frequencies in 12-TET with a4 = 440 Hz, rounded to 0.01 Hz; milliseconds rounded half up). Sorted keys, no timestamps |
 | `cues.md` | one-page preview: a table of cues with purpose, UX feedback, duration, loop and note names, then an accessibility section (highest fundamental, waivers, audibility), `rationale` and `sources` |
-| `cues.provenance.json` | `artifact_kind: bard_cue_provenance`, `authority: none`, generation time, cue-set path/sha256, sha256 of each output, `sources`, generating-script sha256, `license: BSD-3-Clause`, `originality`, `device`, cue count |
+| `cues.provenance.json` | `artifact_kind: bard_cue_provenance`, `authority: none`, generation time, cue-set path/sha256, sha256 of each output, `cue_sources` (the cue set's `sources`), generating-script sha256, `license: BSD-3-Clause`, `originality`, `device`, cue count, plus the interchange envelope v3 fields for `cues.json` (below) |
 
 The same cue set produces byte-identical outputs except the provenance
-timestamp. The `protect-song-artifacts` hook denies hand edits to every
+timestamp.
+
+`cues.provenance.json` is also the interchange envelope v3 sidecar of
+`cues.json`: `envelope_version: 3`, `producer: bard`,
+`artifact: {name: cues.json, sha256}`, `sources` (the cue-set path relative to
+the workspace and its sha256), and `decision_refs` (bard decision ids whose
+evidence cites the cue set at that sha256). Consumers such as firmware check
+it against the bytes they pinned and bard's intact decision log. A broken
+`observations/bard/decisions.jsonl` chain rejects the render. The `protect-song-artifacts` hook denies hand edits to every
 output above.
 
 ## Read-back checks (fail-closed)

@@ -14,7 +14,8 @@ Outputs (per cue set directory):
 - ``cues.json``     bard_cue_manifest: firmware-ready tone tables and file map
 - ``cues.md``       one-page preview for the Agent Canvas Markdown panel
 - ``cues.timeline.svg``  one-row-per-cue timeline for vision review
-- ``cues.provenance.json``  hashes, sources, originality, script sha256
+- ``cues.provenance.json``  hashes, sources, originality, script sha256 and the
+  interchange envelope v3 fields for ``cues.json``
 
 Usage:
     render_cues.py --cues cues/<slug>/cues.proposal.json --out-dir cues/<slug>
@@ -28,6 +29,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import os
 import re
 import struct
 import sys
@@ -46,6 +48,12 @@ if _spec is None or _spec.loader is None:  # pragma: no cover
 render_song = importlib.util.module_from_spec(_spec)
 sys.modules.setdefault("render_song", render_song)
 _spec.loader.exec_module(render_song)
+
+# The VRP v2 core ships with the plugin hooks (stdlib only).
+_RECORDS_PATH = (
+    Path(__file__).resolve().parents[3] / "hooks" / "scripts" / "_records.py"
+)
+ENVELOPE_VERSION = 3
 
 CUE_SET_KIND = "bard_cue_set"
 MANIFEST_KIND = "bard_cue_manifest"
@@ -952,14 +960,67 @@ def readback_check(cue_set: CueSet, outputs: dict[str, bytes]) -> list[str]:
     return reasons
 
 
+def _records() -> Any:
+    spec = importlib.util.spec_from_file_location("bard_records_core", _RECORDS_PATH)
+    if spec is None or spec.loader is None:  # pragma: no cover
+        raise ImportError(f"cannot load the VRP core from {_RECORDS_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _cites(record: dict[str, Any], cited: set[tuple[str, str]]) -> bool:
+    evidence = record.get("evidence")
+    if not isinstance(evidence, list):
+        return False
+    return any(
+        isinstance(entry, dict)
+        and (str(entry.get("path")), str(entry.get("sha256"))) in cited
+        for entry in cast(list[object], evidence)
+    )
+
+
+def envelope_v3(cues_path: Path, manifest: bytes, root: Path) -> dict[str, Any]:
+    """Interchange envelope v3 fields for ``cues.json`` rendered from ``cues_path``.
+
+    ``decision_refs`` are bard decisions citing the cue set at its current
+    sha256; a broken ``observations/bard/decisions.jsonl`` chain refuses it.
+    """
+    resolved = cues_path.resolve()
+    try:
+        key = resolved.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        key = resolved.as_posix()
+    source = (key, hashlib.sha256(cues_path.read_bytes()).hexdigest())
+    refs: list[str] = []
+    log = root / "observations" / "bard" / "decisions.jsonl"
+    if log.is_file():
+        records, problems = _records().verify_log(log, "decision")
+        if problems:
+            raise ProposalError([f"bard decisions fail integrity: {problems[0]}"])
+        refs = sorted({str(r.get("event_id")) for r in records if _cites(r, {source})})
+    return {
+        "envelope_version": ENVELOPE_VERSION,
+        "producer": "bard",
+        "artifact": {
+            "name": "cues.json",
+            "sha256": hashlib.sha256(manifest).hexdigest(),
+        },
+        "sources": [{"path": source[0], "sha256": source[1]}],
+        "decision_refs": refs,
+    }
+
+
 def render_provenance(
     cue_set: CueSet,
     cues_path: Path,
     cues_sha: str,
     outputs: dict[str, bytes],
     script_sha: str,
+    envelope: dict[str, Any] | None = None,
 ) -> str:
     record = {
+        **(envelope or {}),
         "artifact_kind": PROVENANCE_KIND,
         "schema_version": SCHEMA_VERSION,
         "authority": "none",
@@ -969,7 +1030,7 @@ def render_provenance(
             name: hashlib.sha256(blob).hexdigest()
             for name, blob in sorted(outputs.items())
         },
-        "sources": cue_set.sources,
+        "cue_sources": cue_set.sources,
         "script_sha256": script_sha,
         "vision_points": render_song.vision_points(outputs),
         "license": "BSD-3-Clause",
@@ -1020,7 +1081,11 @@ def main(argv: list[str] | None = None) -> int:
         if readback:
             raise ProposalError(readback)
         script_sha = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
-        prov = render_provenance(cue_set, cues_path, cues_sha, outputs, script_sha)
+        root = Path(os.environ.get("OPENHANDS_PROJECT_DIR") or Path.cwd())
+        envelope = envelope_v3(cues_path, outputs["cues.json"], root)
+        prov = render_provenance(
+            cue_set, cues_path, cues_sha, outputs, script_sha, envelope
+        )
         outputs["cues.provenance.json"] = prov.encode("utf-8")
     except ProposalError as e:
         _emit(args.json, {"status": "rejected", "reasons": e.reasons}, e.reasons)

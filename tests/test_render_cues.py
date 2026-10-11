@@ -232,3 +232,78 @@ def test_timeline_svg_written(cues_module: Any, tmp_path: Path) -> None:
         prov["outputs"]["cues.timeline.svg"]
         == hashlib.sha256((out / "cues.timeline.svg").read_bytes()).hexdigest()
     )
+
+
+def _bard_records() -> Any:
+    path = REPO_ROOT / "plugins" / "bard" / "scripts" / "bard_records.py"
+    spec = importlib.util.spec_from_file_location("bard_records_envelope", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _decision(evidence_path: str) -> dict[str, Any]:
+    return {
+        "id": "cue-band",
+        "stage": "design",
+        "question": "Which band should the done cue sit in for a small piezo buzzer?",
+        "principles": [
+            "Piezo transducers peak near their resonance, so cues near it read loudest",
+            "Older listeners lose sensitivity above 4 kHz first",
+        ],
+        "options": [
+            {
+                "name": "high",
+                "pros": ["loud on piezo"],
+                "cons": ["hard for older ears"],
+            },
+            {"name": "mid", "pros": ["broad audibility"], "cons": ["a few dB quieter"]},
+        ],
+        "chosen": "mid",
+        "rationale": (
+            "The kettle is used across age groups, and presbycusis removes the "
+            "top octave first, so a 1.5 to 2 kHz done cue keeps audibility while "
+            "staying near the buzzer's efficient band; the small SPL loss is "
+            "covered by the margin report."
+        ),
+        "evidence": [{"path": evidence_path}],
+        "assumptions": ["the buzzer resonance is near 2.7 kHz"],
+        "unknowns": ["the kitchen ambient level"],
+        "risks": ["a quieter cue in a noisy kitchen"],
+        "revisit_when": "a measured ambient level exceeds the margin report",
+    }
+
+
+def test_provenance_carries_envelope_v3(
+    cues_module: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENHANDS_PROJECT_DIR", str(tmp_path))
+    cues = tmp_path / "cues" / "kettle.cues.json"
+    cues.parent.mkdir()
+    cues.write_bytes(EXAMPLE.read_bytes())
+    out = tmp_path / "out"
+    assert _run(cues_module, cues, out) == 0
+    prov = json.loads((out / "cues.provenance.json").read_text(encoding="utf-8"))
+    manifest_sha = hashlib.sha256((out / "cues.json").read_bytes()).hexdigest()
+    cue_sha = hashlib.sha256(cues.read_bytes()).hexdigest()
+    assert (prov["envelope_version"], prov["producer"]) == (3, "bard")
+    assert prov["artifact"] == {"name": "cues.json", "sha256": manifest_sha}
+    assert prov["sources"] == [{"path": "cues/kettle.cues.json", "sha256": cue_sha}]
+    assert prov["decision_refs"] == []
+    assert (
+        prov["cue_sources"]
+        == json.loads(EXAMPLE.read_text(encoding="utf-8"))["sources"]
+    )
+
+    record = _bard_records().record_decision(_decision("cues/kettle.cues.json"))[
+        "record"
+    ]
+    assert _run(cues_module, cues, out) == 0
+    prov = json.loads((out / "cues.provenance.json").read_text(encoding="utf-8"))
+    assert prov["decision_refs"] == [record["event_id"]]
+
+    log = tmp_path / "observations" / "bard" / "decisions.jsonl"
+    log.write_text(log.read_text(encoding="utf-8") + "{forged\n", encoding="utf-8")
+    assert _run(cues_module, cues, tmp_path / "refused") == 2
+    assert not (tmp_path / "refused").exists()

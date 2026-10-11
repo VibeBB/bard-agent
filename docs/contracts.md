@@ -31,7 +31,8 @@ keys, type mismatches and unreadable files are rejections, never skips.
   ux_feedback, duration_ms, `tones[{freq_hz,start_ms,duration_ms}]`, mid/mml
   paths + sha256.
 - **`cues.provenance.json`** — `bard_cue_provenance`: cue-set sha256, per-output
-  sha256 (incl. `cues.timeline.svg`), sources, license.
+  sha256 (incl. `cues.timeline.svg`), `cue_sources`, license, and the
+  interchange envelope v3 fields for `cues.json` (`docs/cue-set-contract.md`).
 
 ## Records (VRP v1)
 
