@@ -1,6 +1,6 @@
 # Agents
 
-All three are `task` sub-agent definitions (Markdown + YAML frontmatter); the
+All four are `task` sub-agent definitions (Markdown + YAML frontmatter); the
 SDK passes `hooks:` frontmatter into each sub-conversation.
 
 ## bard
@@ -34,3 +34,15 @@ SDK passes `hooks:` frontmatter into each sub-conversation.
   the song. Writes no VRP records — its reply names which findings warrant a
   decision record and supplies the impression text for bard to record.
 - Frontmatter hooks: `protect-song-artifacts`, `safety-rail` only.
+
+## bard-blind-review
+
+- `model: vibebb-review`; `tools: terminal, file_editor, grep, glob,
+  VisionInspectTool`; `max_iteration_per_run: 20`, `max_budget_per_run: 1.5`;
+  `permission_mode: never_confirm`.
+- Independent second (or tiebreak) reader of one `score.png`. Its
+  `blind-guard` hook denies reads of earlier reviews, records and songs, so
+  the first review cannot anchor it. Records one `blind`/`tiebreak` vision
+  review with claims and lookback and returns the event id; bard reconciles.
+- Frontmatter hooks: `blind-guard`, `protect-song-artifacts`, `safety-rail`,
+  `record-vision-tool-event`.

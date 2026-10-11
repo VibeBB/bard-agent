@@ -50,3 +50,4 @@
 | [0012](adr/ADR-0012-attest-published-tools-images.md) | Attest published tools images |
 | [0013](adr/ADR-0013-vibebb-records-liaison-vision.md) | VibeBB record protocol port, SLP v2 liaison CLI, and melody/cue projections |
 | [0014](adr/ADR-0014-structural-coverage.md) | Structural coverage gate (C0, C1, C2, MC/DC, boundaries) |
+| [0015](adr/ADR-0015-vrp-v2-records.md) | VRP v2 records, blind score review and songs to sisters |

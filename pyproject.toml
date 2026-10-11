@@ -42,6 +42,9 @@ select = ["E", "F", "I", "UP", "B"]
 # line lengths follow wire's 100-char style, not bard's 88.
 "plugins/bard/hooks/scripts/_records.py" = ["E501"]
 "plugins/bard/hooks/scripts/require_records.py" = ["E501"]
+"plugins/bard/hooks/scripts/blind_guard.py" = ["E501"]
+# Ported from wire-agent tests/test_records.py; fixtures keep wire's line widths.
+"tests/test_records.py" = ["E501"]
 
 [tool.pyright]
 pythonVersion = "3.12"

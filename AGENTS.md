@@ -23,6 +23,7 @@ plugins/bard/
 ├── agents/
 │   ├── bard.md               # Minstrel that writes songs (task sub-agent)
 │   ├── bard-critic.md        # Critic (no pass/fail authority)
+│   ├── bard-blind-review.md  # Blind second vision review of score.png (VRP v2)
 │   └── bard-cue.md           # Product sound cues (earcons) for ux-creator / firmware
 ├── commands/                 # sing.md, cue.md, inbox.md (/bard:inbox — SLP v2 liaison),
 │                             # doctor.md (/bard:doctor — install probe)

@@ -46,11 +46,17 @@ ARTIFACT_NAMES = (
     "vision-reviews.jsonl",
     "vision-tool-events.jsonl",
     "image-observations.jsonl",
+    "reads.jsonl",
+    "insights.jsonl",
+    "reconciles.jsonl",
+    "song-receipts.jsonl",
     "records-status.json",
 )
 CUE_ARTIFACT_RE = re.compile(r"^cue-[a-z][a-z0-9_]{0,31}\.(?:mid|mml)$")
 # SLP v2 liaison responses are written only by `bard_cli.py ux-respond`.
 UX_RESPONSE_RE = re.compile(r"^[^/]*\.ux-response\.json$")
+# Song deliveries are written only by `bard_cli.py record song-delivery`.
+SONG_DELIVERY_RE = re.compile(r"^[^/]*\.bard-song\.json$")
 WRITE_TOOLS = {"file_editor", "apply_patch"}
 VIEW_ACTIONS = {"view", "read", "undo_edit"}
 WRITE_ACTIONS = {"create", "str_replace", "insert", "edit", "write"}
@@ -106,6 +112,7 @@ def _is_protected(value: str) -> bool:
         base in ARTIFACT_NAMES
         or CUE_ARTIFACT_RE.match(base) is not None
         or UX_RESPONSE_RE.match(base) is not None
+        or SONG_DELIVERY_RE.match(base) is not None
     )
 
 

@@ -11,7 +11,7 @@ PLUGIN_ROOT = REPO_ROOT / "plugins" / "bard"
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
-AGENT_NAMES = {"bard", "bard-critic", "bard-cue"}
+AGENT_NAMES = {"bard", "bard-blind-review", "bard-critic", "bard-cue"}
 
 
 def _frontmatter(path: Path) -> dict[str, str]:

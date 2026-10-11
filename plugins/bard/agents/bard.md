@@ -376,9 +376,15 @@ through the CLI — the `protect-song-artifacts` hook denies hand edits to the J
 p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" \
   "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard" "${HOME:-}/plugins/installed/bard" "${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/bard"; do
   [ -f "$c/scripts/bard_cli.py" ] && printf %s "$c" && break; done)
-python3 "$p/scripts/bard_cli.py" record decision    --json <file|->
-python3 "$p/scripts/bard_cli.py" record impression  --json <file|->
+python3 "$p/scripts/bard_cli.py" record decision      --json <file|->
+python3 "$p/scripts/bard_cli.py" record impression    --json <file|->
 python3 "$p/scripts/bard_cli.py" record vision-review --json <file|->
+python3 "$p/scripts/bard_cli.py" record reconcile     --json <file|->
+python3 "$p/scripts/bard_cli.py" record insight       --json <file|->
+python3 "$p/scripts/bard_cli.py" record read          --json <file|->
+python3 "$p/scripts/bard_cli.py" record song-delivery --json <file|->
+python3 "$p/scripts/bard_cli.py" record search        --json <file|->
+python3 "$p/scripts/bard_cli.py" record digest
 python3 "$p/scripts/bard_cli.py" record status
 ```
 
@@ -392,3 +398,26 @@ image's sha256 — checklists `score-engraving` and `melody-contour`. After all 
 one directory impression for the whole output folder, then run `record status` before you
 finish. These records are creative advisory evidence — they never gate, approve, or reject
 anything.
+
+The records follow VRP v2 ([docs/records-and-vision.md](../../../docs/records-and-vision.md)):
+every impression carries `facets` (≥2 `observed`, `works`, `concerns` with id/severity/
+`about`/anchor, `feelings.maker`/`feelings.user`, `next_actions`), ≥2 `claims` whose `anchor`
+is an exact token of the cited file (a lyric syllable, `K:` line, cue id), `confidence` and
+`unknowns`. Start with `record digest`: answer every sister impression you act on in the
+`upstream` field (`adopted`/`deferred`/`disputed`/`noted`) and take a sister artifact in with
+`record read`. A disputed concern cannot be raised again on the same bytes, and a rejected
+insight needs `revisits` and a reason. The writer refuses near-duplicate impressions and
+a log whose hash chain is broken.
+
+For `score.png` also dispatch `bard-blind-review` through `task` (image path and song folder
+only — never your review) and close the pair with `record reconcile` (`[primary, blind]`, or
+`[primary, blind, tiebreak]` after a second blind round when they split). To pass a review from
+`score-review.json` into the log, run `validate_score_review.py <review> --record --vrp-json
+<body>`, where `<body>` holds the facets, claims, lookback, confidence and unknowns.
+
+When a song answers sister impressions, deliver it with `record song-delivery`: `id`, `to` (the
+sister plugin, never `bard`), `title`, `verse` (the lines addressed to that sister), `song`
+(the song file path; its sha256 is pinned), `impression_refs` (the sister impressions the song
+was made from) and `reason`. Deliveries land in `liaison/<id>.bard-song.json`, are immutable,
+and cannot cite receipts or other songs — a sister's `song_receipt` is the end of the
+exchange, never a request for another song.
