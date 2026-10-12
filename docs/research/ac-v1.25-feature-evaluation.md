@@ -1,7 +1,7 @@
 # Agent Canvas v1.25 feature evaluation (bard-agent)
 
 Scope: the full Agent Canvas / OpenHands platform surface as of agent-canvas
-1.25.0 + agent-server/SDK 1.53.0 + automation 1.19.0 — not just the
+1.25.0 + agent-server/SDK 1.54.0 + automation 1.19.0 — not just the
 September/October 2026 release notes but every documented feature area
 (goal loop, profiles, runtime, automations, canvas UX, security, skills).
 
