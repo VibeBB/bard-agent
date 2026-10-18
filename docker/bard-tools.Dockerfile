@@ -43,13 +43,18 @@ RUN for attempt in 1 2 3 4 5; do \
 
 # The pinned debian:13-slim digest keeps shipping the debs Trivy flags at
 # publish (CVE-2026-103111 libpcre2-8-0; CVE-2026-75804 and CVE-2026-84782
-# openssl/libssl3t64). Upgrade just those packages inside the build so the
-# publish gate stays green.
+# openssl/libssl3t64; CVE-2026-66046, CVE-2026-76956, CVE-2026-76957,
+# CVE-2026-77214 and CVE-2026-93990 libexpat1; CVE-2026-96889 librsvg2).
+# Upgrade just those packages inside the build so the publish gate stays
+# green.
 RUN for attempt in 1 2 3 4 5; do \
         apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update \
         && apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends \
             --only-upgrade \
+            libexpat1 \
             libpcre2-8-0 \
+            librsvg2-2 \
+            librsvg2-bin \
             libssl3t64 \
             openssl-provider-legacy \
         && rm -rf /var/lib/apt/lists/* \
