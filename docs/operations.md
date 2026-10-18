@@ -344,3 +344,9 @@ here so audits do not re-flag them:
 - `release.yml` is dispatch-only; run it once with `dry_run=true` before
   the first real release to rehearse bump, verify, and install-smoke
   without creating a GitHub release.
+
+## Dependency update decisions
+
+### 2026-10-18 sweep
+
+sdk/tools `==1.54.0` -> `==1.55.1`, ruff `==0.17.0` -> `==0.17.1`, uv `==0.13.0` -> `==0.13.1`, zizmor `1.30.1` -> `1.31.1`, trivy `v0.75.0` -> `v0.76.0`, codeql-action v4.38.3 -> v4.39.0. Full changelog review: [SDK v1.55.1 feature evaluation](research/sdk-v1.55.1-feature-evaluation.md). Deferrals unchanged (mcp 2.x, Python 3.15 default); reasons refreshed to cite SDK 1.55.1.

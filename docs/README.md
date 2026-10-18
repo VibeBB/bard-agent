@@ -30,6 +30,7 @@
 | [`research/sdk-v1.52.0-feature-evaluation.md`](research/sdk-v1.52.0-feature-evaluation.md) | OpenHands SDK v1.52.0 adoption review |
 | [`research/sdk-v1.54.0-feature-evaluation.md`](research/sdk-v1.54.0-feature-evaluation.md) | OpenHands SDK v1.54.0 adoption review |
 - [SDK v1.54.0 feature evaluation](research/sdk-v1.54.0-feature-evaluation.md): SDK 1.54.0/uv 0.13.0/ruff 0.17.0 review.
+| [`research/sdk-v1.55.1-feature-evaluation.md`](research/sdk-v1.55.1-feature-evaluation.md) | OpenHands SDK v1.55.1 adoption review |
 | [`research/ac-v1.25-feature-evaluation.md`](research/ac-v1.25-feature-evaluation.md) | Agent Canvas / OpenHands platform surface adoption review |
 | [`../docker/README.md`](../docker/README.md) | `bard-tools` score-render image |
 

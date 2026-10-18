@@ -43,7 +43,7 @@ def test_lock_versions_cover_direct_deps(dep_check: Any) -> None:
 
 
 def test_uv_pin_parsed(dep_check: Any) -> None:
-    assert dep_check.uv_version_pin(REPO_ROOT) == "==0.13.0"
+    assert dep_check.uv_version_pin(REPO_ROOT) == "==0.13.1"
 
 
 def test_workflow_files_have_expected_suffixes(dep_check: Any) -> None:
@@ -111,7 +111,7 @@ def test_trivy_version_input_parsed(dep_check: Any) -> None:
     trivy = next(status for status in statuses if status.name == "aquasecurity/trivy")
     assert trivy.surface == "action-input"
     assert trivy.current == "v0.76.0"
-    assert trivy.latest == "v0.76.0"
+    assert trivy.latest == "v0.77.0"
     assert trivy.outdated is True
     assert "container-audit.yml" in trivy.source
     assert "publish-bard-images.yml" in trivy.source
