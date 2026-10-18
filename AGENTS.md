@@ -69,6 +69,9 @@ tests/                        # Plugin-asset consistency checks
   proposal is rendered only when every `originality` declaration is `true`.
 - Text-reading and text-writing paths must specify `encoding="utf-8"`.
 - Never put API keys, tokens, or secrets in logs, inputs, or commits.
+- Version expectations and pins in source code must derive from files
+  the dependency-update checker covers (pyproject pins, lockfiles,
+  Dockerfiles, workflow pins); do not hardcode a second copy.
 - Files containing externally sourced code must retain the original license
   notices and attribution. Do not add unrelated third-party copyright notices
   to original files.

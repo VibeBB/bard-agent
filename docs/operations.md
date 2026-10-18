@@ -350,3 +350,19 @@ here so audits do not re-flag them:
 ### 2026-10-18 sweep
 
 sdk/tools `==1.54.0` -> `==1.55.1`, ruff `==0.17.0` -> `==0.17.1`, uv `==0.13.0` -> `==0.13.1`, zizmor `1.30.1` -> `1.31.1`, trivy `v0.75.0` -> `v0.76.0`, codeql-action v4.38.3 -> v4.39.0. Full changelog review: [SDK v1.55.1 feature evaluation](research/sdk-v1.55.1-feature-evaluation.md). Deferrals unchanged (mcp 2.x, Python 3.15 default); reasons refreshed to cite SDK 1.55.1.
+
+## Dependency update sweep procedure
+
+When sweeping dependencies to latest releases:
+
+1. Refresh `EXPECTED` hashes from the repo's actual canonical files
+   (`sha256sum`); never copy a value from another repo.
+2. Regenerate every lockfile (`uv.lock` plus language-specific locks such
+   as `runtime/package-lock.json` where present).
+3. Grep the whole repo for the previous version literals to catch a
+   second hardcoded copy outside the checker's covered files.
+4. Verify heavyweight pins end-to-end (download the artifact and run it);
+   "latest" is not always adoptable.
+5. Newly fixable Debian CVEs can land between PR CI and the publish
+   gate; done means post-merge publish and CI runs are green, not just
+   the PR checks.
