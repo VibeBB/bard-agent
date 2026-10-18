@@ -38,12 +38,12 @@ def test_lock_versions_cover_direct_deps(dep_check: Any) -> None:
     deps = dep_check.dependency_names(dep_check.project_data(REPO_ROOT))
     missing = [name for name in deps if name not in versions]
     assert missing == []
-    assert versions["openhands-sdk"] == "1.54.0"
+    assert versions["openhands-sdk"] == "1.55.1"
     assert versions["pytest"] == "9.1.1"
 
 
 def test_uv_pin_parsed(dep_check: Any) -> None:
-    assert dep_check.uv_version_pin(REPO_ROOT) == "==0.13.0"
+    assert dep_check.uv_version_pin(REPO_ROOT) == "==0.13.1"
 
 
 def test_workflow_files_have_expected_suffixes(dep_check: Any) -> None:
@@ -61,15 +61,15 @@ def test_docker_base_image_parsed(dep_check: Any) -> None:
 
 def test_subpath_actions_resolve_to_owner_repo(dep_check: Any) -> None:
     """uses: owner/repo/sub/path@sha pins track the owning repo's tags."""
-    tags = {"https://github.com/github/codeql-action": ["v4.38.3", "v4.39.0"]}
+    tags = {"https://github.com/github/codeql-action": ["v4.39.0", "v4.40.0"]}
     statuses = dep_check.check_github_actions(
         REPO_ROOT, list_remote_tags=lambda url: tags.get(url, [])
     )
     codeql = next(
         status for status in statuses if status.name == "github/codeql-action"
     )
-    assert codeql.current == "v4.38.3"
-    assert codeql.latest == "v4.39.0"
+    assert codeql.current == "v4.39.0"
+    assert codeql.latest == "v4.40.0"
     assert codeql.outdated is True
 
 
@@ -82,7 +82,7 @@ def test_wheel_download_pin_parsed(dep_check: Any) -> None:
     )
     zizmor = next(status for status in statuses if status.name == "zizmor")
     assert zizmor.surface == "workflow-download"
-    assert zizmor.current == "1.30.1"
+    assert zizmor.current == "1.31.1"
     assert zizmor.latest == "1.31.0"
     assert zizmor.outdated is True
 
@@ -106,12 +106,12 @@ def test_release_download_pin_parsed(dep_check: Any) -> None:
 def test_trivy_version_input_parsed(dep_check: Any) -> None:
     """trivy `version:` inputs on aquasecurity actions track trivy releases."""
     statuses = dep_check.check_action_inputs(
-        REPO_ROOT, list_remote_tags=lambda url: ["v0.75.0", "v0.76.0"]
+        REPO_ROOT, list_remote_tags=lambda url: ["v0.76.0", "v0.77.0"]
     )
     trivy = next(status for status in statuses if status.name == "aquasecurity/trivy")
     assert trivy.surface == "action-input"
-    assert trivy.current == "v0.75.0"
-    assert trivy.latest == "v0.76.0"
+    assert trivy.current == "v0.76.0"
+    assert trivy.latest == "v0.77.0"
     assert trivy.outdated is True
     assert "container-audit.yml" in trivy.source
     assert "publish-bard-images.yml" in trivy.source

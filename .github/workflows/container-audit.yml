@@ -68,7 +68,7 @@ jobs:
           retry docker pull "$ref"
       - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
-          version: v0.75.0
+          version: v0.76.0
       # The scan legs below each run trivy with a private TRIVY_CACHE_DIR
       # seeded from the weekly-cached copy: concurrent trivy processes in
       # one cache dir race on db/metadata.json and corrupt it. The weekly
@@ -212,7 +212,7 @@ jobs:
                 "${index:-unknown}" "${warnings:-0}" >> "$GITHUB_OUTPUT"
       - name: Upload Trivy SARIF
         if: always() && hashFiles('trivy-image.sarif') != ''
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: trivy-image.sarif
           category: trivy-bard-tools-audit
