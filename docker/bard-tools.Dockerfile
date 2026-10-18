@@ -42,25 +42,17 @@ RUN for attempt in 1 2 3 4 5; do \
     && rm -f /tmp/smoke*
 
 # The pinned debian:13-slim digest keeps shipping the debs Trivy flags at
-# publish (CVE-2026-103111 libpcre2-8-0; CVE-2026-75804 and CVE-2026-84782
-# openssl/libssl3t64; CVE-2026-66046, CVE-2026-76956, CVE-2026-76957,
-# CVE-2026-77214 and CVE-2026-93990 libexpat1; CVE-2026-96889 librsvg2).
-# Upgrade just those packages inside the build so the publish gate stays
-# green.
+# Apply every Debian security fix available at build time so the publish
+# Trivy gate cannot trip on fixable advisories released after the base
+# digest was pinned (apt always pulls the latest published fix, so an
+# explicit per-package list can only lag behind it).
 RUN for attempt in 1 2 3 4 5; do \
         apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update \
-        && apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends \
-            --only-upgrade \
-            libexpat1 \
-            libpcre2-8-0 \
-            librsvg2-2 \
-            librsvg2-bin \
-            libssl3t64 \
-            openssl-provider-legacy \
+        && apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 upgrade -y --no-install-recommends \
         && rm -rf /var/lib/apt/lists/* \
         && break; \
         [ "$attempt" = 5 ] && exit 1; \
-        echo "::warning::apt update+install attempt ${attempt} failed; retrying"; \
+        echo "::warning::apt update+upgrade attempt ${attempt} failed; retrying"; \
         sleep $((attempt * 30)); \
     done
 
