@@ -42,7 +42,7 @@ RUN for attempt in 1 2 3 4 5; do \
     && rm -f /tmp/smoke*
 
 # The pinned debian:13-slim digest keeps shipping the debs Trivy flags at
-# Apply every Debian security fix available at build time so the publish
+# publish. Apply every Debian security fix available at build time so the
 # Trivy gate cannot trip on fixable advisories released after the base
 # digest was pinned (apt always pulls the latest published fix, so an
 # explicit per-package list can only lag behind it).
