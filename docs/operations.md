@@ -347,6 +347,10 @@ here so audits do not re-flag them:
 
 ## Dependency update decisions
 
+### 2026-10-29 sweep
+
+sdk/tools `==1.55.1` -> `==1.59.0`, pytest `9.1.1` -> `9.2.0`, ruff `0.17.1` -> `0.17.3` (lock), uv `==0.13.1` -> `==0.13.6`, trivy `v0.76.0` -> `v0.76.1`, codeql-action v4.39.0 -> v4.39.1, harden-runner v2.22.1 -> v2.22.3, setup-uv v10.3.0 -> v10.3.3, docker/login-action v4.6.0 -> v4.7.0. Full changelog review: [SDK v1.59.0 feature evaluation](research/sdk-v1.59.0-feature-evaluation.md). `debian:13-slim` digest re-pinned upstream in the merged dependabot lock PR. Deferrals unchanged (mcp 2.x, Python 3.15 default).
+
 ### 2026-10-18 sweep
 
 sdk/tools `==1.54.0` -> `==1.55.1`, ruff `==0.17.0` -> `==0.17.1`, uv `==0.13.0` -> `==0.13.1`, zizmor `1.30.1` -> `1.31.1`, trivy `v0.75.0` -> `v0.76.0`, codeql-action v4.38.3 -> v4.39.0. Full changelog review: [SDK v1.55.1 feature evaluation](research/sdk-v1.55.1-feature-evaluation.md). Deferrals unchanged (mcp 2.x, Python 3.15 default); reasons refreshed to cite SDK 1.55.1.
