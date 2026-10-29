@@ -21,6 +21,20 @@ on:
       # The lock file is written by this workflow itself; exclude it so a
       # merged lock PR does not trigger another publish.
       - "!plugins/bard/skills/bard-render/tools-image.json"
+  pull_request:
+    # Dry-run rehearsal: build --load + Trivy gates only; every irreversible
+    # step below is normalized to skip on pull_request events.
+    paths:
+      - "docker/**"
+      - ".github/workflows/publish-bard-images.yml"
+      - "scripts/publish_image_pin_pr.sh"
+      - "scripts/package_level_sbom.py"
+      - "scripts/measure_image_tools.py"
+      - "scripts/update_tools_image_lock.py"
+      - "!docker/README.md"
+      # The lock file is written by this workflow itself; exclude it so a
+      # merged lock PR does not trigger another publish.
+      - "!plugins/bard/skills/bard-render/tools-image.json"
 
 # Elevated scopes live on the job; the workflow default stays empty.
 permissions: {}
@@ -74,8 +88,8 @@ jobs:
           file: docker/bard-tools.Dockerfile
           # dry_run keeps the image in the local daemon for the gates
           # below; nothing reaches the registry.
-          push: ${{ inputs.dry_run != true }}
-          load: ${{ inputs.dry_run == true }}
+          push: ${{ (inputs.dry_run != true && github.event_name != 'pull_request') }}
+          load: ${{ (inputs.dry_run == true || github.event_name == 'pull_request') }}
           # Immutable tag only: a failing image must never serve :latest;
           # the tag is promoted after every gate passes.
           tags: |
@@ -85,7 +99,7 @@ jobs:
       - name: Resolve published digest
         env:
           BUILT_DIGEST: ${{ steps.tools_publish.outputs.digest }}
-          DRY_RUN: ${{ inputs.dry_run }}
+          DRY_RUN: ${{ (inputs.dry_run == true || github.event_name == 'pull_request') }}
         run: |
           set -euo pipefail
           if [ "$DRY_RUN" = "true" ]; then
@@ -112,7 +126,7 @@ jobs:
       # step overlapping every post-build leg and join it before the
       # :latest promotion that must not outrun a failed attest.
       - name: Attest tools image provenance
-        if: inputs.dry_run != true
+        if: (inputs.dry_run != true && github.event_name != 'pull_request')
         id: attest
         background: true
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -175,7 +189,7 @@ jobs:
             uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
             env:
               # dry_run pulls the just-built image from the local daemon.
-              SYFT_SOURCE_IMAGE_DEFAULT_PULL_SOURCE: ${{ inputs.dry_run == true && 'docker' || 'registry' }}
+              SYFT_SOURCE_IMAGE_DEFAULT_PULL_SOURCE: ${{ (inputs.dry_run == true || github.event_name == 'pull_request') && 'docker' || 'registry' }}
               TMPDIR: ${{ runner.temp }}
               SYFT_FILE_METADATA_SELECTION: none
             with:
@@ -198,7 +212,7 @@ jobs:
           - name: Verify published tools smoke
             env:
               TOOLS_REF: ${{ env.TOOLS_REF }}
-              DRY_RUN: ${{ inputs.dry_run }}
+              DRY_RUN: ${{ (inputs.dry_run == true || github.event_name == 'pull_request') }}
             run: |
               set -euo pipefail
               # dry_run already holds the image in the local daemon.
@@ -304,7 +318,7 @@ jobs:
               raise SystemExit("tools SBOM must use SPDX-2.3")
           PY
       - name: Attest tools SBOM
-        if: inputs.dry_run != true
+        if: (inputs.dry_run != true && github.event_name != 'pull_request')
         id: attest_sbom
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -327,7 +341,7 @@ jobs:
         # Every gate above passed: copy the verified manifest to :latest
         # server-side (attestations and the SBOM keep binding the digest).
         # A gate failure leaves the previous good :latest untouched.
-        if: inputs.dry_run != true
+        if: (inputs.dry_run != true && github.event_name != 'pull_request')
         run: |
           docker buildx imagetools create \
             --tag "ghcr.io/${OWNER_LC}/bard-tools:latest" \
@@ -343,7 +357,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Update image pin and merge PR
         # dry_run stops at the summary: no lock PR, no post-merge dispatches.
-        if: inputs.dry_run != true
+        if: (inputs.dry_run != true && github.event_name != 'pull_request')
         env:
           GH_TOKEN: ${{ github.token }}
           TOOLS_REF: ${{ env.TOOLS_REF }}
@@ -419,13 +433,13 @@ jobs:
           bash scripts/publish_image_pin_pr.sh "$pr_url" "$branch" "" "ci.yml locked-image-check.yml workflow-lint.yml"
       - name: Upload Trivy SARIF
         # A rehearsal must not file code-scanning alerts.
-        if: always() && inputs.dry_run != true && hashFiles('trivy-image.sarif') != ''
+        if: always() && (inputs.dry_run != true && github.event_name != 'pull_request') && hashFiles('trivy-image.sarif') != ''
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: trivy-image.sarif
           category: trivy-bard-tools
       - name: Note dry-run skips
-        if: inputs.dry_run
+        if: (inputs.dry_run == true || github.event_name == 'pull_request')
         run: |
           {
             echo "### dry-run rehearsal"
