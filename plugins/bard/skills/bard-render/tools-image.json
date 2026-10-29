@@ -1,9 +1,9 @@
 {
   "image": "ghcr.io/vibebb/bard-tools",
-  "tag": "b89e84ec6ebe6f54e6b535e2b934bffd2ada914e-tools",
-  "digest": "sha256:c0b63a3eef12a0f7133e75388444b7441c4a7f165fa66a9bab5d8fdf6f74d6d5",
-  "published_at": "2026-10-29T14:24:35Z",
-  "workflow_run": "https://github.com/VibeBB/bard-agent/actions/runs/40890660120",
+  "tag": "6369f246a6c5e970ed4aecb5ffa1da31b1f9af03-tools",
+  "digest": "sha256:0e65bc4a4c11f2e218723683910c2e8d05d14185bea9441ffe884fbdd82b90be",
+  "published_at": "2026-10-29T23:48:31Z",
+  "workflow_run": "https://github.com/VibeBB/bard-agent/actions/runs/40974580676",
   "dockerfile": "docker/bard-tools.Dockerfile",
   "tools": {
     "abcm2ps": "8.14.17",
@@ -11,6 +11,6 @@
     "rsvg-convert": "2.60.0",
     "fonts-ipafont": "00303-23"
   },
-  "attestation": "https://github.com/VibeBB/bard-agent/attestations/61328554",
-  "sbom_attestation": "https://github.com/VibeBB/bard-agent/attestations/61329128"
+  "attestation": "https://github.com/VibeBB/bard-agent/attestations/61535970",
+  "sbom_attestation": "https://github.com/VibeBB/bard-agent/attestations/61536401"
 }
