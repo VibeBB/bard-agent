@@ -3,7 +3,7 @@
 # render_score_png.py falls back to this image when the host lacks the tools.
 # Published to ghcr.io/<owner>/bard-tools by publish-bard-images.yml and pinned
 # by digest in plugins/bard/skills/bard-render/tools-image.json.
-FROM debian:13-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+FROM debian:13-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
 
 LABEL org.opencontainers.image.source="https://github.com/VibeBB/bard-agent" \
       org.opencontainers.image.licenses="BSD-3-Clause"
