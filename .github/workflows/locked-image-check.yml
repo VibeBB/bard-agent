@@ -126,9 +126,16 @@ jobs:
               IMAGE: ${{ needs.check-lock.outputs.image }}
               DIGEST: ${{ needs.check-lock.outputs.digest }}
             run: |
-              gh attestation verify "oci://${IMAGE}@${DIGEST}" \
-                --repo VibeBB/bard-agent \
-                --signer-workflow VibeBB/bard-agent/.github/workflows/publish-bard-images.yml
+              # `gh attestation verify` intermittently fails to initialize
+              # the public-good Sigstore verifier; retry before failing.
+              for attempt in 1 2 3; do
+                if gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+                  --repo VibeBB/bard-agent \
+                  --signer-workflow VibeBB/bard-agent/.github/workflows/publish-bard-images.yml; then
+                  break
+                fi
+                [ "$attempt" -lt 3 ] && sleep 15 || exit 1
+              done
           - name: Warn when bard tools image has no SBOM attestation
             if: needs.check-lock.outputs.sbom_attestation == ''
             run: echo "::warning::bard tools image lock has no SBOM attestation; continuing."
@@ -139,10 +146,17 @@ jobs:
               IMAGE: ${{ needs.check-lock.outputs.image }}
               DIGEST: ${{ needs.check-lock.outputs.digest }}
             run: |
-              gh attestation verify "oci://${IMAGE}@${DIGEST}" \
-                --repo VibeBB/bard-agent \
-                --signer-workflow VibeBB/bard-agent/.github/workflows/publish-bard-images.yml \
-                --predicate-type https://spdx.dev/Document/v2.3
+              # `gh attestation verify` intermittently fails to initialize
+              # the public-good Sigstore verifier; retry before failing.
+              for attempt in 1 2 3; do
+                if gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+                  --repo VibeBB/bard-agent \
+                  --signer-workflow VibeBB/bard-agent/.github/workflows/publish-bard-images.yml \
+                  --predicate-type https://spdx.dev/Document/v2.3; then
+                  break
+                fi
+                [ "$attempt" -lt 3 ] && sleep 15 || exit 1
+              done
           - name: Render shipped song example
             run: |
               python3 plugins/bard/skills/bard-render/scripts/render_song.py \
