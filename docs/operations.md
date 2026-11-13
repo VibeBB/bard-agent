@@ -347,6 +347,10 @@ here so audits do not re-flag them:
 
 ## Dependency update decisions
 
+### 2026-11-14 sweep
+
+sdk/tools `==1.59.0` -> `==1.62.0`, ruff `0.17.3` -> `0.17.5`, uv `==0.13.6` -> `==0.13.8`, trivy `v0.76.1` -> `v0.76.2`, codeql-action v4.39.1 -> v4.39.3, harden-runner v2.22.3 -> v2.22.4, docker/login-action v4.7.0 -> v4.8.0, zizmor `1.31.1` -> `1.32.0`; `pydantic` floated to 2.14.3 in the lock. Full changelog review: [SDK v1.62.0 feature evaluation](research/sdk-v1.62.0-feature-evaluation.md). SDK 1.61.0 `${PLUGIN_ROOT}` resolution adopted in hooks and agent frontmatter. Deferrals unchanged (Python 3.15 default); bard carries no mcp pin so the mcp 2.x migration does not apply.
+
 ### 2026-10-29 sweep
 
 sdk/tools `==1.55.1` -> `==1.59.0`, pytest `9.1.1` -> `9.2.0`, ruff `0.17.1` -> `0.17.3` (lock), uv `==0.13.1` -> `==0.13.6`, trivy `v0.76.0` -> `v0.76.1`, codeql-action v4.39.0 -> v4.39.1, harden-runner v2.22.1 -> v2.22.3, setup-uv v10.3.0 -> v10.3.3, docker/login-action v4.6.0 -> v4.7.0. Full changelog review: [SDK v1.59.0 feature evaluation](research/sdk-v1.59.0-feature-evaluation.md). `debian:13-slim` digest re-pinned upstream in the merged dependabot lock PR. Deferrals unchanged (mcp 2.x, Python 3.15 default).
