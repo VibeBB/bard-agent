@@ -25,6 +25,7 @@ from collections import Counter
 from pathlib import Path
 
 ROOT_ENV = "BARD_PLUGIN_ROOT"
+SDK_ROOT_ENV = "PLUGIN_ROOT"
 PROJECT_ENV = "OPENHANDS_PROJECT_DIR"
 SELF_PATH = Path("hooks") / "scripts" / "bard_doctor.py"
 REQUIRED_PATHS = (".plugin/plugin.json", "agents", "skills")
@@ -34,9 +35,10 @@ PIN_REL = Path("skills") / "bard-render" / "tools-image.json"
 
 def _candidate_roots() -> list[Path]:
     candidates: list[Path] = []
-    root = os.environ.get(ROOT_ENV)
-    if root:
-        candidates.append(Path(root).expanduser())
+    for env in (ROOT_ENV, SDK_ROOT_ENV):
+        root = os.environ.get(env)
+        if root:
+            candidates.append(Path(root).expanduser())
     project = os.environ.get(PROJECT_ENV) or "."
     candidates.append(Path(project).expanduser() / "plugins" / "bard")
     home = Path.home()
