@@ -525,6 +525,24 @@ def test_done_binds_full_official_bundle(
     assert liaison.validate_response(results[0]["response"]) == []
 
 
+@pytest.mark.parametrize("command", ["cue", "inbox"])
+def test_shipped_cue_completion_example(
+    liaison: Any, tmp_path: Path, cue_delivery: dict[str, Any], command: str
+) -> None:
+    text = (REPO_ROOT / f"plugins/bard/commands/{command}.md").read_text(
+        encoding="utf-8"
+    )
+    example = text.split("<<'JSON'\n", 1)[1].split("\n   JSON", 1)[0]
+    payload = json.loads(example.replace("cues/<slug>/", "cues/"))
+    payload.update(
+        request=cue_delivery["request"],
+        reason=cue_delivery["reason"],
+        decision_refs=cue_delivery["decision_refs"],
+        impression_refs=cue_delivery["impression_refs"],
+    )
+    assert liaison.respond(payload, root=tmp_path)["response"]["status"] == "done"
+
+
 @pytest.mark.parametrize(
     "mutation",
     [

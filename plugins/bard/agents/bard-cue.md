@@ -82,6 +82,12 @@ parent picks a fresh slug.
    `<plugin root>/skills/bard-render/SKILL.md` and `docs/cue-set-contract.md` in the bard
    repository). Copy `<plugin root>/skills/bard-render/examples/smart-kettle.cues.json` and
    edit it rather than starting from scratch. Every `ux_feedback` must be an id you were given.
+   For a ux-request, replace the example source with
+   `{"kind": "ux_request", "ref": "<workspace-relative request path>", "sha256": "<current request SHA-256>"}`.
+   Hash the actual request file and check its input hashes; never invent or
+   copy a stale hash. Render from the workspace root so provenance paths
+   resolve there. Return `cues.provenance.json` with the manifest path for
+   the parent's verified liaison completion.
 4. **check** — `python3 <plugin root>/skills/bard-render/scripts/render_cues.py --cues
    cues/<slug>/cues.proposal.json --out-dir cues/<slug> --check`. On rejection fix only the
    listed reasons and re-run; never hand-write the outputs.

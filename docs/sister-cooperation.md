@@ -51,8 +51,9 @@ Output `{requests[], malformed[]}`; exit 0.
   missing or escaped evidence refuses completion before any response write.
   Non-cue work can still use incomplete/refusal statuses; the song workflow
   is separate from this product-cue liaison completion contract.
-- `input_hashes` is recomputed from the current files; a missing request input
-  is only allowed under the soft statuses.
+- `input_hashes` is recomputed from the current files; `done` refuses any
+  mismatch with the request's declared hashes. A missing request input is
+  only allowed under the soft statuses.
 - Response written as `<stem>.ux-response.json` (sorted keys, indent 2, UTF-8;
   overwrite allowed).
 
