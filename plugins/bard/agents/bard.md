@@ -34,7 +34,7 @@ hooks:
       hooks:
         - type: command
           name: require-records
-          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard" "${HOME:-}/plugins/installed/bard" "${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/bard"; do [ -f "$c/hooks/scripts/require_records.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/require_records.py" session-start'
+          command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard" "${HOME:-}/plugins/installed/bard" "${OH_PERSISTENCE_DIR:-/nonexistent}/plugins/installed/bard"; do [ -f "$c/hooks/scripts/require_records.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/require_records.py" record-context'
   stop:
     - matcher: '*'
       hooks:
