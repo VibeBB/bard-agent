@@ -543,7 +543,7 @@ def record_reconcile(
     reviews = [by_id[event] for event in request]
     session_id = _session_id(payload)
     if reviews[0].get("session_id") != session_id or any(
-        r.get("session_id") != session_id
+        (r.get("session_id") is not None or reviews[0].get("session_id") is not None)
         and _vrp.review_primary(r, own.get("vision_review", []), base) is not reviews[0]
         for r in reviews[1:]
     ):
