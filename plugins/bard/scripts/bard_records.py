@@ -202,7 +202,7 @@ def _payload(kind: str, payload: Mapping[str, Any]) -> dict[str, Any]:
     """Reject unknown keys, apply the documented defaults, drop nulls."""
     if not isinstance(payload, Mapping):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise ValueError("payload must be a JSON object")
-    unknown = sorted(set(payload) - _ALLOWED[kind])
+    unknown = sorted(set(payload) - (_ALLOWED[kind] | {"session_id"}))
     if unknown:
         raise ValueError(f"unknown {kind} fields: {unknown}")
     body: dict[str, Any] = {**_DEFAULTS.get(kind, {}), **dict(payload)}
@@ -250,6 +250,23 @@ def _archive_legacy(log: Path) -> None:
     log.rename(target)
 
 
+def _session_id(body: Mapping[str, Any]) -> str | None:
+    """Use explicit/native context; never guess a session from shared marker files."""
+    supplied = body.get("session_id")
+    if supplied is not None and (
+        not isinstance(supplied, str)
+        or not supplied.strip()
+        or supplied != supplied.strip()
+    ):
+        raise ValueError(
+            "session_id must be a non-empty string without surrounding whitespace"
+        )
+    inherited = os.environ.get("OPENHANDS_SESSION_ID", "").strip() or None
+    if supplied is not None and inherited is not None and supplied != inherited:
+        raise ValueError("session_id does not match OPENHANDS_SESSION_ID")
+    return supplied or inherited
+
+
 def _append(kind: str, body: dict[str, Any], root: Path) -> dict[str, Any]:
     log = records_dir(root) / LOG_FILES[kind]
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -283,6 +300,9 @@ def _append(kind: str, body: dict[str, Any], root: Path) -> dict[str, Any]:
             "writer": writer,
             **{key: value for key, value in body.items() if value is not None},
         }
+        session_id = _session_id(body)
+        if session_id is not None:
+            record["session_id"] = session_id
         record["event_id"] = _vrp.compute_event_id(record)
         errors = _vrp.record_errors(kind, record)
         if errors:
@@ -445,10 +465,12 @@ def _round_errors(
     if reviewer == "primary":
         return []
     image = (base / str(body.get("image_path") or "")).resolve()
+    session_id = _session_id(body)
     reviews = [
         r
         for r in own.get("vision_review", [])
-        if r.get("image_sha256") == body.get("image_sha256")
+        if r.get("session_id") == session_id
+        and r.get("image_sha256") == body.get("image_sha256")
         and (base / str(r.get("image_path") or "")).resolve() == image
     ]
     primaries = [r for r in reviews if r.get("reviewer") == "primary"]
@@ -498,6 +520,12 @@ def record_reconcile(
     if missing:
         raise ValueError(f"unknown vision review event ids: {missing}")
     reviews = [by_id[event] for event in request]
+    session_id = _session_id(payload)
+    if any(r.get("session_id") != session_id for r in reviews):
+        raise ValueError("reconciled reviews must belong to the current session")
+    paths = {(base / str(r.get("image_path") or "")).resolve() for r in reviews}
+    if len(paths) != 1:
+        raise ValueError("reconciled reviews must bind the same resolved image path")
     roles = [str(r.get("reviewer")) for r in reviews]
     expected = ["primary", "blind", "tiebreak"][: len(reviews)]
     if roles != expected:
@@ -518,7 +546,9 @@ def record_reconcile(
     if result["round"] == 2 and not any(c.get("outcome") == "disagree" for c in prior):
         raise ValueError("round 2 needs a round-1 reconcile that disagrees")
     body = {"image_sha256": digests.pop(), "reviews": list(request), **result}
-    return _append("review_reconcile", body, base)
+    return _append(
+        "review_reconcile", body | {"session_id": payload.get("session_id")}, base
+    )
 
 
 def record_insight(
@@ -624,7 +654,9 @@ def record_read(payload: Mapping[str, Any], root: Path | None = None) -> dict[st
         "refs": refs,
         "unresolved": unresolved,
     }
-    return _append("upstream_read", record, base)
+    return _append(
+        "upstream_read", record | {"session_id": payload.get("session_id")}, base
+    )
 
 
 def deliver_song(
