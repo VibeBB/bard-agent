@@ -443,6 +443,7 @@ def cue_delivery(
                 "Use distinct rising notes for completion and an interrupted warning "
                 "pattern for overheat. This keeps confirmation short and makes the "
                 "warning recognizable without depending on a high fundamental."
+                " Hardware measurements must verify the physical sound pressure."
             ),
             "evidence": [{"path": "cues/cues.proposal.json"}],
             "risks": ["physical audibility still needs measurement"],
@@ -457,12 +458,12 @@ def cue_delivery(
             "artifacts": ["cues/cues.proposal.json"],
             "impression": (
                 "The smart-kettle proposal separates startup, completion, warning and "
-                "confirmation into four named patterns that can be checked independently. "
-                "The warning alternates notes with rests, while the completion pattern "
-                "uses a rising interval, so their structures are different in the source. "
-                "A firmware developer can read the generated tone tables without parsing "
-                "MIDI, although this source inspection says nothing about physical sound "
-                "pressure. The next step is readback and hardware listening measurement."
+                "confirmation into four named patterns for independent checking. "
+                "The warning alternates notes with rests, while completion uses a "
+                "rising interval, so the source structures are different. A firmware "
+                "developer can read tone tables without parsing MIDI, although source "
+                "inspection says nothing about physical sound pressure. The next "
+                "step is readback and hardware listening measurement."
             ),
             "facets": {
                 "observed": ["smart-kettle has four cues", "warning includes rests"],
