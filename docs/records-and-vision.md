@@ -84,3 +84,34 @@ covering their current bytes, owes a decision, viewed an image/event with no
 matching vision review, or owes a blind review / reconcile for a
 `dual_review_globs` image. Bounded by `max_stop_denials` (2) so a model that
 cannot comply still terminates; the verdict lands in `records-status.json`.
+
+## Session-scoped Stop status
+
+The Stop hook excludes a record with an explicit different session ID,
+even when its timestamp is recent. Legacy records without an ID are
+eligible only from the session start through the following 24 hours;
+their use is reported as an attribution warning. Missing session
+identity or a missing start marker also leaves attribution unverified.
+Reviews bind both the resolved image path and its SHA-256; an event ID
+cannot substitute for that binding. Supply an explicit `image_path` to
+the review writer so it records the current bytes. Legacy reference-only
+reviews remain readable but do not discharge image-review obligations.
+
+Stop writes `observations/<plugin>/records-status.json` and a
+`observations/<plugin>/.sessions/<session>.status.json` snapshot:
+
+| Field | Meaning |
+| --- | --- |
+| `stop_permission` | `deny` while the configured refusal budget remains, then `allow` |
+| `record_compliance` | `fail` for missing evidence, `unknown` for attribution warnings, otherwise `pass` |
+| `run_completion` | `unknown`; only the execution workflow can establish completion |
+| `acceptance` | `unknown`; only the product acceptance workflow can establish it |
+| `checkpoint` | Session marker containing the start time and refusal count |
+
+An exhausted refusal budget permits termination while preserving the
+unresolved problems. The compatibility `verdict` describes the hook's
+problem list only; consumers must use the explicit fields above and must
+not infer product acceptance from Stop permission or the absence of
+record problems. Reviewer identity propagation and derived-image
+ownership require a separate recording contract; this status does not
+claim to verify them.
