@@ -163,6 +163,7 @@ def _source_event_for(root: Path, image_sha: str, session_id: str | None) -> str
 VRP_BODY_KEYS = frozenset(
     {
         "session_id",
+        "coordinator_session_id",
         "impression",
         "facets",
         "claims",

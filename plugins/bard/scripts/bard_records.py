@@ -110,6 +110,7 @@ _ALLOWED: Final[dict[str, frozenset[str]]] = {
         "image_path",
         "source_event_id",
         "primary_event_id",
+        "coordinator_session_id",
         "model",
         "checklist",
         "reviewer",
@@ -464,6 +465,11 @@ def _round_errors(
     """Keep each bounded review round bound to one resolved path and digest."""
     reviewer = str(body.get("reviewer"))
     if reviewer == "primary":
+        scope_errors = _vrp.primary_scope_errors(
+            {**body, "session_id": _session_id(body), "plugin": PLUGIN}, base
+        )
+        if scope_errors:
+            return scope_errors
         if body.get("primary_event_id"):
             return ["a primary review cannot reference another primary"]
         return []
@@ -542,7 +548,10 @@ def record_reconcile(
         raise ValueError(f"unknown vision review event ids: {missing}")
     reviews = [by_id[event] for event in request]
     session_id = _session_id(payload)
-    if reviews[0].get("session_id") != session_id or any(
+    if (
+        session_id != reviews[0].get("session_id")
+        and (not session_id or session_id != reviews[0].get("coordinator_session_id"))
+    ) or any(
         (r.get("session_id") is not None or reviews[0].get("session_id") is not None)
         and _vrp.review_primary(r, own.get("vision_review", []), base) is not reviews[0]
         for r in reviews[1:]
