@@ -144,13 +144,16 @@ def validate(record: Any) -> list[str]:
     return problems
 
 
-def _source_event_for(root: Path, image_sha: str) -> str | None:
+def _source_event_for(root: Path, image_sha: str, session_id: str | None) -> str | None:
     """event_id of a vision tool event or image observation bound to image_sha."""
     directory = root / "observations" / "bard"
     for name in ("vision-tool-events.jsonl", "image-observations.jsonl"):
         records, _malformed = _records.load_jsonl(directory / name)
         for record in records:
-            if record.get("image_sha256") == image_sha:
+            if (
+                record.get("image_sha256") == image_sha
+                and record.get("session_id") == session_id
+            ):
                 event_id = record.get("event_id")
                 if isinstance(event_id, str):
                     return event_id
@@ -158,7 +161,16 @@ def _source_event_for(root: Path, image_sha: str) -> str | None:
 
 
 VRP_BODY_KEYS = frozenset(
-    {"impression", "facets", "claims", "lookback", "confidence", "unknowns", "delta"}
+    {
+        "session_id",
+        "impression",
+        "facets",
+        "claims",
+        "lookback",
+        "confidence",
+        "unknowns",
+        "delta",
+    }
 )
 
 
@@ -206,11 +218,10 @@ def record_review(
         ],
         "impression": str(record["summary"]).removeprefix("inspected:").strip(),
     }
-    source = _source_event_for(root, image_sha)
+    payload["image_path"] = relative_image
+    source = _source_event_for(root, image_sha, bard_records._session_id(body))
     if source is not None:
         payload["source_event_id"] = source
-    else:
-        payload["image_path"] = relative_image
     payload["findings"].append(
         {
             "category": "artifacts",

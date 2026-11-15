@@ -246,3 +246,51 @@ def test_record_flag_appends_vrp_review(validator: Any, tmp_path: Path) -> None:
     assert entry["plugin"] == "bard"
     assert entry["image_sha256"] == hashlib.sha256(b"\x89PNG fake").hexdigest()
     assert entry["checklist"] == "score-engraving"
+
+
+def test_score_wrapper_records_explicit_native_primary(
+    validator: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OPENHANDS_SESSION_ID", raising=False)
+    song = tmp_path / "songs/demo"
+    song.mkdir(parents=True)
+    image = song / "score.png"
+    image.write_bytes(b"\x89PNG fake")
+    (song / "song.abc").write_text("X:1\nT:Demo\nw:light\n", encoding="utf-8")
+    score = _ok_record()
+    score["detail"]["image_path"] = "songs/demo/score.png"
+    score["detail"]["image_sha256"] = hashlib.sha256(image.read_bytes()).hexdigest()
+    observations = tmp_path / "observations/bard"
+    observations.mkdir(parents=True)
+    event = {
+        "session_id": "primary",
+        "event_id": "b" * 64,
+        "image_sha256": score["detail"]["image_sha256"],
+    }
+    (observations / "image-observations.jsonl").write_text(
+        json.dumps(event) + "\n", encoding="utf-8"
+    )
+    result = validator.record_review(
+        score,
+        song / "score-review.json",
+        tmp_path,
+        _vrp_body() | {"session_id": "primary"},
+    )["record"]
+    assert result["session_id"] == "primary"
+    assert result["image_path"] == "songs/demo/score.png"
+    assert result["source_event_id"] == event["event_id"]
+    writer = validator._import_script("bard_records", validator._PLUGIN_SCRIPTS)
+    blind = writer.record_vision_review(
+        _vrp_body()
+        | {
+            "impression": "Demo: " + LONG_SUMMARY.removeprefix("inspected: "),
+            "session_id": "blind",
+            "primary_event_id": result["event_id"],
+            "image_path": result["image_path"],
+            "reviewer": "blind",
+            "model": "test-model",
+            "checklist": "score-engraving",
+        },
+        tmp_path,
+    )["record"]
+    assert blind["primary_event_id"] == result["event_id"]
