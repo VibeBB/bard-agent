@@ -109,6 +109,7 @@ _ALLOWED: Final[dict[str, frozenset[str]]] = {
     | {
         "image_path",
         "source_event_id",
+        "primary_event_id",
         "model",
         "checklist",
         "reviewer",
@@ -463,13 +464,31 @@ def _round_errors(
     """Keep each bounded review round bound to one resolved path and digest."""
     reviewer = str(body.get("reviewer"))
     if reviewer == "primary":
+        if body.get("primary_event_id"):
+            return ["a primary review cannot reference another primary"]
         return []
     image = (base / str(body.get("image_path") or "")).resolve()
     session_id = _session_id(body)
+    reference = body.get("primary_event_id")
+    all_reviews = own.get("vision_review", [])
+    delegated = _vrp.review_primary(
+        {**body, "session_id": session_id, "plugin": PLUGIN}, all_reviews, base
+    )
+    if reference and delegated is None:
+        return [
+            "primary_event_id needs the same owner, path and hash, "
+            "and distinct native sessions"
+        ]
+    if session_id and not reference:
+        return [
+            "a scoped blind/tiebreak review needs primary_event_id "
+            "and a distinct session"
+        ]
     reviews = [
         r
-        for r in own.get("vision_review", [])
-        if r.get("session_id") == session_id
+        for r in all_reviews
+        if (r.get("primary_event_id") == reference or r is delegated)
+        and (delegated is not None or r.get("session_id") == session_id)
         and r.get("image_sha256") == body.get("image_sha256")
         and (base / str(r.get("image_path") or "")).resolve() == image
     ]
@@ -479,6 +498,8 @@ def _round_errors(
             f"a {reviewer} review needs a primary review of the same image bytes first"
         ]
     primary = primaries[-1]
+    if session_id and any(r.get("session_id") == session_id for r in reviews):
+        return ["each review role needs a distinct native reviewer session"]
     after = _vrp.parse_time(primary.get("recorded_at")) or 0.0
     later = [
         r
@@ -499,8 +520,8 @@ def _round_errors(
         ]
         if not splits:
             return [
-                "a tiebreak review is only allowed after a round-1 reconcile"
-                " that disagrees"
+                "a tiebreak review is only allowed after a round-1 reconcile "
+                "that disagrees"
             ]
     return []
 
@@ -521,11 +542,12 @@ def record_reconcile(
         raise ValueError(f"unknown vision review event ids: {missing}")
     reviews = [by_id[event] for event in request]
     session_id = _session_id(payload)
-    if any(r.get("session_id") != session_id for r in reviews):
+    if reviews[0].get("session_id") != session_id or any(
+        r.get("session_id") != session_id
+        and _vrp.review_primary(r, own.get("vision_review", []), base) is not reviews[0]
+        for r in reviews[1:]
+    ):
         raise ValueError("reconciled reviews must belong to the current session")
-    paths = {(base / str(r.get("image_path") or "")).resolve() for r in reviews}
-    if len(paths) != 1:
-        raise ValueError("reconciled reviews must bind the same resolved image path")
     roles = [str(r.get("reviewer")) for r in reviews]
     expected = ["primary", "blind", "tiebreak"][: len(reviews)]
     if roles != expected:

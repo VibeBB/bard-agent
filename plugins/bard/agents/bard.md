@@ -421,3 +421,11 @@ sister plugin, never `bard`), `title`, `verse` (the lines addressed to that sist
 was made from) and `reason`. Deliveries land in `liaison/<id>.bard-song.json`, are immutable,
 and cannot cite receipts or other songs — a sister's `song_receipt` is the end of the
 exchange, never a request for another song.
+
+
+Use the native `session_id` supplied by your SessionStart record context for VRP
+writes. For an independent blind/tiebreak review, pass `primary_event_id` from
+the delegation brief; the writer binds it to the same image path and SHA-256.
+When delegating, provide only that opaque ID, the image identity and task facts;
+never disclose the earlier review prose. Each reviewer keeps its own native
+session ID, and the primary's session performs reconciliation.
