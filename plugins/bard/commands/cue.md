@@ -27,6 +27,9 @@ receive the parent's conversation history — you summarize the request and pass
    `system` `"ux-creator"`, `target_agent` `"bard"`, stage, risk, purpose ≥20 chars,
    non-empty `requested_changes`/`expected_deliverables`/`acceptance` lists, `inputs`
    with sha256 hashes); malformed requests are reported, not worked.
+   Pass the workspace-relative request path and its current SHA-256 to bard-cue.
+   The proposal's `sources` must bind both in an `ux_request` entry; copying
+   the example's unbound request reference cannot satisfy completion.
 4. If `task` is in the tool list actually available in this conversation:
 
    ```text
@@ -48,12 +51,17 @@ receive the parent's conversation history — you summarize the request and pass
    python3 <plugin root>/scripts/bard_cli.py ux-respond --json - <<'JSON'
    {"request": "<request path>", "status": "done",
     "reason": "cue set rendered and read back for the request",
-    "artifacts": ["cues/<slug>/cues.json"],
+    "artifacts": ["cues/<slug>/cues.provenance.json"],
     "gate_verdicts": [{"gate": "cue-set-contract", "verdict": "pass"},
                        {"gate": "readback", "verdict": "pass"}],
     "decision_refs": ["<event_id>"], "impression_refs": ["<event_id>"],
     "questions_for_user": []}
    JSON
    ```
+
+   `ux-respond` verifies and includes the proposal and all official outputs
+   automatically. If validation, readback or provenance fails, correct the
+   authored proposal and regenerate, or answer with an incomplete/refusal
+   status and a concrete reason. Never replace the evidence with a claimed pass.
 
 A cue grants no pass/fail authority over the product it sounds for.

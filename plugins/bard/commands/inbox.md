@@ -25,6 +25,8 @@ bard answers each with a `*.ux-response.json` beside it.
    `task` — `subagent_type="bard-cue"` for cue/earcon/sound requests,
    `subagent_type="bard"` for song requests — passing the request path and a cue or song
    output directory under `cues/<slug>/` or `songs/<slug>/`.
+   For product cues, pass the workspace-relative request path and current
+   SHA-256, and require the proposal's `sources` to cite both as `ux_request`.
 3. After the work lands, record a decision and an impression for the request
    (`record decision`, `record impression`), then answer it:
 
@@ -32,7 +34,7 @@ bard answers each with a `*.ux-response.json` beside it.
    python3 <plugin root>/scripts/bard_cli.py ux-respond --json - <<'JSON'
    {"request": "<path>.ux-request.json", "status": "done",
     "reason": "<why this response>",
-    "artifacts": ["cues/<slug>/cues.json"],
+    "artifacts": ["cues/<slug>/cues.provenance.json"],
     "gate_verdicts": [{"gate": "cue-set-contract", "verdict": "pass"},
                        {"gate": "readback", "verdict": "pass"}],
     "decision_refs": ["<event_id>"], "impression_refs": ["<event_id>"],
@@ -40,10 +42,14 @@ bard answers each with a `*.ux-response.json` beside it.
    JSON
    ```
 
-   Gate verdicts come from `render_*.py --check` (`cue-set-contract` /
-   `song-proposal-contract`), the read-back inside the render (`readback`), and a vision
-   review (`score-review`) when PNGs exist. `done` requires ≥1 artifact, ≥1 decision_ref and
-   ≥1 impression_ref, and no fail/unknown gate verdicts — otherwise respond
+   This `done` example is for product cues. `ux-respond` verifies the complete
+   official cue bundle and includes its proposal and outputs automatically.
+   Gate verdicts come from the cue validator and renderer readback. Vision
+   reviews are advisory records, never gate verdicts. Completion also needs
+   ≥1 decision_ref, ≥1 impression_ref, current request inputs and no
+   fail/unknown gate verdicts. Otherwise respond
    `needs_info`/`rejected`/`deferred` with a ≥20-character `reason`.
+   Songs use the separate song-delivery workflow; report their liaison work
+   as `in_progress` or a refusal status rather than claiming cue completion.
 4. Report each request's state and the response paths written. Requests are advisory work
    items; nothing here gates or approves the UX contract.

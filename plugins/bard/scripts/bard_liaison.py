@@ -546,6 +546,123 @@ def _records_heads(root: Path) -> tuple[dict[str, str], list[str]]:
     return heads, broken
 
 
+def _cue_evidence_path(value: Any, root: Path) -> Path:
+    if not _is_str(value):
+        raise ValueError("refusing done: cue evidence needs a file path")
+    path = (root / value).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        raise ValueError("refusing done: cue evidence must be a workspace file")
+    return path
+
+
+def _verified_cue_artifacts(
+    artifacts: list[dict[str, str]], request_path: Path, root: Path
+) -> list[dict[str, str]]:
+    """Reproduce the official cue bundle before acknowledging completion.
+
+    Provenance is evidence to check, not authority. Regenerating in memory
+    also catches a placeholder whose forged provenance hashes match it.
+    """
+    proofs = [
+        root / item["path"]
+        for item in artifacts
+        if Path(item["path"]).name == "cues.provenance.json"
+    ]
+    if not proofs:
+        raise ValueError(
+            "refusing done: include official cues.provenance.json; "
+            "render a request-bound cue set first or use an incomplete status"
+        )
+    renderer_path = (
+        Path(__file__).resolve().parents[1]
+        / "skills/bard-render/scripts/render_cues.py"
+    )
+    spec = importlib.util.spec_from_file_location("bard_cue_delivery", renderer_path)
+    if spec is None or spec.loader is None:  # pragma: no cover
+        raise ValueError("refusing done: official cue renderer unavailable")
+    renderer = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = renderer
+    spec.loader.exec_module(renderer)
+    verified: dict[str, str] = {}
+    for proof in proofs:
+        provenance, error = _read_json(proof)
+        if error or not isinstance(provenance, dict):
+            raise ValueError("refusing done: invalid cue provenance JSON")
+        source = provenance.get("cue_set")
+        if not isinstance(source, dict):
+            raise ValueError("refusing done: provenance needs cue_set path and hash")
+        cue_path = _cue_evidence_path(source.get("path"), root)
+        data, error = _read_json(cue_path)
+        if error:
+            raise ValueError(f"refusing done: cue set {error}")
+        try:
+            cue_set = renderer.validate_cue_set(data)
+        except renderer.ProposalError as exc:
+            raise ValueError(
+                "refusing done: cue set rejected: " + "; ".join(exc.reasons)
+            ) from exc
+        request_source = {
+            "kind": "ux_request",
+            "ref": request_path.relative_to(root).as_posix(),
+            "sha256": _sha256_file(request_path),
+        }
+        if request_source not in cue_set.sources:
+            raise ValueError(
+                "refusing done: cue sources must cite this ux_request path and sha256"
+            )
+        expected = renderer.render(cue_set)
+        expected_hashes = {
+            name: hashlib.sha256(blob).hexdigest() for name, blob in expected.items()
+        }
+        cue_sha = _sha256_file(cue_path)
+        metadata = {
+            "artifact_kind": renderer.PROVENANCE_KIND,
+            "schema_version": renderer.SCHEMA_VERSION,
+            "authority": "none",
+            "envelope_version": renderer.ENVELOPE_VERSION,
+            "producer": TARGET,
+            "artifact": {"name": "cues.json", "sha256": expected_hashes["cues.json"]},
+            "sources": [
+                {"path": cue_path.relative_to(root).as_posix(), "sha256": cue_sha}
+            ],
+            "outputs": expected_hashes,
+            "script_sha256": _sha256_file(renderer_path),
+            "cue_sources": cue_set.sources,
+            "originality": cue_set.originality,
+            "device": cue_set.device,
+            "cue_count": len(cue_set.cues),
+        }
+        if source.get("sha256") != cue_sha or any(
+            provenance.get(key) != value for key, value in metadata.items()
+        ):
+            raise ValueError("refusing done: cue provenance is stale or inconsistent")
+        if _records.parse_time(provenance.get("generated_at")) is None:
+            raise ValueError("refusing done: cue provenance needs generated_at")
+        actual: dict[str, bytes] = {}
+        for name, expected_blob in expected.items():
+            path = _cue_evidence_path(str(proof.parent / name), root)
+            blob = path.read_bytes()
+            if blob != expected_blob:
+                raise ValueError(f"refusing done: {name} differs from official render")
+            actual[name] = blob
+            verified[path.relative_to(root).as_posix()] = expected_hashes[name]
+        reasons = renderer.readback_check(cue_set, actual)
+        if reasons:
+            raise ValueError("refusing done: " + "; ".join(reasons))
+        verified[cue_path.relative_to(root).as_posix()] = cue_sha
+        verified[proof.relative_to(root).as_posix()] = _sha256_file(proof)
+    for item in artifacts:
+        path = Path(item["path"])
+        if (
+            path.suffix.lower() in {".mid", ".mml"}
+            or path.name in {"cues.json", "cues.provenance.json"}
+        ) and item["path"] not in verified:
+            raise ValueError(f"refusing done: unverified cue artifact {item['path']}")
+    merged = {item["path"]: item["sha256"] for item in artifacts}
+    merged.update(verified)
+    return [{"path": path, "sha256": sha} for path, sha in sorted(merged.items())]
+
+
 def respond(payload: Any, root: Path | None = None) -> dict[str, Any]:
     """Validate a respond input and write <stem>.ux-response.json."""
     base = (root or Path.cwd()).resolve()
@@ -647,11 +764,15 @@ def respond(payload: Any, root: Path | None = None) -> dict[str, Any]:
                 "rejected or deferred to omit it"
             )
         input_hashes[rel] = _sha256_file(path)
+        if status == "done" and input_hashes[rel] != entry["sha256"]:
+            raise ValueError(f"refusing done: request input {rel} is stale")
     heads, broken_logs = _records_heads(base)
     if status == "done" and broken_logs:
         raise ValueError(
             f"refusing 'done': VRP logs fail integrity ({', '.join(broken_logs)})"
         )
+    if status == "done":
+        artifacts = _verified_cue_artifacts(artifacts, req_path, base)
     response = {
         "schema_version": SCHEMA_VERSION,
         "system": SYSTEM,

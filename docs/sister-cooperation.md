@@ -38,8 +38,22 @@ Output `{requests[], malformed[]}`; exit 0.
   `needs_info`/`rejected`/`deferred` with a real reason instead.
   Refs resolve only against an intact VRP v2 chain: a log that fails
   `verify_log` (forged, edited or truncated lines) refuses every ref into it.
-- `input_hashes` is recomputed from the current files; a missing request input
-  is only allowed under the soft statuses.
+- `done` acknowledges a product-cue delivery and must include its official
+  `cues.provenance.json` in `artifacts`. The responder validates the current
+  cue set, reproduces every output in memory with the shipped renderer,
+  checks provenance/source/output/script hashes and MIDI/MML readback, and
+  includes the complete verified bundle and proposal in the response's
+  artifact hashes. A claimed gate pass or matching placeholder hashes are
+  insufficient. Cue sources must contain
+  `{"kind": "ux_request", "ref": "<workspace-relative request path>", "sha256": "<current request hash>"}`.
+  Render from the workspace root (or use an absolute proposal path within
+  it), so the stored source path resolves inside that workspace. Stale,
+  missing or escaped evidence refuses completion before any response write.
+  Non-cue work can still use incomplete/refusal statuses; the song workflow
+  is separate from this product-cue liaison completion contract.
+- `input_hashes` is recomputed from the current files; `done` refuses any
+  mismatch with the request's declared hashes. A missing request input is
+  only allowed under the soft statuses.
 - Response written as `<stem>.ux-response.json` (sorted keys, indent 2, UTF-8;
   overwrite allowed).
 
