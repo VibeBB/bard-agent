@@ -42,6 +42,7 @@ hooks:
         - type: command
           name: record-vision-tool-event
           command: 'p=$(for c in "${BARD_PLUGIN_ROOT:-}" "${PLUGIN_ROOT:-}" "${OPENHANDS_PROJECT_DIR:-.}/plugins/bard" "${HOME:-}/.agents/plugins/bard" "${HOME:-}/.openhands/plugins/installed/bard"; do [ -f "$c/hooks/scripts/record_vision_tool_event.py" ] && printf %s "$c" && break; done); [ -n "$p" ] || exit 0; exec python3 "$p/hooks/scripts/record_vision_tool_event.py"'
+
 permission_mode: never_confirm
 ---
 
