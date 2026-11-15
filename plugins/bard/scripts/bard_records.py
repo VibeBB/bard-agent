@@ -431,20 +431,25 @@ def record_vision_review(
     own = _own(_workspace(base))
     errors = _vrp.impression_errors(body.get("impression"))
     errors += _context_errors("vision_review", body, base, [])
-    errors += _round_errors(str(body.get("reviewer")), body.get("image_sha256"), own)
+    errors += _round_errors(body, own, base)
     if errors:
         raise ValueError("; ".join(errors))
     return _append("vision_review", body, base)
 
 
 def _round_errors(
-    reviewer: str, digest: Any, own: dict[str, list[dict[str, Any]]]
+    body: dict[str, Any], own: dict[str, list[dict[str, Any]]], base: Path
 ) -> list[str]:
-    """Blind needs a primary; a tiebreak needs a round-1 split; each happens once."""
+    """Keep each bounded review round bound to one resolved path and digest."""
+    reviewer = str(body.get("reviewer"))
     if reviewer == "primary":
         return []
+    image = (base / str(body.get("image_path") or "")).resolve()
     reviews = [
-        r for r in own.get("vision_review", []) if r.get("image_sha256") == digest
+        r
+        for r in own.get("vision_review", [])
+        if r.get("image_sha256") == body.get("image_sha256")
+        and (base / str(r.get("image_path") or "")).resolve() == image
     ]
     primaries = [r for r in reviews if r.get("reviewer") == "primary"]
     if not primaries:
