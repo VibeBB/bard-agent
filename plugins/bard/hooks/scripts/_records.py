@@ -134,7 +134,7 @@ def _producer_delivery(path: str, digest: str, root: Path) -> dict[str, object] 
     log = Path(
         os.environ.get("UX_IMAGE_OBSERVATIONS")
         or "observations/ux/image-observations.jsonl"
-    )
+    ).expanduser()
     log = log if log.is_absolute() else root / log
     rows, malformed = load_jsonl(log)
     if malformed:
@@ -320,7 +320,7 @@ def review_image_delivery(
     log = Path(
         os.environ.get(f"{plugin.upper()}_IMAGE_OBSERVATIONS")
         or f"observations/{plugin}/image-observations.jsonl"
-    )
+    ).expanduser()
     log = log if log.is_absolute() else root / log
     rows, malformed = load_jsonl(log)
     if malformed:
