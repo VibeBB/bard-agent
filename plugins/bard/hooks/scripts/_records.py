@@ -329,7 +329,10 @@ def review_image_delivery(
         or f"observations/{plugin}/image-observations.jsonl"
     ).expanduser()
     log = log if log.is_absolute() else root / log
-    rows, malformed = load_jsonl(log)
+    try:
+        rows, malformed = load_jsonl(log)
+    except (OSError, UnicodeError, ValueError, RecursionError):
+        return unknown
     if malformed:
         return unknown
     matched: list[dict[str, object]] = []
@@ -387,7 +390,10 @@ def observed_image_revision(
         os.environ.get(f"{plugin.upper()}_IMAGE_OBSERVATIONS")
         or f"observations/{plugin}/image-observations.jsonl"
     ).expanduser()
-    rows, malformed = load_jsonl(log if log.is_absolute() else root / log)
+    try:
+        rows, malformed = load_jsonl(log if log.is_absolute() else root / log)
+    except (OSError, UnicodeError, ValueError, RecursionError):
+        return None
     matching = [row for row in rows if row.get("event_id") == source]
     if malformed or not matching:
         return None
