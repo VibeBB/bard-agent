@@ -27,14 +27,312 @@ verdict and only ever push toward more work.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import fnmatch
 import hashlib
 import json
+import os
 import re
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
+
+
+def _delivery_mapping(value: object) -> dict[str, object]:
+    return cast(dict[str, object], value) if isinstance(value, dict) else {}
+
+
+def rendered_image_metadata(path: Path, data: bytes, plugin: str) -> dict[str, object]:
+    """Called by local renderer adapters with the exact bytes they attach."""
+    return {
+        "vibebb_image_identity": {
+            "path": str(path.resolve()),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "owner_plugin": plugin,
+            "origin": "renderer",
+        }
+    }
+
+
+def _delivery_items(value: object) -> list[object]:
+    return cast(list[object], value) if isinstance(value, list) else []
+
+
+def _delivery_claim(value: object, root: Path) -> dict[str, object] | None:
+    """Validate an owner claim against intact workspace bytes and ancestry."""
+    claim = _delivery_mapping(value)
+    owners = {
+        "ux",
+        "bard",
+        "circuit",
+        "dashboard",
+        "doc",
+        "firmware",
+        "fpga",
+        "mech",
+        "prodeng",
+        "sim",
+        "wire",
+    }
+
+    def intact(item: dict[str, object]) -> bool:
+        path, digest = item.get("path"), item.get("sha256")
+        if not isinstance(path, str) or not isinstance(digest, str):
+            return False
+        try:
+            resolved = Path(path).resolve()
+            return (
+                str(resolved) == path
+                and resolved.is_relative_to(root)
+                and hashlib.sha256(resolved.read_bytes()).hexdigest() == digest
+            )
+        except (OSError, ValueError):
+            return False
+
+    def original(item: dict[str, object]) -> bool:
+        return (
+            set(item) == {"path", "sha256", "owner_plugin", "origin"}
+            and isinstance(item.get("owner_plugin"), str)
+            and item.get("owner_plugin") in owners
+            and isinstance(item.get("origin"), str)
+            and item.get("origin") in {"renderer", "liaison-response"}
+            and intact(item)
+        )
+
+    if original(claim):
+        return claim
+    parents = [_delivery_mapping(p) for p in _delivery_items(claim.get("parents"))]
+    if (
+        set(claim)
+        != {"path", "sha256", "owner_plugin", "origin", "operation", "parents"}
+        or claim.get("owner_plugin") != "ux"
+        or claim.get("origin") != "derived"
+        or not isinstance(claim.get("operation"), str)
+        or claim.get("operation") not in {"crop", "tile", "composite"}
+        or not 1 <= len(parents) <= 16
+        or (claim.get("operation") != "composite" and len(parents) != 1)
+        or not intact(claim)
+        or any(not original(p) or p["path"] == claim["path"] for p in parents)
+        or len({p["path"] for p in parents}) != len(parents)
+    ):
+        return None
+    return claim
+
+
+def _delivery_receipt(row: dict[str, object]) -> bool:
+    body = {k: v for k, v in row.items() if k not in {"event_id", "recorded_at"}}
+    encoded = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+    return row.get("delivery_evidence") == "inline_bytes" and hashlib.sha256(
+        encoded
+    ).hexdigest() == row.get("event_id")
+
+
+def _producer_delivery(path: str, digest: str, root: Path) -> dict[str, object] | None:
+    """Reuse exact UX producer evidence; a filename alone never creates it."""
+    log = Path(
+        os.environ.get("UX_IMAGE_OBSERVATIONS")
+        or "observations/ux/image-observations.jsonl"
+    )
+    log = log if log.is_absolute() else root / log
+    rows, malformed = load_jsonl(log)
+    if malformed:
+        return None
+    claims: dict[str, dict[str, object]] = {}
+    for row in rows:
+        if (
+            row.get("image_path") != path
+            or row.get("image_sha256") != digest
+            or row.get("identity_status") != "bound"
+            or not _delivery_receipt(row)
+        ):
+            continue
+        claim = _delivery_claim(row.get("image_identity"), root)
+        if (
+            claim is not None
+            and claim.get("path") == path
+            and claim.get("sha256") == digest
+        ):
+            claims[json.dumps(claim, sort_keys=True)] = claim
+    return next(iter(claims.values())) if len(claims) == 1 else None
+
+
+def producer_image_metadata(path: Path, data: bytes, root: Path) -> dict[str, object]:
+    """A viewer reuses verified producer claims instead of claiming ownership."""
+    claim = _producer_delivery(
+        str(path.resolve()), hashlib.sha256(data).hexdigest(), root
+    )
+    return {"vibebb_image_identity": claim} if claim is not None else {}
+
+
+def capture_image_delivery(payload: dict[str, object], root: Path, log: Path) -> bool:
+    """Append actual returned bytes before the legacy filename observer runs."""
+    response = _delivery_mapping(payload.get("tool_response"))
+    if "error" in response or response.get("is_error") or response.get("isError"):
+        return False
+    blocks = [_delivery_mapping(b) for b in _delivery_items(response.get("content"))]
+    digests: list[str] = []
+    metadata: list[dict[str, object]] = []
+    for block in blocks:
+        block_text = block.get("text")
+        if block.get("type") == "text" and isinstance(block_text, str):
+            try:
+                value = _delivery_mapping(json.loads(block_text))
+                metadata.extend(
+                    _delivery_mapping(m)
+                    for m in _delivery_items(value.get("inline_images"))
+                    if _delivery_mapping(m).get("attached") is True
+                )
+            except ValueError:
+                pass
+        if block.get("type") != "image":
+            continue
+        urls = _delivery_items(block.get("image_urls"))
+        encoded = block.get("data")
+        mime = block.get("mimeType", block.get("mime_type"))
+        if (
+            isinstance(encoded, str)
+            and isinstance(mime, str)
+            and mime in {"image/png", "image/jpeg", "image/gif", "image/webp"}
+        ):
+            urls = [f"data:{mime};base64,{encoded}"]
+        for url in urls:
+            if not isinstance(url, str):
+                continue
+            header, _, data = url.partition(",")
+            if header not in {
+                f"data:{mime};base64"
+                for mime in ("image/png", "image/jpeg", "image/gif", "image/webp")
+            }:
+                continue
+            try:
+                digests.append(
+                    hashlib.sha256(base64.b64decode(data, validate=True)).hexdigest()
+                )
+            except (ValueError, binascii.Error):
+                continue
+        meta = _delivery_mapping(block.get("_meta", block.get("meta")))
+        claim = _delivery_mapping(meta.get("vibebb_image_identity"))
+        if claim:
+            metadata.append(
+                {
+                    "path": claim.get("path"),
+                    "sha256": claim.get("sha256"),
+                    "image_identity": claim,
+                    "identity_status": "bound",
+                }
+            )
+    if not digests:
+        return False
+    action = _delivery_mapping(payload.get("tool_input"))
+    viewed = (
+        action.get("path")
+        if payload.get("tool_name") == "file_editor" and action.get("command") == "view"
+        else None
+    )
+    if payload.get("tool_name") == "wire_view_image":
+        viewed = action.get("image_path")
+    log.parent.mkdir(parents=True, exist_ok=True)
+    sequence = (
+        len(log.read_text(encoding="utf-8").splitlines()) + 1 if log.exists() else 1
+    )
+    with log.open("a", encoding="utf-8") as stream:
+        for digest in digests:
+            matches = [m for m in metadata if m.get("sha256") == digest]
+            paths = {m["path"] for m in matches if isinstance(m.get("path"), str)}
+            path = (
+                next(iter(paths))
+                if len(paths) == 1
+                else viewed
+                if len(digests) == 1
+                else None
+            )
+            if isinstance(path, str):
+                path = str((root / path).resolve())
+            candidates: dict[str, dict[str, object]] = {}
+            for entry in matches:
+                candidate = _delivery_claim(entry.get("image_identity"), root)
+                if (
+                    entry.get("identity_status") == "bound"
+                    and candidate is not None
+                    and candidate["path"] == path
+                    and candidate["sha256"] == digest
+                ):
+                    candidates[json.dumps(candidate, sort_keys=True)] = candidate
+            claim = next(iter(candidates.values())) if len(candidates) == 1 else None
+            if not matches and isinstance(path, str):
+                claim = _producer_delivery(path, digest, root)
+            row = {
+                "sequence": sequence,
+                "tool_name": payload.get("tool_name"),
+                "image_path": path,
+                "image_sha256": digest,
+                "image_identity": claim,
+                "identity_status": "bound" if claim else "unknown",
+                "delivery_evidence": "inline_bytes",
+                "session_id": payload.get("session_id"),
+                "actor": None,
+                "tool_call_id": payload.get("tool_call_id") or payload.get("action_id"),
+            }
+            encoded = json.dumps(row, sort_keys=True, separators=(",", ":")).encode()
+            row["event_id"] = hashlib.sha256(encoded).hexdigest()
+            row["recorded_at"] = datetime.now().astimezone().isoformat()
+            stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+            sequence += 1
+    return True
+
+
+def review_image_delivery(
+    review: dict[str, object], root: Path, plugin: str
+) -> dict[str, object]:
+    """Compute delivery binding internally; never accept a caller's binding."""
+    unknown: dict[str, object] = {
+        "status": "unknown",
+        "scope": "tool-return",
+        "producer_identity_status": "unknown",
+    }
+    path = review.get("image_path")
+    if not isinstance(path, str):
+        return unknown
+    image = str((root / path).resolve())
+    log = Path(
+        os.environ.get(f"{plugin.upper()}_IMAGE_OBSERVATIONS")
+        or f"observations/{plugin}/image-observations.jsonl"
+    )
+    log = log if log.is_absolute() else root / log
+    rows, malformed = load_jsonl(log)
+    if malformed:
+        return unknown
+    matched: list[dict[str, object]] = []
+    for row in rows:
+        if row.get("delivery_evidence") != "inline_bytes":
+            continue
+        if not _delivery_receipt(row):
+            return unknown
+        if (
+            row.get("image_path") == image
+            and row.get("image_sha256") == review.get("image_sha256")
+            and row.get("session_id") == review.get("session_id")
+        ):
+            matched.append(row)
+    if len(matched) != 1:
+        return unknown
+    row = matched[0]
+    claim = _delivery_claim(row.get("image_identity"), root)
+    if row.get("identity_status") != "bound":
+        claim = None
+    return {
+        "status": "bound",
+        "scope": "tool-return",
+        "image_path": image,
+        "image_sha256": row["image_sha256"],
+        "session_id": row.get("session_id"),
+        "observation_event_id": row["event_id"],
+        "image_identity": claim,
+        "producer_identity_status": "bound" if claim else "unknown",
+    }
+
 
 SCHEMA_VERSION = 2
 IMPRESSION_MIN_CHARS = 400
