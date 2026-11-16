@@ -449,7 +449,12 @@ def record_vision_review(
         if not path.is_file():
             raise ValueError(f"image is not a file: {image}")
         body["image_path"] = relative
-        body["image_sha256"] = sha256_file(path)
+        body["image_sha256"] = _vrp.observed_image_revision(
+            {**body, "session_id": _session_id(body)}, base, PLUGIN
+        ) or sha256_file(path)
+    body["image_delivery"] = _vrp.review_image_delivery(
+        {**body, "session_id": _session_id(body)}, base, PLUGIN
+    )
     own = _own(_workspace(base))
     errors = _vrp.impression_errors(body.get("impression"))
     errors += _context_errors("vision_review", body, base, [])
