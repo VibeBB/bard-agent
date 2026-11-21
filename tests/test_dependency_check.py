@@ -68,7 +68,7 @@ def test_subpath_actions_resolve_to_owner_repo(dep_check: Any) -> None:
     codeql = next(
         status for status in statuses if status.name == "github/codeql-action"
     )
-    assert codeql.current == "v4.39.3"
+    assert codeql.current == "v4.39.4"
     assert codeql.latest == "v4.40.0"
     assert codeql.outdated is True
 
