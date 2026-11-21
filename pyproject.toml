@@ -14,15 +14,11 @@ dev = [
     "pytest-cov==7.1.0",
     "pytest-xdist>=3",
 ]
-sdk-check = ["openhands-sdk==1.62.0", "openhands-tools==1.62.0"]
+sdk-check = ["openhands-sdk==1.63.1", "openhands-tools==1.63.1"]
 
 [tool.uv]
 default-groups = ["dev"]
-# litellm>=1.104 pins filelock<4.0, which keeps the image-publish Trivy gate
-# on CVE-2026-112940. filelock's locking API is unchanged in 4.x, so the
-# override is safe; drop it once litellm relaxes the cap.
-override-dependencies = ["filelock>=4.2.1"]
-required-version = "==0.13.8"
+required-version = "==0.13.9"
 
 [tool.ruff]
 line-length = 88

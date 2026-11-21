@@ -359,6 +359,13 @@ sdk/tools `==1.55.1` -> `==1.59.0`, pytest `9.1.1` -> `9.2.0`, ruff `0.17.1` -> 
 
 sdk/tools `==1.54.0` -> `==1.55.1`, ruff `==0.17.0` -> `==0.17.1`, uv `==0.13.0` -> `==0.13.1`, zizmor `1.30.1` -> `1.31.1`, trivy `v0.75.0` -> `v0.76.0`, codeql-action v4.38.3 -> v4.39.0. Full changelog review: [SDK v1.55.1 feature evaluation](research/sdk-v1.55.1-feature-evaluation.md). Deferrals unchanged (mcp 2.x, Python 3.15 default); reasons refreshed to cite SDK 1.55.1.
 
+
+- 2026-11-21: Dependency sweep. sdk/tools `==1.62.0` -> `==1.63.1`, uv `==0.13.8`
+  -> `==0.13.9`, harden-runner v2.23.0, setup-uv v10.4.0, codeql-action
+  v4.39.4, dependency-review-action v5.0.1, scorecard-action v2.6.0.
+  Full changelog review:
+  [SDK v1.63.1 feature evaluation](research/sdk-v1.63.1-feature-evaluation.md).
+
 ## Dependency update sweep procedure
 
 When sweeping dependencies to latest releases:
